@@ -7,6 +7,8 @@
 [ext_resource type="Animation" path="res://assets/animations/ybot/flinch_left.res" id="5_flinch_left"]
 [ext_resource type="Animation" path="res://assets/animations/ybot/flinch_right.res" id="6_flinch_right"]
 [ext_resource type="Animation" path="res://assets/animations/ybot/flinch_head.res" id="7_flinch_head"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/get_up_face_down.res" id="8_getup_facedown"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/get_up_face_up.res" id="9_getup_faceup"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_xoyn8"]
 radius = 0.12
@@ -87,7 +89,9 @@ _data = {
 &"flinch_back": ExtResource("4_flinch_back"),
 &"flinch_left": ExtResource("5_flinch_left"),
 &"flinch_right": ExtResource("6_flinch_right"),
-&"flinch_head": ExtResource("7_flinch_head")
+&"flinch_head": ExtResource("7_flinch_head"),
+&"get_up_face_down": ExtResource("8_getup_facedown"),
+&"get_up_face_up": ExtResource("9_getup_faceup")
 }
 
 [node name="ybot" unique_id=1687264501 instance=ExtResource("1_ieaut")]

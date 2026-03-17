@@ -12,6 +12,11 @@ var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
 var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
+var _settle_timer: float = 0.0
+
+const SETTLE_LINEAR_THRESHOLD := 0.15
+const SETTLE_ANGULAR_THRESHOLD := 0.1
+const SETTLE_DURATION := 0.8
 
 const STRENGTH_MAP: Dictionary = {
 	"Hips": 0.65, "Spine": 0.60, "Chest": 0.60,
@@ -162,3 +167,44 @@ func get_bone_strength(rig_name: String) -> float:
 func set_bone_strength(rig_name: String, value: float) -> void:
 	if rig_name in _bones:
 		_bones[rig_name].strength = value
+
+
+func is_settled(delta: float) -> bool:
+	if _bones.is_empty():
+		return false
+	for state: Dictionary in _bones.values():
+		var body: RigidBody3D = state.body
+		if body.linear_velocity.length() > SETTLE_LINEAR_THRESHOLD:
+			_settle_timer = 0.0
+			return false
+		if body.angular_velocity.length() > SETTLE_ANGULAR_THRESHOLD:
+			_settle_timer = 0.0
+			return false
+	_settle_timer += delta
+	return _settle_timer >= SETTLE_DURATION
+
+
+func reset_settle_timer() -> void:
+	_settle_timer = 0.0
+
+
+func get_max_rotation_error() -> float:
+	if _bones.is_empty() or not _active:
+		return 999.0
+	var skel_global := _skeleton.global_transform
+	var max_err := 0.0
+	for state: Dictionary in _bones.values():
+		var bone_idx: int = state.bone_idx
+		var body: RigidBody3D = state.body
+		var target_basis: Basis = (skel_global * _get_animation_bone_global(bone_idx)).basis.orthonormalized()
+		var current_basis: Basis = body.global_transform.basis.orthonormalized()
+		var error_basis: Basis = target_basis * current_basis.inverse()
+		var det: float = error_basis.determinant()
+		if det < 0.001 and det > -0.001:
+			continue
+		var q: Quaternion = error_basis.get_rotation_quaternion()
+		if q.w < 0:
+			q = -q
+		var angle := 2.0 * acos(clampf(q.w, -1.0, 1.0))
+		max_err = maxf(max_err, angle)
+	return max_err

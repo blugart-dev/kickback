@@ -282,9 +282,19 @@ core active ragdoll system.
 
 ---
 
-## Step 7 — Recovery / get-up system
+## Step 7 — Recovery / get-up system ✅ COMPLETE
 
 **Goal**: Characters that go full ragdoll can get back up.
+
+**Status**: Complete. Key learnings:
+- State machine: NORMAL → RAGDOLL → GETTING_UP → NORMAL
+- Auto-recovery (recovery_rate) must be disabled during RAGDOLL state, otherwise
+  strengths immediately recover and character pops back up
+- Hits during RAGDOLL state should only apply impulse + reset settle timer, NOT
+  touch strength values (MIN_STRENGTH floors cause partial recovery)
+- Settling detection: all body velocities below threshold for 0.8s continuously
+- Orientation check: chest body Y-axis dot world UP → face up or face down
+- Spring strength ramp from 0 → base over recovery_duration drives get-up physically
 
 **Tasks**:
 - Detect settling: all RigidBody3D angular + linear velocities below threshold for 0.8s

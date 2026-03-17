@@ -2,13 +2,35 @@ class_name ActiveRagdollController
 extends Node
 
 @export var spring_resolver_path: NodePath
+@export var rig_builder_path: NodePath
+@export var animation_player_path: NodePath
+@export var recovery_duration: float = 1.5
+@export var safety_timeout: float = 5.0
+
+enum State { NORMAL, RAGDOLL, GETTING_UP }
 
 var _spring: SpringResolver
+var _rig_builder: PhysicsRigBuilder
+var _anim_player: AnimationPlayer
 var _adjacency: Dictionary = {}
+var _state: int = State.NORMAL
+var _recovery_timer: float = 0.0
+var _recovery_elapsed: float = 0.0
+
+signal state_changed(new_state: int)
+
+const MIN_STRENGTH: Dictionary = {
+	"Hips": 0.15, "Spine": 0.10, "Chest": 0.10,
+	"UpperLeg_L": 0.10, "UpperLeg_R": 0.10,
+	"LowerLeg_L": 0.08, "LowerLeg_R": 0.08,
+	"Foot_L": 0.05, "Foot_R": 0.05,
+}
 
 
 func _ready() -> void:
 	_spring = get_node(spring_resolver_path) as SpringResolver
+	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
+	_anim_player = get_node(animation_player_path) as AnimationPlayer
 	_build_adjacency()
 
 
@@ -24,18 +46,43 @@ func _build_adjacency() -> void:
 		_adjacency[c].append(p)
 
 
+func _physics_process(delta: float) -> void:
+	match _state:
+		State.RAGDOLL:
+			if _spring.is_settled(delta):
+				_start_recovery()
+		State.GETTING_UP:
+			_recovery_elapsed += delta
+			# Ramp strengths from 0 → base over recovery_duration
+			var t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
+			for rig_name: String in _spring._bones:
+				var base: float = _spring._bones[rig_name].base_strength
+				_spring.set_bone_strength(rig_name, base * t)
+
+			# Check completion: rotation error small enough or timeout
+			if (_spring.get_max_rotation_error() < 0.15 and t >= 0.9) or _recovery_elapsed > safety_timeout:
+				_finish_recovery()
+
+
 func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: WeaponProfile) -> void:
-	# Compute impulse from profile
+	# Hit during recovery → back to ragdoll
+	if _state == State.GETTING_UP:
+		_full_ragdoll()
+		return
+
+	# Compute and apply impulse
 	var final_impulse := profile.base_impulse * profile.impulse_transfer_ratio
 	var direction := (hit_dir + Vector3.UP * profile.upward_bias).normalized()
 	var local_offset := body.to_local(hit_pos)
 	body.apply_impulse(direction * final_impulse, local_offset)
 
-	# Reduce spring strength
-	var rig_name: String = body.name
-	_reduce_strength(rig_name, profile.strength_reduction, profile.strength_spread)
+	# During RAGDOLL: only apply impulse, don't touch strengths
+	if _state == State.RAGDOLL:
+		_spring.reset_settle_timer()
+		return
 
-	# Set per-bone recovery rate
+	# NORMAL state: reduce strength + enable recovery
+	_reduce_strength(body.name, profile.strength_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 
 	# Random full ragdoll check
@@ -43,13 +90,62 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: W
 		_full_ragdoll()
 
 
-# Load-bearing bones that shouldn't fully collapse from stacking hits
-const MIN_STRENGTH: Dictionary = {
-	"Hips": 0.15, "Spine": 0.10, "Chest": 0.10,
-	"UpperLeg_L": 0.10, "UpperLeg_R": 0.10,
-	"LowerLeg_L": 0.08, "LowerLeg_R": 0.08,
-	"Foot_L": 0.05, "Foot_R": 0.05,
-}
+func trigger_ragdoll() -> void:
+	_full_ragdoll()
+
+
+func _full_ragdoll() -> void:
+	for rig_name: String in _spring._bones:
+		_spring.set_bone_strength(rig_name, 0.0)
+	_state = State.RAGDOLL
+	_spring.recovery_rate = 0.0  # Stop auto-recovery during ragdoll
+	_spring.reset_settle_timer()
+	state_changed.emit(_state)
+
+
+func _start_recovery() -> void:
+	_state = State.GETTING_UP
+	_recovery_elapsed = 0.0
+	state_changed.emit(_state)
+
+	# Detect orientation: chest body's Y axis vs world UP
+	var bodies := _rig_builder.get_bodies()
+	var chest_body: RigidBody3D = bodies.get("Chest")
+	var face_up := true
+	if chest_body:
+		face_up = chest_body.global_basis.y.dot(Vector3.UP) > 0
+
+	# Play get-up animation
+	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
+	if _anim_player and _anim_player.has_animation(anim_name):
+		_anim_player.play(anim_name)
+
+
+func _finish_recovery() -> void:
+	_state = State.NORMAL
+	_spring.recovery_rate = 0.3  # Restore auto-recovery for normal hit reactions
+	state_changed.emit(_state)
+
+	# Restore all strengths to base
+	for rig_name: String in _spring._bones:
+		var base: float = _spring._bones[rig_name].base_strength
+		_spring.set_bone_strength(rig_name, base)
+
+	# Play idle
+	if _anim_player and _anim_player.has_animation("idle"):
+		_anim_player.play("idle")
+
+
+func get_state() -> int:
+	return _state
+
+
+func get_state_name() -> String:
+	match _state:
+		State.NORMAL: return "NORMAL"
+		State.RAGDOLL: return "RAGDOLL"
+		State.GETTING_UP: return "GETTING UP"
+	return "UNKNOWN"
 
 
 func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
@@ -78,8 +174,3 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 					_spring.set_bone_strength(neighbor, maxf(s * (1.0 - reduction * falloff), nfloor))
 
 			current_level = next_level
-
-
-func _full_ragdoll() -> void:
-	for rig_name: String in _spring._bones:
-		_spring.set_bone_strength(rig_name, 0.0)
