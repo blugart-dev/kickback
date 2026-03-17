@@ -1,0 +1,129 @@
+# Godot 4.6 Constraints and Workarounds
+
+Read this BEFORE writing any physics code. These are confirmed issues and
+workarounds specific to Godot 4.6.x with Jolt physics.
+
+## Why we use RigidBody3D instead of PhysicalBone3D for active ragdoll
+
+PhysicalBone3D is missing critical RigidBody3D functionality (proposal #8008):
+- No `apply_force(force, position)` — only `apply_impulse()` is exposed
+- No `apply_torque(torque)` — the method doesn't exist
+- No `body_entered` / `body_exited` signals — can't detect collisions
+- No `contact_monitor` property
+- No `center_of_mass` property
+- No `get_colliding_bodies()`
+
+RigidBody3D has ALL of these. The active ragdoll layer uses RigidBody3D exclusively.
+
+PhysicalBone3D + PhysicalBoneSimulator3D is used ONLY for the mid-range partial
+ragdoll tier (Step 1), where apply_impulse() and influence blending are sufficient.
+
+## PhysicalBoneSimulator3D (used in Step 1 only)
+
+### influence is global, not per-bone
+`PhysicalBoneSimulator3D.influence` (0.0-1.0) blends ALL bones between
+physics and animation. You cannot set per-bone influence. This means when
+blending back from partial ragdoll, ALL bones get slightly softened.
+For brief hit reactions (0.3-0.4s blend), this is acceptable.
+
+### Partial simulation works
+`simulator.physical_bones_start_simulation(["UpperArm_L", "LowerArm_L", "Hand_L"])`
+correctly simulates only the named bones. This is the core of Step 1.
+
+### Keep AnimationTree active
+```gdscript
+# WRONG — stops target poses, ragdoll looks worse
+animation_tree.active = false
+
+# RIGHT — animation keeps playing, physics overrides selectively
+animation_tree.active = true
+```
+
+### Deferred simulation start
+Don't start simulation in _ready(). Wait one frame:
+```gdscript
+func start_ragdoll():
+    await get_tree().physics_frame
+    simulator.physical_bones_start_simulation()
+```
+
+## Jolt physics specifics
+
+### Verify Jolt is active
+Project Settings → Physics → 3D → Physics Engine must be "JoltPhysics3D".
+If it says "GodotPhysics3D", change it. GodotPhysics has:
+- Generic6DOFJoint3D motors/springs NOT IMPLEMENTED (despite UI existing)
+- ~50 body limit vs Jolt's ~800
+- No angular motor support
+
+### Joint springs are unreliable
+Generic6DOFJoint3D angular springs are poorly documented with Jolt.
+Spring equilibrium point has coordinate space issues and flipped axes.
+**DO NOT USE built-in joint springs.** Use the velocity-based spring
+resolver in script instead (Step 4). This is what V-Sekai and Jolt's
+creator recommend.
+
+### Angular motors DO work
+If you need joint-level motors (we don't for the spring resolver approach):
+```gdscript
+joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY, 0.0)
+joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, 100.0)
+joint.set_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_MOTOR, true)
+```
+
+### Solver tuning for ragdolls
+```
+Project Settings → Physics → Jolt 3D → Solver:
+  Velocity Iterations: 8   (default 4 — increase for joint stability)
+  Position Iterations: 2   (default 1)
+```
+
+### Disable sleeping on active ragdoll bodies
+The spring resolver constantly modifies velocities, which conflicts with sleep:
+```gdscript
+rigid_body.can_sleep = false  # For all active ragdoll bodies
+```
+Re-enable sleeping for dead/settled ragdolls to save CPU.
+
+## Skeleton3D.get_bone_global_pose() timing
+
+In Godot 4.3+, `get_bone_global_pose()` may return stale data during physics.
+Two safe alternatives:
+
+```gdscript
+# Option A: Read directly from the RigidBody3D (always current)
+var bone_global = physics_body.global_transform
+
+# Option B: Connect to PhysicalBoneSimulator3D signal (Step 1 only)
+simulator.modification_processed.connect(_on_poses_updated)
+```
+
+For the dual-skeleton approach (Steps 3+), always read from the RigidBody3D
+transforms directly — never from skeleton bone poses.
+
+## Scaling
+
+PhysicalBoneSimulator3D has scaling bugs (#95679). Keep character root at
+scale (1,1,1). Scale the mesh at import time or on the MeshInstance3D.
+Never apply non-uniform scale to any node in a ragdoll hierarchy.
+
+## Collision layers
+
+Use this layout:
+- Layer 1: Character controllers (CharacterBody3D)
+- Layer 2: Environment (StaticBody3D, terrain)
+- Layer 3: Props, dynamic objects
+- Layer 4: Ragdoll physics bodies (RigidBody3D from dual-skeleton)
+- Layer 5: PhysicalBone3D (partial ragdoll)
+
+Ragdoll bodies (layer 4) should:
+- Collide with: layer 2 (environment), layer 3 (props), layer 4 (self — inter-bone collision)
+- NOT collide with: layer 1 (would conflict with CharacterBody3D)
+
+## Performance budget
+
+- Each ragdoll rig: ~16 RigidBody3D + ~15 Generic6DOFJoint3D = ~31 physics objects
+- Spring resolver: 16 velocity calculations per physics frame per character
+- With Jolt at 60Hz: 30-50 simultaneous passive ragdolls, 5-8 active ragdolls before physics > 4ms
+- Main bottleneck: `PhysicsServer::flush_queries()`, not GDScript
+- Profile with: Debugger → Monitors → Physics Process time
