@@ -6,6 +6,7 @@ extends Node
 @export var hip_pin_strength: float = 0.85
 @export var foot_pin_strength: float = 0.4
 @export var default_pin_strength: float = 0.1
+@export var recovery_rate: float = 0.3
 
 var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
@@ -72,6 +73,18 @@ func _physics_process(delta: float) -> void:
 	if not _active or _bones.is_empty():
 		return
 
+	# Recover strength + restore gravity as strength returns
+	for rig_name: String in _bones:
+		var state: Dictionary = _bones[rig_name]
+		state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
+		# Scale gravity and damping by how weakened the bone is
+		var strength_ratio: float = state.strength / state.base_strength if state.base_strength > 0.001 else 1.0
+		state.body.gravity_scale = (1.0 - strength_ratio) * 0.5
+		# Low strength = low damping (limbs swing freely on hit)
+		# Full strength = full damping (stable pose hold)
+		state.body.angular_damp = 0.2 + 2.8 * strength_ratio  # 0.2 when hit, 3.0 at full
+		state.body.linear_damp = 0.2 + 1.8 * strength_ratio   # 0.2 when hit, 2.0 at full
+
 	var skel_global := _skeleton.global_transform
 
 	for rig_name: String in _bones:
@@ -89,8 +102,10 @@ func _physics_process(delta: float) -> void:
 		# Angular spring: drive rotation toward animation pose
 		_apply_angular_spring(body, target_xform, current_xform, strength, delta)
 
-		# Position pin: drive position toward animation pose
-		var pin := _get_pin_strength(rig_name)
+		# Position pin: scale by strength ratio so hit limbs drift freely
+		var base_pin := _get_pin_strength(rig_name)
+		var strength_ratio: float = strength / state.base_strength if state.base_strength > 0.001 else 1.0
+		var pin := base_pin * strength_ratio
 		var pos_error := target_xform.origin - current_xform.origin
 		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
 

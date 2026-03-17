@@ -212,9 +212,18 @@ core active ragdoll system.
 
 ---
 
-## Step 5 — Hit reactions on the active ragdoll
+## Step 5 — Hit reactions on the active ragdoll ✅ COMPLETE
 
 **Goal**: Hits apply impulse + reduce spring strength = physics wins temporarily = Euphoria moment.
+
+**Status**: Complete. Key learnings:
+- Strength reduction alone isn't enough — damping and position pins must also scale
+  with strength ratio (strength / base_strength) for visible reactions
+- Angular damp, linear damp, gravity_scale, and position pin all lerp between
+  "hit" values (low damp, high gravity) and "normal" values (high damp, zero gravity)
+- Recovery rate 0.3/s gives ~2s recovery window for visible hit reactions
+- Strength reduction 0.92 (keeps 8%) with spread=2 for dramatic local reactions
+- Impulse magnitude 15+ needed to punch through springs for active ragdoll
 
 **Tasks**:
 - On raycast hit: identify which RigidBody3D was struck

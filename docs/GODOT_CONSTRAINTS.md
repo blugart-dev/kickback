@@ -167,9 +167,16 @@ Hips pin anchors the character from above, feet pins anchor from below. Without
 foot pins, the lower body collapses. Light position pins (0.1) on all other
 bodies prevent drift without making the character robotic.
 
-### Damping balances wobble vs responsiveness
-Higher angular_damp (3.0) kills jitter/oscillation but also dampens hit reactions.
-Compensate with higher impulse_magnitude (15+) so hits punch through the damping.
+### Damping must scale with spring strength
+Static damping (3.0) kills hit reactions even when spring strength is reduced.
+Scale all physics properties by strength ratio `(strength / base_strength)`:
+- `angular_damp`: 0.2 (hit) → 3.0 (full)
+- `linear_damp`: 0.2 (hit) → 2.0 (full)
+- `gravity_scale`: 0.5 (hit) → 0.0 (full)
+- `position_pin`: base × ratio
+
+This creates a unified system where hitting a bone weakens everything — springs,
+pins, damping — letting physics dominate, then all recover together.
 
 ## Dual-skeleton physics rig (learned in Step 3)
 
