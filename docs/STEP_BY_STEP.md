@@ -250,9 +250,16 @@ core active ragdoll system.
 
 ---
 
-## Step 6 — Weapon profiles
+## Step 6 — Weapon profiles ✅ COMPLETE
 
 **Goal**: Different weapons produce distinctly different reactions.
+
+**Status**: Complete. Key learnings:
+- WeaponProfile Resource class drives all hit parameters (impulse, reduction, spread, recovery)
+- ActiveRagdollController accepts WeaponProfile instead of hardcoded values
+- MIN_STRENGTH floor on load-bearing bones prevents full collapse from stacking hits
+- Only ragdoll_probability roll causes true full ragdoll (bypasses floors)
+- Adjusted values from REFERENCE.md to match our tuned spring system (higher reduction, slower recovery)
 
 **Tasks**:
 - Create `WeaponProfile` Resource class with exported properties
