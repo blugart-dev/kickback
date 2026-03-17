@@ -125,10 +125,18 @@ Used standalone for far targets, combined with partial ragdoll for mid-range.
 
 ---
 
-## Step 3 — Dual-skeleton physics rig
+## Step 3 — Dual-skeleton physics rig ✅ COMPLETE
 
 **Goal**: Build the RigidBody3D skeleton that will become the active ragdoll.
 No spring resolver yet — just verify the physics rig works as a passive ragdoll.
+
+**Status**: Complete. Key learnings:
+- Bodies must be placed at bone transforms directly, not midpoints (eliminates offset errors)
+- Collision shapes offset locally within body to cover limb segment
+- PhysicalBoneSimulator3D must be queue_free'd (not just disabled) to avoid Jolt transform conflicts
+- Joint limits must be symmetric without spring resolver — asymmetric limits cause backwards bending
+- Higher damping (linear=2.0, angular=8.0) + reduced gravity (0.8) for realistic crumple speed
+- set_bone_global_pose_override needs determinant check to avoid degenerate basis errors
 
 **Tasks**:
 - Create the physics rig hierarchy (see REFERENCE.md for bone list):

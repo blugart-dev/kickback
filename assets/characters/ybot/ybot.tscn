@@ -9,76 +9,76 @@
 [ext_resource type="Animation" path="res://assets/animations/ybot/flinch_head.res" id="7_flinch_head"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_xoyn8"]
-radius = 0.1
-height = 0.2
+radius = 0.12
+height = 0.25
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_vrytn"]
-radius = 0.075
-height = 0.15
+radius = 0.1
+height = 0.18
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cbjln"]
-radius = 0.075
-height = 0.15
+radius = 0.1
+height = 0.18
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_fmh6t"]
-radius = 0.1
-height = 0.2
+radius = 0.12
+height = 0.22
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3ysjy"]
-radius = 0.04
+radius = 0.05
 height = 0.11
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_c4v2p"]
-radius = 0.09
-height = 0.2
+radius = 0.12
+height = 0.24
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_7qnld"]
-radius = 0.04
+radius = 0.055
 height = 0.28
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_pki57"]
-radius = 0.035
+radius = 0.05
 height = 0.26
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_trbj4"]
-radius = 0.03
-height = 0.08
+radius = 0.04
+height = 0.1
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_a3rkp"]
-radius = 0.04
+radius = 0.055
 height = 0.28
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_32ldi"]
-radius = 0.035
+radius = 0.05
 height = 0.26
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cohh2"]
-radius = 0.03
-height = 0.08
+radius = 0.04
+height = 0.1
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_iiwor"]
-radius = 0.06
+radius = 0.08
 height = 0.42
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_qj7yr"]
-radius = 0.05
+radius = 0.065
 height = 0.42
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_aj1to"]
-radius = 0.04
-height = 0.16
+radius = 0.055
+height = 0.2
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kkt22"]
-radius = 0.06
+radius = 0.08
 height = 0.42
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_bjkca"]
-radius = 0.05
+radius = 0.065
 height = 0.42
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_dry07"]
-radius = 0.04
-height = 0.16
+radius = 0.055
+height = 0.2
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_1"]
 _data = {

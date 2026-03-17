@@ -138,6 +138,30 @@ Auto-generated bones have zero damping — ragdoll feels liquid. Add:
 - `angular_damp = 5.0` (prevents spinning)
 - `linear_damp = 0.5` (prevents excessive bouncing)
 
+## Dual-skeleton physics rig (learned in Step 3)
+
+### Body positioning: use bone transforms, not midpoints
+Place each RigidBody3D at the bone's `global_transform` directly. Offset the
+collision shape locally within the body (`col.position = offset`). Do NOT place
+bodies at midpoints between bones — the offset math accumulates errors and
+causes visible snapping when toggling physics on/off.
+
+### PhysicalBoneSimulator3D conflicts with set_bone_global_pose_override
+When the sync script writes `set_bone_global_pose_override()` on the Skeleton3D,
+any PhysicalBone3D nodes still in the scene receive the overridden transforms.
+This can produce degenerate bases that Jolt rejects. Fix: `queue_free()` the
+PhysicalBoneSimulator3D entirely, not just `process_mode = DISABLED`.
+
+### Symmetric joint limits without spring resolver
+Without a spring resolver to enforce pose direction, asymmetric 6DOF angular
+limits (e.g., knee -120/0) cause backwards bending because the joint frame
+orientation is unpredictable. Use symmetric limits (e.g., ±60) until the spring
+resolver is in place.
+
+### Degenerate basis guard for set_bone_global_pose_override
+Always check `basis.determinant()` before passing a transform to
+`set_bone_global_pose_override()`. Skip if determinant is near zero.
+
 ## Signal ordering with async controllers (learned in polish pass)
 
 When multiple controllers react to the same hit event, call order matters.
