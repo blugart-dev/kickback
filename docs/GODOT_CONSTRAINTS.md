@@ -107,6 +107,50 @@ PhysicalBoneSimulator3D has scaling bugs (#95679). Keep character root at
 scale (1,1,1). Scale the mesh at import time or on the MeshInstance3D.
 Never apply non-uniform scale to any node in a ragdoll hierarchy.
 
+## PhysicalBone3D joint types (learned in Step 0-1)
+
+### Auto-generated joints use PIN — switch to CONE
+Godot's "Create Physical Skeleton" generates all joints as `joint_type = 1`
+(PIN). PIN joints are simple ball-and-socket with **no angular limits** — bones
+can rotate freely in any direction. This causes unnatural bending.
+
+Change all joints to `joint_type = 2` (CONE/ConeTwist) which provides:
+- `swing_span`: max angle bone can deviate from rest direction (degrees)
+- `twist_span`: max twist rotation around bone's own axis (degrees)
+- `bias`, `softness`, `relaxation`: constraint stiffness tuning
+
+Recommended values for Mixamo Y Bot:
+- Spine: swing 30°, twist 25°
+- Head: swing 60°, twist 55°
+- Arms (shoulder): swing 80°, twist 60°
+- ForeArms (elbow): swing 80°, twist 10°
+- UpLegs (hip): swing 70°, twist 30°
+- Legs (knee): swing 80°, twist 10°
+- Feet (ankle): swing 35°, twist 20°
+
+### Self-collision
+Set PhysicalBone3D `collision_mask` to include its own layer (layer 5) for
+inter-bone collision. Without this, limbs pass through each other.
+Mask = 18 (layer 2 environment + layer 5 self).
+
+### Damping
+Auto-generated bones have zero damping — ragdoll feels liquid. Add:
+- `angular_damp = 5.0` (prevents spinning)
+- `linear_damp = 0.5` (prevents excessive bouncing)
+
+## GDScript export gotchas (learned in Step 0-1)
+
+### Typed node exports don't resolve from hand-written .tscn
+`@export var camera: Camera3D` stored as `camera = NodePath(...)` in a .tscn
+file does not reliably resolve the NodePath into a node reference.
+Workaround: use `get_viewport().get_camera_3d()` or `@export var path: NodePath`
+with `get_node(path)` instead.
+
+### node_paths attribute in .tscn
+The `node_paths=PackedStringArray(...)` attribute on `[node]` entries is ONLY
+for typed node reference exports (`@export var x: Node3D`). Do NOT use it for
+`@export var path: NodePath` — it will resolve the path as empty string.
+
 ## Collision layers
 
 Use this layout:

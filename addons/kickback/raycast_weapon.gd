@@ -5,6 +5,7 @@ extends Node3D
 @export var ray_length: float = 100.0
 
 signal hit_reported(bone_name: String)
+signal hit_fired(event: HitEvent)
 
 var _camera: Camera3D
 
@@ -38,9 +39,17 @@ func _shoot(screen_pos: Vector2) -> void:
 
 	var collider: CollisionObject3D = result["collider"]
 	if collider is PhysicalBone3D:
+		var bone: PhysicalBone3D = collider
 		var hit_pos: Vector3 = result["position"]
-		var local_offset := collider.to_local(hit_pos)
-		collider.apply_impulse(direction * impulse_magnitude, local_offset)
-		hit_reported.emit(collider.name)
+
+		var event := HitEvent.new()
+		event.hit_position = hit_pos
+		event.hit_direction = direction
+		event.hit_bone_name = bone.bone_name
+		event.impulse_magnitude = impulse_magnitude
+		event.hit_bone = bone
+
+		hit_reported.emit(bone.name)
+		hit_fired.emit(event)
 	else:
 		hit_reported.emit("Non-bone: %s" % collider.name)

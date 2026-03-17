@@ -6,10 +6,16 @@ one passes.
 
 ---
 
-## Step 0 — Project setup + passive ragdoll
+## Step 0 — Project setup + passive ragdoll ✅ COMPLETE
 
 **Goal**: A character with working passive ragdoll. This validates skeleton,
 collision shapes, and joint limits before adding any complexity.
+
+**Status**: Complete. Key learnings:
+- Auto-generated PhysicalBone3D joints use PIN type (no limits) — must change to CONE
+- Collision shapes from auto-generation are too small — need manual sizing
+- Self-collision (mask includes own layer) and damping are essential
+- Typed node exports (`@export var x: Camera3D`) don't resolve from hand-written .tscn
 
 **Tasks**:
 - Initialize Godot project with Jolt physics enabled
@@ -38,10 +44,17 @@ collision shapes, and joint limits before adding any complexity.
 
 ---
 
-## Step 1 — Partial ragdoll hit reactions
+## Step 1 — Partial ragdoll hit reactions ✅ COMPLETE
 
 **Goal**: On hit, only the struck limb (and neighbors) go ragdoll briefly, then
 blend back to animation. This is the highest value-to-effort feature.
+
+**Status**: Complete. Key learnings:
+- Weapon emits HitEvent, controller handles impulse AFTER simulation starts
+- Bone chain: hit bone + recursive children + 1 parent (stop at Hips)
+- Deferred start needs two physics frames: one to start sim, one before impulse
+- CONE joints with per-bone swing/twist limits prevent unnatural bending
+- Overlapping hits: kill active tween, stop sim, restart fresh
 
 **Tasks**:
 - Create `HitEvent` class: hit_position, hit_direction, hit_bone_name, impulse_magnitude
