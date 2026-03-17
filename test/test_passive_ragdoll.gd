@@ -8,11 +8,12 @@ extends Node3D
 
 func _ready() -> void:
 	_weapon.hit_reported.connect(_on_hit_reported)
+	_weapon.hit_fired.connect(_ragdoll_ctrl.apply_impulse)
 
 
 func _process(_delta: float) -> void:
 	var state := "RAGDOLL" if _ragdoll_ctrl.is_ragdoll() else "ANIMATED"
-	_state_label.text = "State: %s  |  FPS: %d  |  R = toggle ragdoll  |  Click = shoot" % [state, Engine.get_frames_per_second()]
+	_state_label.text = "State: %s  |  FPS: %d  |  R = toggle ragdoll  |  LMB = shoot  |  RMB = orbit  |  Scroll = zoom" % [state, Engine.get_frames_per_second()]
 
 
 func _on_hit_reported(bone_name: String) -> void:

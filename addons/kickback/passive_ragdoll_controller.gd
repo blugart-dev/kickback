@@ -41,5 +41,11 @@ func _stop_ragdoll() -> void:
 	_simulator.physical_bones_stop_simulation()
 
 
+func apply_impulse(event: HitEvent) -> void:
+	if _is_ragdoll and event.hit_bone:
+		var local_offset := event.hit_bone.to_local(event.hit_position)
+		event.hit_bone.apply_impulse(event.hit_direction * event.impulse_magnitude, local_offset)
+
+
 func is_ragdoll() -> bool:
 	return _is_ragdoll
