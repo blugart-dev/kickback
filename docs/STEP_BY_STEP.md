@@ -168,10 +168,19 @@ No spring resolver yet — just verify the physics rig works as a passive ragdol
 
 ---
 
-## Step 4 — Spring resolver
+## Step 4 — Spring resolver ✅ COMPLETE
 
 **Goal**: The physics rig actively tracks the animation skeleton. This is the
 core active ragdoll system.
+
+**Status**: Complete. Key learnings:
+- Must read animation poses via get_bone_pose() (local, ignores overrides), NOT
+  get_bone_global_pose() which returns sync overrides → zero error → no recovery
+- All bodies need gravity_scale=0 when spring active — springs handle all forces
+- Position pins on hips (0.85), feet (0.4), and light on all others (0.1)
+- Higher damping (angular=3.0, linear=2.0) kills wobble/jitter
+- Higher impulse (15.0) needed to punch through springs for visible hit reactions
+- Velocity clamping (angular 20, linear 10) prevents runaway momentum
 
 **Tasks**:
 - Write `SpringResolver` script (see REFERENCE.md for the math)

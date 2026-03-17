@@ -138,6 +138,39 @@ Auto-generated bones have zero damping — ragdoll feels liquid. Add:
 - `angular_damp = 5.0` (prevents spinning)
 - `linear_damp = 0.5` (prevents excessive bouncing)
 
+## Spring resolver (learned in Step 4)
+
+### Read animation poses with get_bone_pose(), NOT get_bone_global_pose()
+`Skeleton3D.get_bone_global_pose()` returns poses WITH `set_bone_global_pose_override`
+applied. If the sync script is writing physics body transforms as overrides, the
+spring resolver reads those overrides as the "target" — zero error, no recovery.
+
+Fix: use `get_bone_pose(bone_idx)` (local, animation-only) and walk up the parent
+chain to compute global pose manually:
+```gdscript
+func _get_animation_bone_global(bone_idx: int) -> Transform3D:
+    var xform := _skeleton.get_bone_pose(bone_idx)
+    var parent_idx := _skeleton.get_bone_parent(bone_idx)
+    while parent_idx >= 0:
+        xform = _skeleton.get_bone_pose(parent_idx) * xform
+        parent_idx = _skeleton.get_bone_parent(parent_idx)
+    return xform
+```
+
+### Zero gravity when spring active
+Angular springs can't lift mass against gravity — they only correct rotation.
+Set `gravity_scale = 0` on all bodies when springs are active. Gravity returns
+when springs weaken (hit reactions in Step 5).
+
+### Position pins needed on hips + feet
+Hips pin anchors the character from above, feet pins anchor from below. Without
+foot pins, the lower body collapses. Light position pins (0.1) on all other
+bodies prevent drift without making the character robotic.
+
+### Damping balances wobble vs responsiveness
+Higher angular_damp (3.0) kills jitter/oscillation but also dampens hit reactions.
+Compensate with higher impulse_magnitude (15+) so hits punch through the damping.
+
 ## Dual-skeleton physics rig (learned in Step 3)
 
 ### Body positioning: use bone transforms, not midpoints
