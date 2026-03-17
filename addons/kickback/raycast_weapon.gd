@@ -1,15 +1,17 @@
 class_name RaycastWeapon
 extends Node3D
 
-@export var camera: Camera3D
 @export var impulse_magnitude: float = 8.0
 @export var ray_length: float = 100.0
 
 signal hit_reported(bone_name: String)
 
+var _camera: Camera3D
+
 
 func _ready() -> void:
 	JoltCheck.warn_if_not_jolt()
+	_camera = get_viewport().get_camera_3d()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -18,10 +20,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _shoot(screen_pos: Vector2) -> void:
-	if not camera:
+	if not _camera:
 		return
-	var from := camera.project_ray_origin(screen_pos)
-	var direction := camera.project_ray_normal(screen_pos)
+	var from := _camera.project_ray_origin(screen_pos)
+	var direction := _camera.project_ray_normal(screen_pos)
 	var to := from + direction * ray_length
 
 	var space_state := get_world_3d().direct_space_state
