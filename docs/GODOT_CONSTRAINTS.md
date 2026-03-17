@@ -138,6 +138,23 @@ Auto-generated bones have zero damping — ragdoll feels liquid. Add:
 - `angular_damp = 5.0` (prevents spinning)
 - `linear_damp = 0.5` (prevents excessive bouncing)
 
+## AnimationTree (learned in Step 2)
+
+### Don't hand-write AnimationTree in .tscn
+AnimationTree sub_resources (BlendSpace2D, BlendTree, etc.) have complex internal
+types. Writing them by hand in .tscn causes "Type mismatch between initial and
+final value" errors spamming every frame. Always set up AnimationTree through
+the Godot editor.
+
+### Simple flinch approach: skip AnimationTree entirely
+For directional flinch animations, `AnimationPlayer.play()` + `queue("idle")` is
+simpler and more reliable than AnimationTree Add2 blending. The AnimationPlayer
+handles the blend transition natively via the `custom_blend` parameter.
+
+### Mixamo animation naming convention
+Mixamo "React From Front" means "I was hit from the front" (the animation shows
+a backward recoil). Map hit direction directly to animation name — don't invert.
+
 ## GDScript export gotchas (learned in Step 0-1)
 
 ### Typed node exports don't resolve from hand-written .tscn

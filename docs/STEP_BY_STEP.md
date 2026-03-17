@@ -84,10 +84,16 @@ blend back to animation. This is the highest value-to-effort feature.
 
 ---
 
-## Step 2 — Additive flinch animations
+## Step 2 — Additive flinch animations ✅ COMPLETE
 
 **Goal**: Directional flinch animations that layer on top of any current animation.
 Used standalone for far targets, combined with partial ragdoll for mid-range.
+
+**Status**: Complete. Key learnings:
+- AnimationTree BlendSpace2D cannot be reliably hand-written in .tscn — always set up in editor
+- Simpler approach: AnimationPlayer.play() + queue("idle") works well for flinch overlays
+- Mixamo "React From X" anims are named by hit source — map directly, don't double-invert
+- OrbitCamera added for multi-angle testing (RMB drag + scroll zoom)
 
 **Tasks**:
 - Import or create 4 directional flinch animations (front/back/left/right)

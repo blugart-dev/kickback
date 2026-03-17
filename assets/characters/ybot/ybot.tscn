@@ -2,6 +2,11 @@
 
 [ext_resource type="PackedScene" uid="uid://bkjtl63giv5kp" path="res://assets/characters/ybot/ybot.fbx" id="1_ieaut"]
 [ext_resource type="Animation" uid="uid://btmy326ij1o3l" path="res://assets/animations/ybot/idle.res" id="2_idle"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/flinch_front.res" id="3_flinch_front"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/flinch_back.res" id="4_flinch_back"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/flinch_left.res" id="5_flinch_left"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/flinch_right.res" id="6_flinch_right"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/flinch_head.res" id="7_flinch_head"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_xoyn8"]
 radius = 0.1
@@ -77,7 +82,12 @@ height = 0.16
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_1"]
 _data = {
-&"idle": ExtResource("2_idle")
+&"idle": ExtResource("2_idle"),
+&"flinch_front": ExtResource("3_flinch_front"),
+&"flinch_back": ExtResource("4_flinch_back"),
+&"flinch_left": ExtResource("5_flinch_left"),
+&"flinch_right": ExtResource("6_flinch_right"),
+&"flinch_head": ExtResource("7_flinch_head")
 }
 
 [node name="ybot" unique_id=1687264501 instance=ExtResource("1_ieaut")]
@@ -514,3 +524,4 @@ shape = SubResource("CapsuleShape3D_dry07")
 [node name="AnimationPlayer" parent="." index="1" unique_id=1776656459]
 libraries/ = SubResource("AnimationLibrary_1")
 autoplay = &"idle"
+

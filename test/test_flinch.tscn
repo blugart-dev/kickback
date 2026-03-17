@@ -1,0 +1,71 @@
+[gd_scene format=3 uid="uid://bgpbcvqvopr0"]
+
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
+[ext_resource type="Script" uid="uid://cckr4lxvd5nug" path="res://test/test_flinch.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://cve0fs6dwfp8y" path="res://addons/kickback/flinch_controller.gd" id="3_flinch"]
+[ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://addons/kickback/raycast_weapon.gd" id="4_weapon"]
+[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="5_orbit"]
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.35, 0.35, 0.4, 1)
+
+[node name="TestFlinch" type="Node3D" unique_id=977842082]
+script = ExtResource("2_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1991653119]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=785628593]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
+current = true
+fov = 60.0
+script = ExtResource("5_orbit")
+target = NodePath("../Character")
+target_offset = Vector3(0, 1.0, 0)
+
+[node name="Floor" type="StaticBody3D" parent="." unique_id=1812154849]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=1705305267]
+shape = SubResource("WorldBoundaryShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=1078813132]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="Character" parent="." unique_id=1910297612 instance=ExtResource("1_char")]
+
+[node name="FlinchController" type="Node" parent="Character" unique_id=1922343691]
+unique_name_in_owner = true
+script = ExtResource("3_flinch")
+animation_player_path = NodePath("../AnimationPlayer")
+character_path = NodePath("..")
+
+[node name="Weapon" type="Node3D" parent="." unique_id=1095639869]
+unique_name_in_owner = true
+script = ExtResource("4_weapon")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=721200490]
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer" unique_id=547000151]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 500.0
+offset_bottom = 60.0
+
+[node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=611383413]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Click = shoot flinch"
+
+[node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=1240388801]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Hit: -"
