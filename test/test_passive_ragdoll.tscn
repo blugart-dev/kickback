@@ -1,0 +1,68 @@
+[gd_scene format=3 uid="uid://ds3cql2ohunw1"]
+
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
+[ext_resource type="Script" uid="uid://cas7qdy4ttuh0" path="res://test/test_passive_ragdoll.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://dnl1y47r07y5o" path="res://addons/kickback/passive_ragdoll_controller.gd" id="3_ragdoll"]
+[ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://addons/kickback/raycast_weapon.gd" id="4_weapon"]
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.35, 0.35, 0.4, 1)
+
+[node name="TestPassiveRagdoll" type="Node3D" unique_id=2096373410]
+script = ExtResource("2_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=684762098]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1865731985]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
+current = true
+fov = 60.0
+
+[node name="Floor" type="StaticBody3D" parent="." unique_id=1655689715]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=1469144163]
+shape = SubResource("WorldBoundaryShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=1671593628]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="Character" parent="." unique_id=2097434684 instance=ExtResource("1_char")]
+
+[node name="RagdollController" type="Node" parent="Character" unique_id=210886838]
+unique_name_in_owner = true
+script = ExtResource("3_ragdoll")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+animation_player_path = NodePath("../AnimationPlayer")
+
+[node name="Weapon" type="Node3D" parent="." unique_id=1297082602]
+unique_name_in_owner = true
+script = ExtResource("4_weapon")
+camera = NodePath("../Camera3D")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=2051419208]
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer" unique_id=2084304973]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 500.0
+offset_bottom = 60.0
+
+[node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=1886426859]
+unique_name_in_owner = true
+layout_mode = 2
+text = "State: ANIMATED"
+
+[node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=103062539]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Hit: -"

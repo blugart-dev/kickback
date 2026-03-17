@@ -11,12 +11,15 @@ config_version=5
 [application]
 
 config/name="kickback"
+run/main_scene="res://test/test_passive_ragdoll.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [physics]
 
 3d/physics_engine="Jolt Physics"
+jolt_physics_3d/solver/velocity_iterations=8
+jolt_physics_3d/solver/position_iterations=2
 
 [rendering]
 
