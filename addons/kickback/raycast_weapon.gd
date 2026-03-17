@@ -1,6 +1,8 @@
 class_name RaycastWeapon
 extends Node3D
 
+const RAGDOLL_LAYER := 4  # 0-indexed, layer 5 in Godot UI
+
 @export var impulse_magnitude: float = 8.0
 @export var ray_length: float = 100.0
 
@@ -29,7 +31,7 @@ func _shoot(screen_pos: Vector2) -> void:
 
 	var space_state := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collision_mask = 1 << 4  # Layer 5 (0-indexed bit 4)
+	query.collision_mask = 1 << RAGDOLL_LAYER
 	query.collide_with_bodies = true
 
 	var result := space_state.intersect_ray(query)
@@ -42,14 +44,15 @@ func _shoot(screen_pos: Vector2) -> void:
 		var bone: PhysicalBone3D = collider
 		var hit_pos: Vector3 = result["position"]
 
-		var event := HitEvent.new()
-		event.hit_position = hit_pos
-		event.hit_direction = direction
-		event.hit_bone_name = bone.bone_name
-		event.impulse_magnitude = impulse_magnitude
-		event.hit_bone = bone
+		var ev := HitEvent.new()
+		ev.hit_position = hit_pos
+		ev.hit_direction = direction.normalized()
+		ev.hit_bone_name = bone.bone_name
+		ev.impulse_magnitude = impulse_magnitude
+		ev.hit_bone = bone
+		ev.hit_bone_region = HitEvent.classify_region(bone.bone_name)
 
-		hit_reported.emit(bone.name)
-		hit_fired.emit(event)
+		hit_reported.emit(bone.bone_name)
+		hit_fired.emit(ev)
 	else:
 		hit_reported.emit("Non-bone: %s" % collider.name)

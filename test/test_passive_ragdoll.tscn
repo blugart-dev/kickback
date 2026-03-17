@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://cas7qdy4ttuh0" path="res://test/test_passive_ragdoll.gd" id="2_script"]
 [ext_resource type="Script" uid="uid://dnl1y47r07y5o" path="res://addons/kickback/passive_ragdoll_controller.gd" id="3_ragdoll"]
 [ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://addons/kickback/raycast_weapon.gd" id="4_weapon"]
+[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="5_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 
@@ -24,6 +25,9 @@ shadow_enabled = true
 transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
 current = true
 fov = 60.0
+script = ExtResource("5_orbit")
+target = NodePath("../Character")
+target_offset = Vector3(0, 1.0, 0)
 
 [node name="Floor" type="StaticBody3D" parent="." unique_id=1655689715]
 collision_layer = 2

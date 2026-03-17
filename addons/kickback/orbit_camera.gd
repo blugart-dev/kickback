@@ -38,7 +38,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _update_transform() -> void:
 	var pivot := target_offset
-	if target:
+	if target and is_instance_valid(target):
 		pivot = target.global_position + target_offset
 
 	var offset := Vector3(

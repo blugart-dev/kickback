@@ -138,6 +138,23 @@ Auto-generated bones have zero damping — ragdoll feels liquid. Add:
 - `angular_damp = 5.0` (prevents spinning)
 - `linear_damp = 0.5` (prevents excessive bouncing)
 
+## Signal ordering with async controllers (learned in polish pass)
+
+When multiple controllers react to the same hit event, call order matters.
+A controller that uses `_set_reacting(true)` synchronously will block any
+subsequent controller that checks `is_reacting()`. Solution: call instant
+handlers (AnimationPlayer.play) before async handlers (ragdoll with await).
+
+```gdscript
+# WRONG — ragdoll sets is_reacting=true, flinch always skips
+_ragdoll_ctrl.apply_hit(event)
+_flinch_ctrl.on_hit(event)
+
+# RIGHT — flinch plays instantly, ragdoll starts async after
+_flinch_ctrl.on_hit(event)
+_ragdoll_ctrl.apply_hit(event)
+```
+
 ## AnimationTree (learned in Step 2)
 
 ### Don't hand-write AnimationTree in .tscn
