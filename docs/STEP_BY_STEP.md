@@ -352,3 +352,32 @@ core active ragdoll system.
 - Shooting rapidly across many characters: no performance drop below 55fps
 - Tier transitions are invisible (character crossing distance threshold doesn't pop)
 - Active ragdoll count cap is enforced (6th character falls back to partial ragdoll)
+
+---
+
+# Next Milestones
+
+## Milestone 1 — Mid-tier partial ragdoll in LOD
+Re-integrate partial ragdoll (PhysicalBoneSimulator3D) as a mid-tier between
+active ragdoll and flinch. Currently LOD jumps ACTIVE → FLINCH. Need a cheaper
+physics reaction for 10-25m range.
+
+## Milestone 2 — Locomotion support
+Import walk/run animations. Test spring resolver with locomotion — character
+should hold pose while moving, react to hits mid-stride, recover to walking.
+
+## Milestone 3 — Get-up animation polish
+Root motion matching for ragdoll→get-up transition. Blend curves for smoother
+spring ramp. Consider pose interpolation at transition start.
+
+## Milestone 4 — Performance profiling
+Measure physics cost with 7+ active ragdolls. Profile PhysicsServer, spring
+resolver, sync script. Target: 55+ FPS with 5 active ragdolls.
+
+## Milestone 5 — Editor plugin tooling
+One-click "Add Kickback to character", visual strength debugger, weapon profile
+editor, collision shape visualization.
+
+## Milestone 6 — Multiple character support
+Test with different Mixamo characters. Configurable bone name mapping for
+non-Mixamo rigs.
