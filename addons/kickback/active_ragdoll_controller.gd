@@ -120,6 +120,12 @@ func _start_recovery() -> void:
 	if chest_body:
 		face_up = chest_body.global_basis.y.dot(Vector3.UP) > 0
 
+	# Save all body world transforms before moving root
+	var saved_transforms: Dictionary = {}
+	for rig_name: String in bodies:
+		var body: RigidBody3D = bodies[rig_name]
+		saved_transforms[rig_name] = body.global_transform
+
 	# Reposition character root to ragdoll landing position
 	if _character_root and hip_body:
 		var hip_pos := hip_body.global_position
@@ -131,7 +137,13 @@ func _start_recovery() -> void:
 			if facing.length_squared() > 0.01:
 				_character_root.global_rotation.y = atan2(facing.x, facing.z)
 
-		_rig_builder.snap_to_skeleton()
+	# Restore body world transforms — bodies stay where they were
+	# Spring ramp will gradually pull them toward the get-up animation
+	for rig_name: String in saved_transforms:
+		var body: RigidBody3D = bodies[rig_name]
+		body.global_transform = saved_transforms[rig_name]
+		body.linear_velocity = Vector3.ZERO
+		body.angular_velocity = Vector3.ZERO
 
 	# Play get-up animation
 	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
