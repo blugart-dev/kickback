@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
 [ext_resource type="Script" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
 [ext_resource type="Script" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_active"]
+[ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="7_partial"]
 [ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="8_flinch"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_character.gd" id="9_coordinator"]
 [ext_resource type="Script" path="res://addons/kickback/free_camera.gd" id="10_freecam"]
@@ -70,6 +71,12 @@ rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
+[node name="PartialRagdollController" type="Node" parent="Char_1"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+
 [node name="FlinchController" type="Node" parent="Char_1"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
@@ -104,6 +111,12 @@ spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
+
+[node name="PartialRagdollController" type="Node" parent="Char_2"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
 
 [node name="FlinchController" type="Node" parent="Char_2"]
 script = ExtResource("8_flinch")
@@ -140,6 +153,12 @@ rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
+[node name="PartialRagdollController" type="Node" parent="Char_3"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+
 [node name="FlinchController" type="Node" parent="Char_3"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
@@ -174,6 +193,12 @@ spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
+
+[node name="PartialRagdollController" type="Node" parent="Char_4"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
 
 [node name="FlinchController" type="Node" parent="Char_4"]
 script = ExtResource("8_flinch")
@@ -210,6 +235,12 @@ rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
+[node name="PartialRagdollController" type="Node" parent="Char_5"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+
 [node name="FlinchController" type="Node" parent="Char_5"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
@@ -245,6 +276,12 @@ rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
+[node name="PartialRagdollController" type="Node" parent="Char_6"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+
 [node name="FlinchController" type="Node" parent="Char_6"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
@@ -279,6 +316,12 @@ spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
+
+[node name="PartialRagdollController" type="Node" parent="Char_7"]
+script = ExtResource("7_partial")
+simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
 
 [node name="FlinchController" type="Node" parent="Char_7"]
 script = ExtResource("8_flinch")

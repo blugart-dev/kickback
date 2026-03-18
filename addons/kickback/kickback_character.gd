@@ -1,9 +1,6 @@
 class_name KickbackCharacter
 extends Node
 
-## Coordinator that routes hit events to the appropriate reaction tier
-## based on camera distance and the KickbackManager's LOD config.
-
 enum Tier { ACTIVE_RAGDOLL, PARTIAL_RAGDOLL, FLINCH, NONE }
 
 @export var skeleton_path: NodePath
@@ -14,6 +11,7 @@ var _skeleton: Skeleton3D
 var _anim_player: AnimationPlayer
 var _character_root: Node3D
 var _manager: KickbackManager
+var _simulator: PhysicalBoneSimulator3D
 
 var _rig_builder: PhysicsRigBuilder
 var _rig_sync: PhysicsRigSync
@@ -35,14 +33,16 @@ func _ready() -> void:
 	if not character_root_path.is_empty():
 		_character_root = get_node(character_root_path) as Node3D
 
-	# Find manager — check autoload first, then search scene tree
 	_manager = get_node_or_null("/root/KickbackManager") as KickbackManager
 	if not _manager:
 		var root := get_tree().current_scene
 		if root:
-			_manager = _find_node_of_type(root)
+			_manager = _find_manager(root)
 
-	# Find existing controllers in siblings
+	# Find simulator and controllers in siblings
+	if _skeleton:
+		_simulator = _skeleton.get_node_or_null("PhysicalBoneSimulator3D")
+
 	for sibling in get_parent().get_children():
 		if sibling is PhysicsRigBuilder:
 			_rig_builder = sibling
@@ -57,13 +57,10 @@ func _ready() -> void:
 		elif sibling is FlinchController:
 			_flinch_controller = sibling
 
-	# Remove PhysicalBoneSimulator3D if active ragdoll is available
-	if _rig_builder and _skeleton:
-		var sim := _skeleton.get_node_or_null("PhysicalBoneSimulator3D")
-		if sim:
-			sim.queue_free()
+	# Disable simulator initially (will enable when PARTIAL tier is set)
+	if _simulator:
+		_simulator.active = false
 
-	# Wait for rig to be built before enabling tiers
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -72,11 +69,11 @@ func _ready() -> void:
 	_ready_complete = true
 
 
-func _find_node_of_type(node: Node) -> KickbackManager:
+func _find_manager(node: Node) -> KickbackManager:
 	if node is KickbackManager:
 		return node
 	for child in node.get_children():
-		var found := _find_node_of_type(child)
+		var found := _find_manager(child)
 		if found:
 			return found
 	return null
@@ -106,10 +103,10 @@ func _process(_delta: float) -> void:
 		else:
 			target_tier = Tier.NONE
 
-	# Only use active ragdoll if the rig builder exists
+	# Fallback if controller for target tier doesn't exist
 	if target_tier == Tier.ACTIVE_RAGDOLL and not _rig_builder:
 		target_tier = Tier.PARTIAL_RAGDOLL
-	if target_tier == Tier.PARTIAL_RAGDOLL and not _partial_controller:
+	if target_tier == Tier.PARTIAL_RAGDOLL and (not _partial_controller or not _simulator):
 		target_tier = Tier.FLINCH
 	if target_tier == Tier.FLINCH and not _flinch_controller:
 		target_tier = Tier.NONE
@@ -143,7 +140,7 @@ func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vec
 
 
 func _set_tier(new_tier: int) -> void:
-	# Deactivate old tier
+	# --- Deactivate old tier ---
 	if _current_tier == Tier.ACTIVE_RAGDOLL:
 		if _spring:
 			_spring.set_active(false)
@@ -154,22 +151,38 @@ func _set_tier(new_tier: int) -> void:
 		if _active_ragdoll_enabled and _manager:
 			_manager.release_active_ragdoll()
 			_active_ragdoll_enabled = false
+	elif _current_tier == Tier.PARTIAL_RAGDOLL:
+		if _simulator:
+			_simulator.active = false
+			_simulator.physical_bones_stop_simulation()
 
 	_current_tier = new_tier
 	tier_changed.emit(new_tier)
 
-	# Activate new tier
-	if new_tier == Tier.ACTIVE_RAGDOLL:
-		var allowed := true
-		if _manager:
-			allowed = _manager.request_active_ragdoll()
-		if allowed and _rig_builder and _spring and _rig_sync:
-			_rig_builder.set_enabled(true)
-			_rig_sync.set_active(true)
-			_spring.set_active(true)
-			_active_ragdoll_enabled = true
-		else:
-			_current_tier = Tier.PARTIAL_RAGDOLL
+	# --- Activate new tier ---
+	match new_tier:
+		Tier.ACTIVE_RAGDOLL:
+			# Disable simulator (conflicts with rig sync)
+			if _simulator:
+				_simulator.active = false
+				_simulator.physical_bones_stop_simulation()
+			var allowed := true
+			if _manager:
+				allowed = _manager.request_active_ragdoll()
+			if allowed and _rig_builder and _spring and _rig_sync:
+				_rig_builder.set_enabled(true)
+				_rig_sync.set_active(true)
+				_spring.set_active(true)
+				_active_ragdoll_enabled = true
+			else:
+				_current_tier = Tier.PARTIAL_RAGDOLL
+				if _simulator:
+					_simulator.active = true
+
+		Tier.PARTIAL_RAGDOLL:
+			# Enable simulator for partial ragdoll hits
+			if _simulator:
+				_simulator.active = true
 
 
 func get_current_tier() -> int:
