@@ -61,10 +61,26 @@ func _shoot(screen_pos: Vector2) -> void:
 	var hit_pos: Vector3 = result["position"]
 	var profile: WeaponProfile = _profiles[_current_weapon]
 
-	for kc: KickbackCharacter in _characters:
-		kc.receive_hit(collider, direction.normalized(), hit_pos, profile)
+	# Find which character owns the hit body
+	var char_root := _find_character_owner(collider)
+	if char_root:
+		var kc: KickbackCharacter = char_root.get_node_or_null("KickbackCharacter")
+		if kc:
+			kc.receive_hit(collider, direction.normalized(), hit_pos, profile)
+			_hit_label.text = "Hit: %s on %s with %s" % [collider.name, char_root.name, profile.weapon_name]
+			return
 
-	_hit_label.text = "Hit: %s with %s" % [collider.name, profile.weapon_name]
+	_hit_label.text = "Hit: %s (no owner)" % collider.name
+
+
+func _find_character_owner(body: Node) -> Node:
+	# Walk up the tree to find a node that has a KickbackCharacter child
+	var node := body.get_parent()
+	while node and node != get_tree().root:
+		if node.has_node("KickbackCharacter"):
+			return node
+		node = node.get_parent()
+	return null
 
 
 func _process(_delta: float) -> void:
