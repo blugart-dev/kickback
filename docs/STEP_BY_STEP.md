@@ -362,9 +362,15 @@ Re-integrate partial ragdoll (PhysicalBoneSimulator3D) as a mid-tier between
 active ragdoll and flinch. Currently LOD jumps ACTIVE → FLINCH. Need a cheaper
 physics reaction for 10-25m range.
 
-## Milestone 2 — Locomotion support
+## Milestone 2 — Locomotion support ✅ COMPLETE
 Import walk/run animations. Test spring resolver with locomotion — character
 should hold pose while moving, react to hits mid-stride, recover to walking.
+
+**Status**: Complete. Key learnings:
+- Walk/run must be "In Place" animations from Mixamo (root motion causes loop snapping)
+- Spring resolver works with locomotion animations — character holds walking pose
+- Heavy Bullet profile (no ragdoll, high impulse, slow recovery) best for testing
+- Manual character translation removed — animations play in place for now
 
 ## Milestone 3 — Get-up animation polish
 Root motion matching for ragdoll→get-up transition. Blend curves for smoother

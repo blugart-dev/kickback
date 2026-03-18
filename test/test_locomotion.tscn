@@ -1,0 +1,87 @@
+[gd_scene format=3 uid="uid://1c84xshub4wd"]
+
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
+[ext_resource type="Script" uid="uid://csn5ki8psqtfh" path="res://test/test_locomotion.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://qjrypha5yute" path="res://addons/kickback/physics_rig_builder.gd" id="3_builder"]
+[ext_resource type="Script" uid="uid://csqpwgrswnf7y" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
+[ext_resource type="Script" uid="uid://20hh4yh8kh35" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
+[ext_resource type="Script" uid="uid://dt16s4lggj7ff" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_active"]
+[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://addons/kickback/orbit_camera.gd" id="7_orbit"]
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(100, 100)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.35, 0.35, 0.4, 1)
+
+[node name="TestLocomotion" type="Node3D" unique_id=937340177]
+script = ExtResource("2_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=482665172]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1322350203]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
+current = true
+fov = 60.0
+script = ExtResource("7_orbit")
+target = NodePath("../Character")
+
+[node name="Floor" type="StaticBody3D" parent="." unique_id=520403286]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=1641390790]
+shape = SubResource("WorldBoundaryShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=1272440996]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="Character" parent="." unique_id=652525655 instance=ExtResource("1_char")]
+unique_name_in_owner = true
+
+[node name="PhysicsRigBuilder" type="Node3D" parent="Character" unique_id=1614668824]
+unique_name_in_owner = true
+script = ExtResource("3_builder")
+skeleton_path = NodePath("../Skeleton3D")
+
+[node name="PhysicsRigSync" type="Node" parent="Character" unique_id=1312037089]
+unique_name_in_owner = true
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Character" unique_id=1758660520]
+unique_name_in_owner = true
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Character" unique_id=651030511]
+unique_name_in_owner = true
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=637866502]
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer" unique_id=950833324]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 900.0
+offset_bottom = 60.0
+
+[node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=1984789092]
+unique_name_in_owner = true
+layout_mode = 2
+text = "W=walk R=run S=stop E=ragdoll  |  LMB=shoot  |  RMB=orbit"
+
+[node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=694686277]
+unique_name_in_owner = true
+layout_mode = 2
