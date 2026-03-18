@@ -1,14 +1,24 @@
+## Manages the active ragdoll state machine (NORMAL -> RAGDOLL -> GETTING_UP).
+## Coordinates hit reactions, full ragdoll transitions, and recovery sequences
+## by driving the SpringResolver's per-bone strengths and pose blending.
 class_name ActiveRagdollController
 extends Node
 
+@export_group("References")
 @export var spring_resolver_path: NodePath
 @export var rig_builder_path: NodePath
 @export var animation_player_path: NodePath
 @export var character_root_path: NodePath
+@export_group("Recovery")
 @export var recovery_duration: float = 2.0
-@export var safety_timeout: float = 5.0
+@export var safety_timeout: float = 3.5
 
-enum State { NORMAL, RAGDOLL, GETTING_UP }
+## Character state for the active ragdoll lifecycle.
+enum State {
+	NORMAL,      ## Fully animated; springs at full strength.
+	RAGDOLL,     ## All springs zeroed; physics drives the body.
+	GETTING_UP,  ## Recovering from ragdoll; springs ramping back up.
+}
 
 var _spring: SpringResolver
 var _rig_builder: PhysicsRigBuilder
@@ -20,6 +30,7 @@ var _recovery_elapsed: float = 0.0
 var _ragdoll_elapsed: float = 0.0
 var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
 
+## Emitted whenever the controller transitions between states.
 signal state_changed(new_state: int)
 
 const RAGDOLL_FORCE_RECOVERY_TIME := 3.0
@@ -105,10 +116,12 @@ func _physics_process(delta: float) -> void:
 				_spring.set_bone_strength(rig_name, base * eased_t)
 
 			var global_t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
-			if (_spring.get_max_rotation_error() < 0.15 and global_t >= 0.9) or _recovery_elapsed > safety_timeout:
+			if (_spring.get_max_rotation_error() < 0.3 and global_t >= 0.85) or _recovery_elapsed > safety_timeout:
 				_finish_recovery()
 
 
+## Applies a hit reaction to [param body] using the given weapon [param profile].
+## Reduces spring strengths, applies impulse, and may trigger full ragdoll.
 func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: WeaponProfile) -> void:
 	if _state == State.GETTING_UP:
 		_full_ragdoll()
@@ -130,6 +143,7 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: W
 		_full_ragdoll()
 
 
+## Forces an immediate transition to full ragdoll, zeroing all spring strengths.
 func trigger_ragdoll() -> void:
 	_full_ragdoll()
 
@@ -232,10 +246,12 @@ func _finish_recovery() -> void:
 		_anim_player.play("idle", 0.5)  # 0.5s crossfade from get-up to idle
 
 
+## Returns the current state as a [enum State] integer value.
 func get_state() -> int:
 	return _state
 
 
+## Returns a human-readable name for the current state (for debug display).
 func get_state_name() -> String:
 	match _state:
 		State.NORMAL: return "NORMAL"

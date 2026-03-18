@@ -1,12 +1,20 @@
+## Mid-range hit reaction using PhysicalBoneSimulator3D. On hit, selectively
+## simulates the struck bone and its neighbors, applies impulse, then blends
+## back to animation over a short duration.
 class_name PartialRagdollController
 extends Node
 
+@export_group("References")
 @export var simulator_path: NodePath
 @export var skeleton_path: NodePath
 @export var animation_player_path: NodePath
+@export_group("Timing")
+## How long the hit bone stays in physics simulation before blend-back.
 @export var hold_time: float = 0.18
+## Duration of the influence blend from 1.0 (physics) to 0.0 (animation).
 @export var blend_duration: float = 0.4
 
+## Emitted when the controller starts or finishes reacting to a hit.
 signal state_changed(is_reacting: bool)
 
 var _simulator: PhysicalBoneSimulator3D
@@ -19,9 +27,12 @@ var _is_reacting: bool = false
 
 func _ready() -> void:
 	JoltCheck.warn_if_not_jolt()
-	_simulator = get_node(simulator_path) as PhysicalBoneSimulator3D
-	_skeleton = get_node(skeleton_path) as Skeleton3D
-	_anim_player = get_node(animation_player_path) as AnimationPlayer
+	_simulator = get_node_or_null(simulator_path) as PhysicalBoneSimulator3D
+	_skeleton = get_node_or_null(skeleton_path) as Skeleton3D
+	_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
+	if not _simulator:
+		push_warning("PartialRagdollController: No PhysicalBoneSimulator3D found at '%s' — partial ragdoll disabled" % simulator_path)
+		return
 	if _anim_player and _anim_player.has_animation("idle"):
 		_anim_player.play("idle")
 	_build_bone_map()

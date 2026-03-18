@@ -1,11 +1,18 @@
+## Plays directional flinch animations in response to hits. Used for the far-range
+## LOD tier where physics simulation is too expensive. Selects front/back/left/right
+## animation based on hit direction relative to the character.
 class_name FlinchController
 extends Node
 
+@export_group("References")
 @export var animation_player_path: NodePath
 @export var character_path: NodePath
 @export var ragdoll_controller_path: NodePath
+@export_group("Animation")
 @export var blend_time: float = 0.1
 
+## Emitted when a flinch animation starts. [param direction_name] is the animation
+## name chosen (e.g. "flinch_front", "flinch_back").
 signal flinch_triggered(direction_name: String)
 
 var _anim_player: AnimationPlayer
@@ -16,10 +23,14 @@ const REQUIRED_ANIMS := ["flinch_front", "flinch_back", "flinch_left", "flinch_r
 
 
 func _ready() -> void:
-	_anim_player = get_node(animation_player_path) as AnimationPlayer
-	_character = get_node(character_path) as Node3D
+	_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
+	_character = get_node_or_null(character_path) as Node3D
+	if not _anim_player:
+		push_warning("FlinchController: AnimationPlayer not found at '%s'" % animation_player_path)
+	if not _character:
+		push_warning("FlinchController: character not found at '%s'" % character_path)
 	if not ragdoll_controller_path.is_empty():
-		_ragdoll_ctrl = get_node(ragdoll_controller_path) as PartialRagdollController
+		_ragdoll_ctrl = get_node_or_null(ragdoll_controller_path) as PartialRagdollController
 	_validate_animations()
 
 
@@ -31,6 +42,7 @@ func _validate_animations() -> void:
 			push_warning("FlinchController: missing animation '%s'" % anim_name)
 
 
+## Triggers a directional flinch animation based on the hit event.
 func on_hit(event: HitEvent) -> void:
 	if not _anim_player or not _character:
 		return

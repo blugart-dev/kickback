@@ -1,6 +1,9 @@
+## Global manager for Kickback. Tracks active ragdoll count and LOD distance
+## thresholds. Add as an autoload or place in the scene root.
 class_name KickbackManager
 extends Node
 
+@export_group("LOD")
 ## Maximum simultaneous active ragdolls before fallback to partial ragdoll.
 @export var max_active_ragdolls: int = 5
 ## Distance thresholds: [active_ragdoll, partial_ragdoll, flinch]. Beyond last = no reaction.
@@ -9,6 +12,7 @@ extends Node
 var _active_ragdoll_count: int = 0
 
 
+## Requests an active ragdoll slot. Returns true if granted, false if at capacity.
 func request_active_ragdoll() -> bool:
 	if _active_ragdoll_count >= max_active_ragdolls:
 		return false
@@ -16,16 +20,19 @@ func request_active_ragdoll() -> bool:
 	return true
 
 
+## Releases an active ragdoll slot.
 func release_active_ragdoll() -> void:
 	_active_ragdoll_count = maxi(_active_ragdoll_count - 1, 0)
 
 
+## Returns how many active ragdolls are currently in use.
 func get_active_ragdoll_count() -> int:
 	return _active_ragdoll_count
 
 
+## Returns the LOD tier index for a given camera distance.
+## 0 = active ragdoll, 1 = partial ragdoll, 2 = flinch, 3 = none.
 func get_tier(distance: float) -> int:
-	## Returns 0=active_ragdoll, 1=partial_ragdoll, 2=flinch, 3=none
 	for i in lod_distances.size():
 		if distance < lod_distances[i]:
 			return i

@@ -1,11 +1,21 @@
+## Velocity-based spring resolver that drives physics ragdoll bodies toward
+## animation skeleton poses. Each frame, computes rotation/position error per
+## bone and lerps rigid body velocities toward the correction, weighted by
+## per-bone strength. Strength can be reduced on hit so physics wins temporarily,
+## then recovers over time.
 class_name SpringResolver
 extends Node
 
+@export_group("References")
 @export var skeleton_path: NodePath
 @export var rig_builder_path: NodePath
+
+@export_group("Spring Physics")
 @export var hip_pin_strength: float = 0.85
 @export var foot_pin_strength: float = 0.4
 @export var default_pin_strength: float = 0.1
+
+@export_group("Recovery")
 @export var recovery_rate: float = 0.3
 @export var settle_duration: float = 0.6
 @export var settle_linear_threshold: float = 0.5
@@ -62,6 +72,8 @@ func _init_bones() -> void:
 		}
 
 
+## Enables or disables the spring resolver. When active, bodies are driven toward
+## animation poses. When inactive, bodies use passive ragdoll damping and gravity.
 func set_active(value: bool) -> void:
 	_active = value
 	for rig_name: String in _bones:
@@ -163,6 +175,8 @@ func _get_pin_strength(rig_name: String) -> float:
 	return default_pin_strength
 
 
+## Computes the skeleton-local global transform for a bone by walking the
+## parent chain, since Skeleton3D doesn't expose this directly.
 func get_animation_bone_global(bone_idx: int) -> Transform3D:
 	var xform := _skeleton.get_bone_pose(bone_idx)
 	var parent_idx := _skeleton.get_bone_parent(bone_idx)
@@ -174,23 +188,28 @@ func get_animation_bone_global(bone_idx: int) -> Transform3D:
 
 # --- Public API ---
 
+## Returns the current spring strength for the given bone (0.0 = fully ragdolled).
 func get_bone_strength(rig_name: String) -> float:
 	if rig_name in _bones:
 		return _bones[rig_name].strength
 	return 0.0
 
 
+## Sets the current spring strength for a bone. Typically reduced on hit, then
+## recovers toward base_strength each frame.
 func set_bone_strength(rig_name: String, value: float) -> void:
 	if rig_name in _bones:
 		_bones[rig_name].strength = value
 
 
+## Returns the resting (fully recovered) strength for a bone.
 func get_base_strength(rig_name: String) -> float:
 	if rig_name in _bones:
 		return _bones[rig_name].base_strength
 	return 0.0
 
 
+## Returns the rig names of all registered bones (e.g. "Hips", "Spine", "Head").
 func get_all_bone_names() -> PackedStringArray:
 	return PackedStringArray(_bones.keys())
 
@@ -199,6 +218,8 @@ func get_default_recovery_rate() -> float:
 	return _default_recovery_rate
 
 
+## Returns true when all bodies have been below velocity thresholds for at least
+## [member settle_duration] seconds, indicating the ragdoll has come to rest.
 func is_settled(delta: float) -> bool:
 	if _bones.is_empty():
 		return false
@@ -220,20 +241,26 @@ func reset_settle_timer() -> void:
 	_settle_timer = 0.0
 
 
+## Returns the Skeleton3D bone index for a given rig name, or -1 if not found.
 func get_bone_idx(rig_name: String) -> int:
 	if rig_name in _bones:
 		return _bones[rig_name].bone_idx
 	return -1
 
 
+## Sets temporary target pose overrides (rig_name -> Transform3D) that replace
+## animation poses for specific bones, used during get-up blending.
 func set_target_overrides(overrides: Dictionary) -> void:
 	_target_overrides = overrides
 
 
+## Clears all target pose overrides, reverting to animation-driven targets.
 func clear_target_overrides() -> void:
 	_target_overrides.clear()
 
 
+## Returns the largest rotation error (in radians) across all bones between
+## their current physics orientation and the animation target.
 func get_max_rotation_error() -> float:
 	if _bones.is_empty() or not _active:
 		return 999.0

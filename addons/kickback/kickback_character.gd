@@ -1,8 +1,18 @@
+## Central coordinator for a Kickback-enabled character. Manages LOD tier switching
+## based on camera distance and routes incoming hits to the appropriate controller
+## (active ragdoll, partial ragdoll, or flinch animation).
 class_name KickbackCharacter
 extends Node
 
-enum Tier { ACTIVE_RAGDOLL, PARTIAL_RAGDOLL, FLINCH, NONE }
+## Detail level for hit-reaction simulation, ordered from most expensive to cheapest.
+enum Tier {
+	ACTIVE_RAGDOLL,   ## Full physics rig with spring-driven joints (< 10m).
+	PARTIAL_RAGDOLL,  ## PhysicalBoneSimulator3D on hit bones only (10-25m).
+	FLINCH,           ## Additive animation blending, no physics (25-50m).
+	NONE,             ## No reactions (> 50m or no controller available).
+}
 
+@export_group("References")
 @export var skeleton_path: NodePath
 @export var animation_player_path: NodePath
 @export var character_root_path: NodePath
@@ -24,14 +34,23 @@ var _current_tier: int = Tier.NONE
 var _active_ragdoll_enabled: bool = false
 var _ready_complete: bool = false
 
+## Emitted when the character transitions to a different LOD tier.
 signal tier_changed(new_tier: int)
 
 
 func _ready() -> void:
-	_skeleton = get_node(skeleton_path) as Skeleton3D
-	_anim_player = get_node(animation_player_path) as AnimationPlayer
+	_skeleton = get_node_or_null(skeleton_path) as Skeleton3D
+	if not _skeleton:
+		push_error("KickbackCharacter: skeleton_path is invalid or missing — cannot initialize.")
+		return
+
+	_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
+	if not _anim_player:
+		push_error("KickbackCharacter: animation_player_path is invalid or missing — cannot initialize.")
+		return
+
 	if not character_root_path.is_empty():
-		_character_root = get_node(character_root_path) as Node3D
+		_character_root = get_node_or_null(character_root_path) as Node3D
 
 	_manager = get_node_or_null("/root/KickbackManager") as KickbackManager
 	if not _manager:
@@ -115,6 +134,8 @@ func _process(_delta: float) -> void:
 		_set_tier(target_tier)
 
 
+## Routes an incoming hit to the controller for the current LOD tier.
+## [param body_or_bone] should be a RigidBody3D (active) or PhysicalBone3D (partial).
 func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vector3, profile: WeaponProfile) -> void:
 	match _current_tier:
 		Tier.ACTIVE_RAGDOLL:
@@ -185,10 +206,12 @@ func _set_tier(new_tier: int) -> void:
 				_simulator.active = true
 
 
+## Returns the current LOD tier as a [enum Tier] value.
 func get_current_tier() -> int:
 	return _current_tier
 
 
+## Returns a human-readable label for the current tier (e.g. "ACTIVE", "PARTIAL").
 func get_tier_name() -> String:
 	match _current_tier:
 		Tier.ACTIVE_RAGDOLL: return "ACTIVE"

@@ -1,14 +1,23 @@
+## Data object describing a single hit event. Passed to partial ragdoll and
+## flinch controllers to communicate hit location, direction, and magnitude.
 class_name HitEvent
 extends RefCounted
 
+## World-space position where the hit landed.
 var hit_position: Vector3
+## World-space direction of the incoming hit (normalized).
 var hit_direction: Vector3
+## Skeleton bone name that was hit (e.g. "mixamorig_LeftArm").
 var hit_bone_name: String
+## Final impulse magnitude after weapon profile scaling.
 var impulse_magnitude: float
+## The PhysicalBone3D that was hit (for partial ragdoll tier).
 var hit_bone: PhysicalBone3D
+## Body region classification: "head", "torso", "upper_limb", or "lower_limb".
 var hit_bone_region: String = "torso"
 
 
+## Classifies a bone name into a body region for flinch animation selection.
 static func classify_region(bone_name: String) -> String:
 	var n := bone_name.to_lower()
 	if "head" in n:                                          return "head"

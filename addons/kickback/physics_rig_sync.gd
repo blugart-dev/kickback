@@ -1,3 +1,5 @@
+## Synchronizes physics ragdoll body transforms back to the visible Skeleton3D.
+## Runs every frame when active, writing bone pose overrides from RigidBody3D positions.
 class_name PhysicsRigSync
 extends Node
 

@@ -393,9 +393,17 @@ resolver, sync script. Target: 55+ FPS with 5 active ragdolls.
 - Use length_squared() for velocity clamping (avoid sqrt in hot path)
 - Added frame time + active ragdoll count overlay to integration test
 
-## Milestone 5 — Editor plugin tooling
+## Milestone 5 — Editor plugin tooling ✅ COMPLETE
 One-click "Add Kickback to character", visual strength debugger, weapon profile
 editor, collision shape visualization.
+
+**Status**: Complete. Key features:
+- Tool menu "Add Kickback to Selected": creates all 7 controller nodes with auto-wired NodePaths
+- Validates Skeleton3D + AnimationPlayer prerequisites, prevents duplicates
+- Undoable via EditorUndoRedoManager
+- StrengthDebugHUD: 2D overlay (F3 toggle) showing per-bone strength as colored dots
+- Weapon profiles use Godot's built-in Resource editor (no custom editor needed)
+- Collision shapes visible via Debug → Visible Collision Shapes (built-in)
 
 ## Milestone 6 — Multiple character support
 Test with different Mixamo characters. Configurable bone name mapping for

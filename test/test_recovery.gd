@@ -64,7 +64,7 @@ func _shoot(screen_pos: Vector2) -> void:
 func _process(_delta: float) -> void:
 	var state_name := _controller.get_state_name()
 	var max_err := _spring.get_max_rotation_error()
-	_state_label.text = "State: %s  |  Error: %.2f  |  FPS: %d  |  E = ragdoll  |  LMB = shoot  |  RMB = orbit" % [
+	_state_label.text = "State: %s  |  Error: %.2f  |  FPS: %d  |  E = ragdoll  |  LMB = shoot  |  RMB = orbit  |  F3 = debug" % [
 		state_name, max_err, Engine.get_frames_per_second()]
 
 	if _controller.get_state() == ActiveRagdollController.State.GETTING_UP:

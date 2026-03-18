@@ -1,3 +1,6 @@
+## Builds a physics ragdoll rig from 16 RigidBody3D nodes connected by
+## Generic6DOFJoint3D joints. Created at runtime when active ragdoll is enabled.
+## Currently supports Mixamo-compatible humanoid skeletons.
 class_name PhysicsRigBuilder
 extends Node3D
 
