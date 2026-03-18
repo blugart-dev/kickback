@@ -6,6 +6,8 @@ extends Node3D
 var _characters: Array[KickbackCharacter] = []
 var _profiles: Array[WeaponProfile] = []
 var _current_weapon: int = 0
+var _frame_time_usec: float = 0.0
+var _last_tick: int = 0
 
 
 func _ready() -> void:
@@ -84,10 +86,22 @@ func _find_character_owner(body: Node) -> Node:
 
 
 func _process(_delta: float) -> void:
+	var now := Time.get_ticks_usec()
+	if _last_tick > 0:
+		_frame_time_usec = lerp(_frame_time_usec, float(now - _last_tick), 0.1)
+	_last_tick = now
+
 	var camera := get_viewport().get_camera_3d()
 	var profile: WeaponProfile = _profiles[_current_weapon]
-	var info := "[%d] %s  |  FPS: %d  |  RMB+WASD = fly  |  1-5 = weapon  |  LMB = shoot\n" % [
-		_current_weapon + 1, profile.weapon_name, Engine.get_frames_per_second()]
+
+	var active_count := 0
+	for kc: KickbackCharacter in _characters:
+		if kc.get_current_tier() == KickbackCharacter.Tier.ACTIVE_RAGDOLL:
+			active_count += 1
+
+	var info := "[%d] %s  |  FPS: %d  |  Frame: %.1fms  |  Active ragdolls: %d  |  RMB+WASD = fly  |  1-5 = weapon\n" % [
+		_current_weapon + 1, profile.weapon_name, Engine.get_frames_per_second(),
+		_frame_time_usec / 1000.0, active_count]
 
 	if camera:
 		for i in _characters.size():

@@ -66,3 +66,9 @@ func _process(_delta: float) -> void:
 	var max_err := _spring.get_max_rotation_error()
 	_state_label.text = "State: %s  |  Error: %.2f  |  FPS: %d  |  E = ragdoll  |  LMB = shoot  |  RMB = orbit" % [
 		state_name, max_err, Engine.get_frames_per_second()]
+
+	if _controller.get_state() == ActiveRagdollController.State.GETTING_UP:
+		var hip_str := _spring.get_bone_strength("Hips")
+		var arm_str := _spring.get_bone_strength("UpperArm_L")
+		var head_str := _spring.get_bone_strength("Head")
+		_hit_label.text = "Recovery: Hips=%.2f  Arm=%.2f  Head=%.2f" % [hip_str, arm_str, head_str]

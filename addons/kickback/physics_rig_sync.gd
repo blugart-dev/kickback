@@ -10,6 +10,8 @@ var _active: bool = false
 
 var _spine1_idx: int = -1
 var _neck_idx: int = -1
+var _bone_cache: Array = []  # [{body: RigidBody3D, bone_idx: int}, ...]
+var _cache_built: bool = false
 
 
 func _ready() -> void:
@@ -31,24 +33,34 @@ func is_active() -> bool:
 	return _active
 
 
+func _build_cache() -> void:
+	_bone_cache.clear()
+	var bodies := _rig_builder.get_bodies()
+	for rig_name: String in bodies:
+		var bone_name: String = _rig_builder.get_bone_name_for_body(rig_name)
+		var bone_idx := _skeleton.find_bone(bone_name)
+		if bone_idx >= 0:
+			_bone_cache.append({"body": bodies[rig_name], "bone_idx": bone_idx})
+	_cache_built = true
+
+
 func _process(_delta: float) -> void:
 	if not _active or not _rig_builder or not _skeleton:
 		return
 
+	if not _cache_built:
+		_build_cache()
+
 	var skel_global_inv := _skeleton.global_transform.affine_inverse()
-	var bodies := _rig_builder.get_bodies()
 
 	# Direct sync: body transform IS the bone transform
-	for rig_name: String in bodies:
-		var body: RigidBody3D = bodies[rig_name]
-		var bone_name: String = _rig_builder.get_bone_name_for_body(rig_name)
-		var bone_idx := _skeleton.find_bone(bone_name)
-		if bone_idx < 0:
-			continue
-		var local_pose := skel_global_inv * body.global_transform
-		_safe_set_bone_override(bone_idx, local_pose)
+	for entry: Dictionary in _bone_cache:
+		var body: RigidBody3D = entry.body
+		var local_pose: Transform3D = skel_global_inv * body.global_transform
+		_safe_set_bone_override(entry.bone_idx, local_pose)
 
 	# Interpolate skipped bones (Spine1, Neck)
+	var bodies := _rig_builder.get_bodies()
 	if _spine1_idx >= 0 and "Spine" in bodies and "Chest" in bodies:
 		var spine_pos: Vector3 = bodies["Spine"].global_position
 		var chest_pos: Vector3 = bodies["Chest"].global_position

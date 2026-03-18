@@ -17,6 +17,7 @@ var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
 var _settle_timer: float = 0.0
 var _default_recovery_rate: float = 0.3
+var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
 
 const STRENGTH_MAP: Dictionary = {
 	"Hips": 0.65, "Spine": 0.60, "Chest": 0.60,
@@ -29,6 +30,9 @@ const STRENGTH_MAP: Dictionary = {
 
 const MAX_ANGULAR_VEL := 20.0
 const MAX_LINEAR_VEL := 10.0
+const MAX_ANGULAR_VEL_SQ := MAX_ANGULAR_VEL * MAX_ANGULAR_VEL
+const MAX_LINEAR_VEL_SQ := MAX_LINEAR_VEL * MAX_LINEAR_VEL
+const PROPERTY_THRESHOLD := 0.01
 
 
 func _ready() -> void:
@@ -80,37 +84,51 @@ func _physics_process(delta: float) -> void:
 	if not _active or _bones.is_empty():
 		return
 
-	for rig_name: String in _bones:
-		var state: Dictionary = _bones[rig_name]
-		state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
-		var ratio := _strength_ratio(state)
-		state.body.gravity_scale = (1.0 - ratio) * 0.5
-		state.body.angular_damp = 1.0 + 2.0 * ratio
-		state.body.linear_damp = 0.5 + 1.5 * ratio
-
+	# Cache animation bone globals once per frame
 	var skel_global := _skeleton.global_transform
+	var has_overrides := not _target_overrides.is_empty()
 
+	# Single merged pass: strength recovery + property updates + spring computation
 	for rig_name: String in _bones:
 		var state: Dictionary = _bones[rig_name]
 		var body: RigidBody3D = state.body
-		var bone_idx: int = state.bone_idx
+
+		# Strength recovery
+		state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
+		var ratio := _strength_ratio(state)
+
+		# Property updates — skip if unchanged
+		var new_gravity := (1.0 - ratio) * 0.5
+		var new_ang_damp := 1.0 + 2.0 * ratio
+		var new_lin_damp := 0.5 + 1.5 * ratio
+		if absf(body.gravity_scale - new_gravity) > PROPERTY_THRESHOLD:
+			body.gravity_scale = new_gravity
+		if absf(body.angular_damp - new_ang_damp) > PROPERTY_THRESHOLD:
+			body.angular_damp = new_ang_damp
+		if absf(body.linear_damp - new_lin_damp) > PROPERTY_THRESHOLD:
+			body.linear_damp = new_lin_damp
+
+		# Spring computation
 		var strength: float = state.strength
 		if strength < 0.001:
 			continue
 
-		var target_xform := skel_global * _get_animation_bone_global(bone_idx)
+		var target_xform: Transform3D
+		if has_overrides and rig_name in _target_overrides:
+			target_xform = _target_overrides[rig_name]
+		else:
+			target_xform = skel_global * get_animation_bone_global(state.bone_idx)
 		var current_xform := body.global_transform
 
 		_apply_angular_spring(body, target_xform, current_xform, strength, delta)
 
-		var base_pin := _get_pin_strength(rig_name)
-		var pin := base_pin * _strength_ratio(state)
+		var pin := _get_pin_strength(rig_name) * ratio
 		var pos_error := target_xform.origin - current_xform.origin
 		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
 
-		if body.angular_velocity.length() > MAX_ANGULAR_VEL:
+		if body.angular_velocity.length_squared() > MAX_ANGULAR_VEL_SQ:
 			body.angular_velocity = body.angular_velocity.normalized() * MAX_ANGULAR_VEL
-		if body.linear_velocity.length() > MAX_LINEAR_VEL:
+		if body.linear_velocity.length_squared() > MAX_LINEAR_VEL_SQ:
 			body.linear_velocity = body.linear_velocity.normalized() * MAX_LINEAR_VEL
 
 
@@ -145,7 +163,7 @@ func _get_pin_strength(rig_name: String) -> float:
 	return default_pin_strength
 
 
-func _get_animation_bone_global(bone_idx: int) -> Transform3D:
+func get_animation_bone_global(bone_idx: int) -> Transform3D:
 	var xform := _skeleton.get_bone_pose(bone_idx)
 	var parent_idx := _skeleton.get_bone_parent(bone_idx)
 	while parent_idx >= 0:
@@ -184,12 +202,14 @@ func get_default_recovery_rate() -> float:
 func is_settled(delta: float) -> bool:
 	if _bones.is_empty():
 		return false
+	var lin_sq := settle_linear_threshold * settle_linear_threshold
+	var ang_sq := settle_angular_threshold * settle_angular_threshold
 	for state: Dictionary in _bones.values():
 		var body: RigidBody3D = state.body
-		if body.linear_velocity.length() > settle_linear_threshold:
+		if body.linear_velocity.length_squared() > lin_sq:
 			_settle_timer = 0.0
 			return false
-		if body.angular_velocity.length() > settle_angular_threshold:
+		if body.angular_velocity.length_squared() > ang_sq:
 			_settle_timer = 0.0
 			return false
 	_settle_timer += delta
@@ -200,6 +220,20 @@ func reset_settle_timer() -> void:
 	_settle_timer = 0.0
 
 
+func get_bone_idx(rig_name: String) -> int:
+	if rig_name in _bones:
+		return _bones[rig_name].bone_idx
+	return -1
+
+
+func set_target_overrides(overrides: Dictionary) -> void:
+	_target_overrides = overrides
+
+
+func clear_target_overrides() -> void:
+	_target_overrides.clear()
+
+
 func get_max_rotation_error() -> float:
 	if _bones.is_empty() or not _active:
 		return 999.0
@@ -208,7 +242,7 @@ func get_max_rotation_error() -> float:
 	for state: Dictionary in _bones.values():
 		var bone_idx: int = state.bone_idx
 		var body: RigidBody3D = state.body
-		var target_basis: Basis = (skel_global * _get_animation_bone_global(bone_idx)).basis.orthonormalized()
+		var target_basis: Basis = (skel_global * get_animation_bone_global(bone_idx)).basis.orthonormalized()
 		var current_basis: Basis = body.global_transform.basis.orthonormalized()
 		var error_basis: Basis = target_basis * current_basis.inverse()
 		var det: float = error_basis.determinant()

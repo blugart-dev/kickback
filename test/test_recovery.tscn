@@ -1,12 +1,12 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://csrt1cfuydc2t"]
 
 [ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
-[ext_resource type="Script" path="res://test/test_recovery.gd" id="2_script"]
-[ext_resource type="Script" path="res://addons/kickback/physics_rig_builder.gd" id="3_builder"]
-[ext_resource type="Script" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
-[ext_resource type="Script" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
-[ext_resource type="Script" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_controller"]
-[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="7_orbit"]
+[ext_resource type="Script" uid="uid://sfhgkp4g0hsg" path="res://test/test_recovery.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://qjrypha5yute" path="res://addons/kickback/physics_rig_builder.gd" id="3_builder"]
+[ext_resource type="Script" uid="uid://csqpwgrswnf7y" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
+[ext_resource type="Script" uid="uid://20hh4yh8kh35" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
+[ext_resource type="Script" uid="uid://dt16s4lggj7ff" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_controller"]
+[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://addons/kickback/orbit_camera.gd" id="7_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 
@@ -16,53 +16,74 @@ size = Vector2(20, 20)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
 albedo_color = Color(0.35, 0.35, 0.4, 1)
 
-[node name="TestRecovery" type="Node3D"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_platform"]
+size = Vector3(3, 0.5, 3)
+
+[sub_resource type="BoxMesh" id="BoxMesh_platform"]
+size = Vector3(3, 0.5, 3)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_platform"]
+albedo_color = Color(0.5, 0.35, 0.25, 1)
+
+[node name="TestRecovery" type="Node3D" unique_id=1177962918]
 script = ExtResource("2_script")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=860908474]
 transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 5, 0)
 shadow_enabled = true
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1975711287]
 transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
 current = true
 fov = 60.0
 script = ExtResource("7_orbit")
 target = NodePath("../Character")
-target_offset = Vector3(0, 1.0, 0)
 
-[node name="Floor" type="StaticBody3D" parent="."]
+[node name="Floor" type="StaticBody3D" parent="." unique_id=944368165]
 collision_layer = 2
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=413886227]
 shape = SubResource("WorldBoundaryShape3D_1")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=408932178]
 mesh = SubResource("PlaneMesh_1")
 surface_material_override/0 = SubResource("StandardMaterial3D_1")
 
-[node name="Character" parent="." instance=ExtResource("1_char")]
-unique_name_in_owner = true
+[node name="Platform" type="StaticBody3D" parent="." unique_id=1669678283]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.25, 0)
+collision_layer = 2
+collision_mask = 0
 
-[node name="PhysicsRigBuilder" type="Node3D" parent="Character"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Platform" unique_id=457999685]
+shape = SubResource("BoxShape3D_platform")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Platform" unique_id=394765228]
+mesh = SubResource("BoxMesh_platform")
+surface_material_override/0 = SubResource("StandardMaterial3D_platform")
+
+[node name="Character" parent="." unique_id=1548711537 instance=ExtResource("1_char")]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.1645937, 0.50676465, 0)
+
+[node name="PhysicsRigBuilder" type="Node3D" parent="Character" unique_id=1677203378]
 unique_name_in_owner = true
 script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
 
-[node name="PhysicsRigSync" type="Node" parent="Character"]
+[node name="PhysicsRigSync" type="Node" parent="Character" unique_id=1222784088]
 unique_name_in_owner = true
 script = ExtResource("4_sync")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="SpringResolver" type="Node" parent="Character"]
+[node name="SpringResolver" type="Node" parent="Character" unique_id=855862360]
 unique_name_in_owner = true
 script = ExtResource("5_spring")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="ActiveRagdollController" type="Node" parent="Character"]
+[node name="ActiveRagdollController" type="Node" parent="Character" unique_id=1499611105]
 unique_name_in_owner = true
 script = ExtResource("6_controller")
 spring_resolver_path = NodePath("../SpringResolver")
@@ -70,18 +91,19 @@ rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="CanvasLayer" type="CanvasLayer" parent="."]
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1728884711]
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer" unique_id=1376553233]
 offset_left = 10.0
 offset_top = 10.0
 offset_right = 800.0
 offset_bottom = 60.0
 
-[node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer"]
+[node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=751938125]
 unique_name_in_owner = true
+layout_mode = 2
 text = "E = ragdoll  |  LMB = shoot  |  RMB = orbit"
 
-[node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer"]
+[node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer" unique_id=1520908103]
 unique_name_in_owner = true
-text = ""
+layout_mode = 2

@@ -18,10 +18,21 @@ var _adjacency: Dictionary = {}
 var _state: int = State.NORMAL
 var _recovery_elapsed: float = 0.0
 var _ragdoll_elapsed: float = 0.0
+var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
 
 signal state_changed(new_state: int)
 
 const RAGDOLL_FORCE_RECOVERY_TIME := 3.0
+const POSE_BLEND_DURATION := 0.4
+
+const RAMP_DELAY: Dictionary = {
+	"Hips": 0.0, "Spine": 0.0, "Chest": 0.05,
+	"Head": 0.25,
+	"UpperArm_L": 0.2, "LowerArm_L": 0.25, "Hand_L": 0.3,
+	"UpperArm_R": 0.2, "LowerArm_R": 0.25, "Hand_R": 0.3,
+	"UpperLeg_L": 0.1, "LowerLeg_L": 0.15, "Foot_L": 0.2,
+	"UpperLeg_R": 0.1, "LowerLeg_R": 0.15, "Foot_R": 0.2,
+}
 
 const MIN_STRENGTH: Dictionary = {
 	"Hips": 0.15, "Spine": 0.10, "Chest": 0.10,
@@ -61,14 +72,40 @@ func _physics_process(delta: float) -> void:
 				_start_recovery()
 		State.GETTING_UP:
 			_recovery_elapsed += delta
-			var t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
-			# Ease-in curve: springs engage gently at first, accelerate later
-			var eased_t := t * t * t  # Cubic ease-in
+
+			# Phase 1: Pose interpolation — blend ragdoll landing pose toward animation
+			var blend_t := clampf(_recovery_elapsed / POSE_BLEND_DURATION, 0.0, 1.0)
+			if blend_t < 1.0 and not _ragdoll_poses.is_empty():
+				var eased_blend := blend_t * blend_t  # Quadratic ease-in
+				var skel_global := _spring._skeleton.global_transform
+				var overrides: Dictionary = {}
+				for rig_name: String in _ragdoll_poses:
+					var bone_idx: int = _spring.get_bone_idx(rig_name)
+					if bone_idx < 0:
+						continue
+					var ragdoll_xform: Transform3D = _ragdoll_poses[rig_name]
+					var anim_xform: Transform3D = skel_global * _spring.get_animation_bone_global(bone_idx)
+					var blended_origin := ragdoll_xform.origin.lerp(anim_xform.origin, eased_blend)
+					var q_ragdoll := ragdoll_xform.basis.get_rotation_quaternion()
+					var q_anim := anim_xform.basis.get_rotation_quaternion()
+					var q_blend := q_ragdoll.slerp(q_anim, eased_blend)
+					overrides[rig_name] = Transform3D(Basis(q_blend), blended_origin)
+				_spring.set_target_overrides(overrides)
+			else:
+				_spring.clear_target_overrides()
+
+			# Phase 2: Per-bone staggered strength ramp
 			for rig_name: String in _spring.get_all_bone_names():
+				var delay: float = RAMP_DELAY.get(rig_name, 0.0)
+				var effective_elapsed := maxf(0.0, _recovery_elapsed - delay)
+				var effective_duration := maxf(0.1, recovery_duration - delay)
+				var t := clampf(effective_elapsed / effective_duration, 0.0, 1.0)
+				var eased_t := t * t * t  # Cubic ease-in per bone
 				var base: float = _spring.get_base_strength(rig_name)
 				_spring.set_bone_strength(rig_name, base * eased_t)
 
-			if (_spring.get_max_rotation_error() < 0.15 and t >= 0.9) or _recovery_elapsed > safety_timeout:
+			var global_t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
+			if (_spring.get_max_rotation_error() < 0.15 and global_t >= 0.9) or _recovery_elapsed > safety_timeout:
 				_finish_recovery()
 
 
@@ -104,6 +141,8 @@ func _full_ragdoll() -> void:
 	_ragdoll_elapsed = 0.0
 	_spring.recovery_rate = 0.0
 	_spring.reset_settle_timer()
+	_spring.clear_target_overrides()
+	_ragdoll_poses.clear()
 	state_changed.emit(_state)
 
 
@@ -135,11 +174,23 @@ func _start_recovery() -> void:
 	# Reposition character root to ragdoll landing position
 	if _character_root and hip_body:
 		var hip_pos := hip_body.global_position
-		_character_root.global_position = Vector3(hip_pos.x, 0.0, hip_pos.z)
+
+		# Raycast down from hip to find ground height
+		var ground_y := 0.0
+		var space_state := _character_root.get_world_3d().direct_space_state
+		var ray_origin := Vector3(hip_pos.x, hip_pos.y + 1.0, hip_pos.z)
+		var ray_end := Vector3(hip_pos.x, hip_pos.y - 3.0, hip_pos.z)
+		var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+		query.collision_mask = 2  # Environment layer only
+		query.collide_with_bodies = true
+		var result := space_state.intersect_ray(query)
+		if not result.is_empty():
+			ground_y = result["position"].y
+
+		_character_root.global_position = Vector3(hip_pos.x, ground_y, hip_pos.z)
 
 		if head_body:
 			var head_pos := head_body.global_position
-			# Head-to-hip = forward when face-down, backward when face-up
 			var facing := Vector3(head_pos.x - hip_pos.x, 0.0, head_pos.z - hip_pos.z)
 			if face_up:
 				facing = -facing
@@ -154,6 +205,9 @@ func _start_recovery() -> void:
 		body.linear_velocity = Vector3.ZERO
 		body.angular_velocity = Vector3.ZERO
 
+	# Capture ragdoll poses for pose interpolation during recovery
+	_ragdoll_poses = saved_transforms.duplicate()
+
 	# Play get-up animation based on orientation
 	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
 	if _anim_player:
@@ -166,6 +220,8 @@ func _start_recovery() -> void:
 func _finish_recovery() -> void:
 	_state = State.NORMAL
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
+	_spring.clear_target_overrides()
+	_ragdoll_poses.clear()
 	state_changed.emit(_state)
 
 	for rig_name: String in _spring.get_all_bone_names():

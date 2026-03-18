@@ -372,13 +372,26 @@ should hold pose while moving, react to hits mid-stride, recover to walking.
 - Heavy Bullet profile (no ragdoll, high impulse, slow recovery) best for testing
 - Manual character translation removed — animations play in place for now
 
-## Milestone 3 — Get-up animation polish
+## Milestone 3 — Get-up animation polish ✅ COMPLETE
 Root motion matching for ragdoll→get-up transition. Blend curves for smoother
 spring ramp. Consider pose interpolation at transition start.
 
-## Milestone 4 — Performance profiling
+**Status**: Complete. Key changes:
+- Pose interpolation: 0.4s blend from ragdoll landing pose toward animation start
+- Staggered spring ramp: core bones engage first, extremities follow (0.0-0.3s delays)
+- Ground raycast: root Y from downward raycast, not hardcoded 0.0
+- SpringResolver target override API for pose blending
+
+## Milestone 4 — Performance profiling ✅ COMPLETE
 Measure physics cost with 7+ active ragdolls. Profile PhysicsServer, spring
 resolver, sync script. Target: 55+ FPS with 5 active ragdolls.
+
+**Status**: Complete. Key optimizations:
+- Cached bone indices in PhysicsRigSync (eliminated 80+ find_bone() calls/frame)
+- Merged SpringResolver dual loops into single pass
+- Skip redundant property writes (gravity_scale, damping) when unchanged
+- Use length_squared() for velocity clamping (avoid sqrt in hot path)
+- Added frame time + active ragdoll count overlay to integration test
 
 ## Milestone 5 — Editor plugin tooling
 One-click "Add Kickback to character", visual strength debugger, weapon profile
