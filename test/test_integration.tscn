@@ -9,13 +9,13 @@
 [ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="7_partial"]
 [ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="8_flinch"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_character.gd" id="9_coordinator"]
-[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="10_orbit"]
+[ext_resource type="Script" path="res://addons/kickback/free_camera.gd" id="10_freecam"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_manager.gd" id="11_manager"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_1"]
-size = Vector2(100, 100)
+size = Vector2(200, 200)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
 albedo_color = Color(0.35, 0.35, 0.4, 1)
@@ -31,12 +31,10 @@ transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.6
 shadow_enabled = true
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.2, 3)
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 1.5, 5)
 current = true
 fov = 60.0
-script = ExtResource("10_orbit")
-target = NodePath("../Character_Close")
-target_offset = Vector3(0, 1.0, 0)
+script = ExtResource("10_freecam")
 
 [node name="Floor" type="StaticBody3D" parent="."]
 collision_layer = 2
@@ -49,85 +47,148 @@ shape = SubResource("WorldBoundaryShape3D_1")
 mesh = SubResource("PlaneMesh_1")
 surface_material_override/0 = SubResource("StandardMaterial3D_1")
 
-[node name="Character_Close" parent="." instance=ExtResource("1_char")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+[node name="Char_Close_1" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 
-[node name="PhysicsRigBuilder" type="Node3D" parent="Character_Close"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_Close_1"]
 script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
 
-[node name="PhysicsRigSync" type="Node" parent="Character_Close"]
+[node name="PhysicsRigSync" type="Node" parent="Char_Close_1"]
 script = ExtResource("4_sync")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="SpringResolver" type="Node" parent="Character_Close"]
+[node name="SpringResolver" type="Node" parent="Char_Close_1"]
 script = ExtResource("5_spring")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="ActiveRagdollController" type="Node" parent="Character_Close"]
+[node name="ActiveRagdollController" type="Node" parent="Char_Close_1"]
 script = ExtResource("6_active")
 spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="PartialRagdollController" type="Node" parent="Character_Close"]
+[node name="FlinchController" type="Node" parent="Char_Close_1"]
+script = ExtResource("8_flinch")
+animation_player_path = NodePath("../AnimationPlayer")
+character_path = NodePath("..")
+
+[node name="KickbackCharacter" type="Node" parent="Char_Close_1"]
+script = ExtResource("9_coordinator")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="Char_Close_2" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_Close_2"]
+script = ExtResource("3_builder")
+skeleton_path = NodePath("../Skeleton3D")
+
+[node name="PhysicsRigSync" type="Node" parent="Char_Close_2"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_Close_2"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_Close_2"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_Close_2"]
+script = ExtResource("8_flinch")
+animation_player_path = NodePath("../AnimationPlayer")
+character_path = NodePath("..")
+
+[node name="KickbackCharacter" type="Node" parent="Char_Close_2"]
+script = ExtResource("9_coordinator")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="Char_Mid_1" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -15)
+
+[node name="PartialRagdollController" type="Node" parent="Char_Mid_1"]
 script = ExtResource("7_partial")
 simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 
-[node name="FlinchController" type="Node" parent="Character_Close"]
+[node name="FlinchController" type="Node" parent="Char_Mid_1"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Character_Close"]
+[node name="KickbackCharacter" type="Node" parent="Char_Mid_1"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Character_Mid" parent="." instance=ExtResource("1_char")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -15)
+[node name="Char_Mid_2" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -18)
 
-[node name="PartialRagdollController" type="Node" parent="Character_Mid"]
+[node name="PartialRagdollController" type="Node" parent="Char_Mid_2"]
 script = ExtResource("7_partial")
 simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 
-[node name="FlinchController" type="Node" parent="Character_Mid"]
+[node name="FlinchController" type="Node" parent="Char_Mid_2"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Character_Mid"]
+[node name="KickbackCharacter" type="Node" parent="Char_Mid_2"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Character_Far" parent="." instance=ExtResource("1_char")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, -35)
+[node name="Char_Far_1" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -35)
 
-[node name="FlinchController" type="Node" parent="Character_Far"]
+[node name="FlinchController" type="Node" parent="Char_Far_1"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Character_Far"]
+[node name="KickbackCharacter" type="Node" parent="Char_Far_1"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Character_VeryFar" parent="." instance=ExtResource("1_char")]
+[node name="Char_Far_2" parent="." instance=ExtResource("1_char")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -40)
+
+[node name="FlinchController" type="Node" parent="Char_Far_2"]
+script = ExtResource("8_flinch")
+animation_player_path = NodePath("../AnimationPlayer")
+character_path = NodePath("..")
+
+[node name="KickbackCharacter" type="Node" parent="Char_Far_2"]
+script = ExtResource("9_coordinator")
+skeleton_path = NodePath("../Skeleton3D")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="Char_VeryFar" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -55)
 
-[node name="KickbackCharacter" type="Node" parent="Character_VeryFar"]
+[node name="KickbackCharacter" type="Node" parent="Char_VeryFar"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
@@ -139,11 +200,11 @@ character_root_path = NodePath("..")
 offset_left = 10.0
 offset_top = 10.0
 offset_right = 900.0
-offset_bottom = 60.0
+offset_bottom = 80.0
 
 [node name="StateLabel" type="Label" parent="CanvasLayer/VBoxContainer"]
 unique_name_in_owner = true
-text = "LMB = shoot  |  RMB = orbit"
+text = "RMB+WASD = fly  |  1-5 = weapon  |  LMB = shoot"
 
 [node name="HitLabel" type="Label" parent="CanvasLayer/VBoxContainer"]
 unique_name_in_owner = true
