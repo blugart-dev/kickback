@@ -45,13 +45,28 @@ func _on_add_kickback() -> void:
 
 	print("Kickback: Found Skeleton3D='%s', AnimationPlayer='%s'" % [skeleton_name, anim_name])
 
+	# Preload all scripts and validate they exist
+	var scripts: Dictionary = {}
+	var script_paths := [
+		"kickback_character", "physics_rig_builder", "physics_rig_sync",
+		"spring_resolver", "active_ragdoll_controller",
+		"partial_ragdoll_controller", "flinch_controller",
+	]
+	for script_name: String in script_paths:
+		var path := "res://addons/kickback/%s.gd" % script_name
+		var s: GDScript = load(path)
+		if not s:
+			_show_error("Failed to load '%s'.\nCheck that the Kickback addon is installed correctly." % path)
+			return
+		scripts[script_name] = s
+
 	# Create all nodes with scripts and properties set BEFORE adding to tree
 	var nodes: Array[Node] = []
 
 	# 1. KickbackCharacter
 	var kc := Node.new()
 	kc.name = "KickbackCharacter"
-	kc.set_script(load("res://addons/kickback/kickback_character.gd"))
+	kc.set_script(scripts["kickback_character"])
 	kc.set("skeleton_path", NodePath("../%s" % skeleton_name))
 	kc.set("animation_player_path", NodePath("../%s" % anim_name))
 	kc.set("character_root_path", NodePath(".."))
@@ -60,14 +75,14 @@ func _on_add_kickback() -> void:
 	# 2. PhysicsRigBuilder
 	var builder := Node3D.new()
 	builder.name = "PhysicsRigBuilder"
-	builder.set_script(load("res://addons/kickback/physics_rig_builder.gd"))
+	builder.set_script(scripts["physics_rig_builder"])
 	builder.set("skeleton_path", NodePath("../%s" % skeleton_name))
 	nodes.append(builder)
 
 	# 3. PhysicsRigSync
 	var sync := Node.new()
 	sync.name = "PhysicsRigSync"
-	sync.set_script(load("res://addons/kickback/physics_rig_sync.gd"))
+	sync.set_script(scripts["physics_rig_sync"])
 	sync.set("skeleton_path", NodePath("../%s" % skeleton_name))
 	sync.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
 	nodes.append(sync)
@@ -75,7 +90,7 @@ func _on_add_kickback() -> void:
 	# 4. SpringResolver
 	var spring := Node.new()
 	spring.name = "SpringResolver"
-	spring.set_script(load("res://addons/kickback/spring_resolver.gd"))
+	spring.set_script(scripts["spring_resolver"])
 	spring.set("skeleton_path", NodePath("../%s" % skeleton_name))
 	spring.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
 	nodes.append(spring)
@@ -83,7 +98,7 @@ func _on_add_kickback() -> void:
 	# 5. ActiveRagdollController
 	var active := Node.new()
 	active.name = "ActiveRagdollController"
-	active.set_script(load("res://addons/kickback/active_ragdoll_controller.gd"))
+	active.set_script(scripts["active_ragdoll_controller"])
 	active.set("spring_resolver_path", NodePath("../SpringResolver"))
 	active.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
 	active.set("animation_player_path", NodePath("../%s" % anim_name))
@@ -93,7 +108,7 @@ func _on_add_kickback() -> void:
 	# 6. PartialRagdollController
 	var partial := Node.new()
 	partial.name = "PartialRagdollController"
-	partial.set_script(load("res://addons/kickback/partial_ragdoll_controller.gd"))
+	partial.set_script(scripts["partial_ragdoll_controller"])
 	partial.set("simulator_path", NodePath(simulator_path))
 	partial.set("skeleton_path", NodePath("../%s" % skeleton_name))
 	partial.set("animation_player_path", NodePath("../%s" % anim_name))
@@ -102,7 +117,7 @@ func _on_add_kickback() -> void:
 	# 7. FlinchController
 	var flinch := Node.new()
 	flinch.name = "FlinchController"
-	flinch.set_script(load("res://addons/kickback/flinch_controller.gd"))
+	flinch.set_script(scripts["flinch_controller"])
 	flinch.set("animation_player_path", NodePath("../%s" % anim_name))
 	flinch.set("character_path", NodePath(".."))
 	flinch.set("ragdoll_controller_path", NodePath("../PartialRagdollController"))

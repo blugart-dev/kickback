@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://ji7hevl0rubl" path="res://test/test_physics_rig.gd" id="2_script"]
 [ext_resource type="Script" uid="uid://qjrypha5yute" path="res://addons/kickback/physics_rig_builder.gd" id="3_builder"]
 [ext_resource type="Script" uid="uid://csqpwgrswnf7y" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
-[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://addons/kickback/orbit_camera.gd" id="5_orbit"]
+[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://test/orbit_camera.gd" id="5_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

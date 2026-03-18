@@ -5,8 +5,8 @@
 [ext_resource type="Script" path="res://addons/kickback/physics_rig_builder.gd" id="3_builder"]
 [ext_resource type="Script" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
 [ext_resource type="Script" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
-[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="6_orbit"]
-[ext_resource type="Script" path="res://addons/kickback/raycast_weapon.gd" id="7_weapon"]
+[ext_resource type="Script" path="res://test/orbit_camera.gd" id="6_orbit"]
+[ext_resource type="Script" path="res://test/raycast_weapon.gd" id="7_weapon"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

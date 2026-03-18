@@ -6,7 +6,7 @@
 [ext_resource type="Script" uid="uid://csqpwgrswnf7y" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
 [ext_resource type="Script" uid="uid://20hh4yh8kh35" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
 [ext_resource type="Script" uid="uid://dt16s4lggj7ff" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_active"]
-[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://addons/kickback/orbit_camera.gd" id="7_orbit"]
+[ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://test/orbit_camera.gd" id="7_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

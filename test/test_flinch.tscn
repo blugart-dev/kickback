@@ -3,8 +3,8 @@
 [ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
 [ext_resource type="Script" uid="uid://cckr4lxvd5nug" path="res://test/test_flinch.gd" id="2_script"]
 [ext_resource type="Script" uid="uid://cve0fs6dwfp8y" path="res://addons/kickback/flinch_controller.gd" id="3_flinch"]
-[ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://addons/kickback/raycast_weapon.gd" id="4_weapon"]
-[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="5_orbit"]
+[ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://test/raycast_weapon.gd" id="4_weapon"]
+[ext_resource type="Script" path="res://test/orbit_camera.gd" id="5_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

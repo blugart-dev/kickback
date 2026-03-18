@@ -4,8 +4,8 @@
 [ext_resource type="Script" path="res://test/test_combined.gd" id="2_script"]
 [ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="3_ragdoll"]
 [ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="4_flinch"]
-[ext_resource type="Script" path="res://addons/kickback/raycast_weapon.gd" id="5_weapon"]
-[ext_resource type="Script" path="res://addons/kickback/orbit_camera.gd" id="6_orbit"]
+[ext_resource type="Script" path="res://test/raycast_weapon.gd" id="5_weapon"]
+[ext_resource type="Script" path="res://test/orbit_camera.gd" id="6_orbit"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

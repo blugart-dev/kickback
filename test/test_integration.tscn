@@ -9,7 +9,7 @@
 [ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="7_partial"]
 [ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="8_flinch"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_character.gd" id="9_coordinator"]
-[ext_resource type="Script" path="res://addons/kickback/free_camera.gd" id="10_freecam"]
+[ext_resource type="Script" path="res://test/free_camera.gd" id="10_freecam"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_manager.gd" id="11_manager"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
