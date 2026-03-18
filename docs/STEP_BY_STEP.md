@@ -292,9 +292,12 @@ core active ragdoll system.
   strengths immediately recover and character pops back up
 - Hits during RAGDOLL state should only apply impulse + reset settle timer, NOT
   touch strength values (MIN_STRENGTH floors cause partial recovery)
-- Settling detection: all body velocities below threshold for 0.8s continuously
+- Settling detection: relaxed thresholds (linear 0.5, angular 0.3) + fallback timeout (3s)
+- Minimum damping during ragdoll (angular 1.0, linear 0.5) so bodies actually stop
 - Orientation check: chest body Y-axis dot world UP → face up or face down
-- Spring strength ramp from 0 → base over recovery_duration drives get-up physically
+- Root repositioning to ragdoll hip position before get-up animation
+- Snap bodies to new animation positions after root move to prevent spring yanking
+- Get-up transition remains the hardest part — inherently tricky ragdoll→animation blend
 
 **Tasks**:
 - Detect settling: all RigidBody3D angular + linear velocities below threshold for 0.8s

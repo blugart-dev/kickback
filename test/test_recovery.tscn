@@ -68,6 +68,7 @@ script = ExtResource("6_controller")
 spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 

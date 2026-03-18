@@ -14,9 +14,9 @@ var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
 var _settle_timer: float = 0.0
 
-const SETTLE_LINEAR_THRESHOLD := 0.15
-const SETTLE_ANGULAR_THRESHOLD := 0.1
-const SETTLE_DURATION := 0.8
+const SETTLE_LINEAR_THRESHOLD := 0.5
+const SETTLE_ANGULAR_THRESHOLD := 0.3
+const SETTLE_DURATION := 0.6
 
 const STRENGTH_MAP: Dictionary = {
 	"Hips": 0.65, "Spine": 0.60, "Chest": 0.60,
@@ -87,8 +87,8 @@ func _physics_process(delta: float) -> void:
 		state.body.gravity_scale = (1.0 - strength_ratio) * 0.5
 		# Low strength = low damping (limbs swing freely on hit)
 		# Full strength = full damping (stable pose hold)
-		state.body.angular_damp = 0.2 + 2.8 * strength_ratio  # 0.2 when hit, 3.0 at full
-		state.body.linear_damp = 0.2 + 1.8 * strength_ratio   # 0.2 when hit, 2.0 at full
+		state.body.angular_damp = 1.0 + 2.0 * strength_ratio  # 1.0 when hit, 3.0 at full
+		state.body.linear_damp = 0.5 + 1.5 * strength_ratio   # 0.5 when hit, 2.0 at full
 
 	var skel_global := _skeleton.global_transform
 

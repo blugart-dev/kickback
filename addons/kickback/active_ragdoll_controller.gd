@@ -4,6 +4,7 @@ extends Node
 @export var spring_resolver_path: NodePath
 @export var rig_builder_path: NodePath
 @export var animation_player_path: NodePath
+@export var character_root_path: NodePath
 @export var recovery_duration: float = 1.5
 @export var safety_timeout: float = 5.0
 
@@ -12,10 +13,13 @@ enum State { NORMAL, RAGDOLL, GETTING_UP }
 var _spring: SpringResolver
 var _rig_builder: PhysicsRigBuilder
 var _anim_player: AnimationPlayer
+var _character_root: Node3D
 var _adjacency: Dictionary = {}
 var _state: int = State.NORMAL
 var _recovery_timer: float = 0.0
 var _recovery_elapsed: float = 0.0
+var _ragdoll_elapsed: float = 0.0
+const RAGDOLL_FORCE_RECOVERY_TIME := 3.0
 
 signal state_changed(new_state: int)
 
@@ -31,6 +35,8 @@ func _ready() -> void:
 	_spring = get_node(spring_resolver_path) as SpringResolver
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
 	_anim_player = get_node(animation_player_path) as AnimationPlayer
+	if not character_root_path.is_empty():
+		_character_root = get_node(character_root_path) as Node3D
 	_build_adjacency()
 
 
@@ -49,7 +55,8 @@ func _build_adjacency() -> void:
 func _physics_process(delta: float) -> void:
 	match _state:
 		State.RAGDOLL:
-			if _spring.is_settled(delta):
+			_ragdoll_elapsed += delta
+			if _spring.is_settled(delta) or _ragdoll_elapsed > RAGDOLL_FORCE_RECOVERY_TIME:
 				_start_recovery()
 		State.GETTING_UP:
 			_recovery_elapsed += delta
@@ -98,6 +105,7 @@ func _full_ragdoll() -> void:
 	for rig_name: String in _spring._bones:
 		_spring.set_bone_strength(rig_name, 0.0)
 	_state = State.RAGDOLL
+	_ragdoll_elapsed = 0.0
 	_spring.recovery_rate = 0.0  # Stop auto-recovery during ragdoll
 	_spring.reset_settle_timer()
 	state_changed.emit(_state)
@@ -108,12 +116,30 @@ func _start_recovery() -> void:
 	_recovery_elapsed = 0.0
 	state_changed.emit(_state)
 
-	# Detect orientation: chest body's Y axis vs world UP
 	var bodies := _rig_builder.get_bodies()
+	var hip_body: RigidBody3D = bodies.get("Hips")
 	var chest_body: RigidBody3D = bodies.get("Chest")
+	var head_body: RigidBody3D = bodies.get("Head")
+
+	# Detect orientation BEFORE moving root (uses current body positions)
 	var face_up := true
 	if chest_body:
 		face_up = chest_body.global_basis.y.dot(Vector3.UP) > 0
+
+	# Reposition character root to where the ragdoll landed
+	if _character_root and hip_body:
+		var hip_pos := hip_body.global_position
+		_character_root.global_position = Vector3(hip_pos.x, 0.0, hip_pos.z)
+
+		# Align Y rotation to body facing direction (feet → head = forward)
+		if head_body:
+			var head_pos := head_body.global_position
+			var facing := Vector3(head_pos.x - hip_pos.x, 0.0, head_pos.z - hip_pos.z)
+			if facing.length_squared() > 0.01:
+				_character_root.global_rotation.y = atan2(facing.x, facing.z)
+
+		# Snap bodies to the new animation positions so springs don't yank them
+		_rig_builder._snap_to_skeleton()
 
 	# Play get-up animation
 	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
