@@ -324,7 +324,7 @@ core active ragdoll system.
 
 ---
 
-## Step 8 — LOD system + integration
+## Step 8 — LOD system + integration ✅ COMPLETE
 
 **Goal**: Wire everything together with distance-based fidelity.
 
