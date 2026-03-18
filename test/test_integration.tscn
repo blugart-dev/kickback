@@ -6,7 +6,6 @@
 [ext_resource type="Script" path="res://addons/kickback/physics_rig_sync.gd" id="4_sync"]
 [ext_resource type="Script" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
 [ext_resource type="Script" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_active"]
-[ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="7_partial"]
 [ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="8_flinch"]
 [ext_resource type="Script" path="res://addons/kickback/kickback_character.gd" id="9_coordinator"]
 [ext_resource type="Script" path="res://addons/kickback/free_camera.gd" id="10_freecam"]
@@ -47,148 +46,246 @@ shape = SubResource("WorldBoundaryShape3D_1")
 mesh = SubResource("PlaneMesh_1")
 surface_material_override/0 = SubResource("StandardMaterial3D_1")
 
-[node name="Char_Close_1" parent="." instance=ExtResource("1_char")]
+[node name="Char_1" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 
-[node name="PhysicsRigBuilder" type="Node3D" parent="Char_Close_1"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_1"]
 script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
 
-[node name="PhysicsRigSync" type="Node" parent="Char_Close_1"]
+[node name="PhysicsRigSync" type="Node" parent="Char_1"]
 script = ExtResource("4_sync")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="SpringResolver" type="Node" parent="Char_Close_1"]
+[node name="SpringResolver" type="Node" parent="Char_1"]
 script = ExtResource("5_spring")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="ActiveRagdollController" type="Node" parent="Char_Close_1"]
+[node name="ActiveRagdollController" type="Node" parent="Char_1"]
 script = ExtResource("6_active")
 spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="FlinchController" type="Node" parent="Char_Close_1"]
+[node name="FlinchController" type="Node" parent="Char_1"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Close_1"]
+[node name="KickbackCharacter" type="Node" parent="Char_1"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_Close_2" parent="." instance=ExtResource("1_char")]
+[node name="Char_2" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
-[node name="PhysicsRigBuilder" type="Node3D" parent="Char_Close_2"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_2"]
 script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
 
-[node name="PhysicsRigSync" type="Node" parent="Char_Close_2"]
+[node name="PhysicsRigSync" type="Node" parent="Char_2"]
 script = ExtResource("4_sync")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="SpringResolver" type="Node" parent="Char_Close_2"]
+[node name="SpringResolver" type="Node" parent="Char_2"]
 script = ExtResource("5_spring")
 skeleton_path = NodePath("../Skeleton3D")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 
-[node name="ActiveRagdollController" type="Node" parent="Char_Close_2"]
+[node name="ActiveRagdollController" type="Node" parent="Char_2"]
 script = ExtResource("6_active")
 spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="FlinchController" type="Node" parent="Char_Close_2"]
+[node name="FlinchController" type="Node" parent="Char_2"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Close_2"]
+[node name="KickbackCharacter" type="Node" parent="Char_2"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_Mid_1" parent="." instance=ExtResource("1_char")]
+[node name="Char_3" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -15)
 
-[node name="PartialRagdollController" type="Node" parent="Char_Mid_1"]
-script = ExtResource("7_partial")
-simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_3"]
+script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
-animation_player_path = NodePath("../AnimationPlayer")
 
-[node name="FlinchController" type="Node" parent="Char_Mid_1"]
+[node name="PhysicsRigSync" type="Node" parent="Char_3"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_3"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_3"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_3"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Mid_1"]
+[node name="KickbackCharacter" type="Node" parent="Char_3"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_Mid_2" parent="." instance=ExtResource("1_char")]
+[node name="Char_4" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -18)
 
-[node name="PartialRagdollController" type="Node" parent="Char_Mid_2"]
-script = ExtResource("7_partial")
-simulator_path = NodePath("../Skeleton3D/PhysicalBoneSimulator3D")
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_4"]
+script = ExtResource("3_builder")
 skeleton_path = NodePath("../Skeleton3D")
-animation_player_path = NodePath("../AnimationPlayer")
 
-[node name="FlinchController" type="Node" parent="Char_Mid_2"]
+[node name="PhysicsRigSync" type="Node" parent="Char_4"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_4"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_4"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_4"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Mid_2"]
+[node name="KickbackCharacter" type="Node" parent="Char_4"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_Far_1" parent="." instance=ExtResource("1_char")]
+[node name="Char_5" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -35)
 
-[node name="FlinchController" type="Node" parent="Char_Far_1"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_5"]
+script = ExtResource("3_builder")
+skeleton_path = NodePath("../Skeleton3D")
+
+[node name="PhysicsRigSync" type="Node" parent="Char_5"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_5"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_5"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_5"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Far_1"]
+[node name="KickbackCharacter" type="Node" parent="Char_5"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_Far_2" parent="." instance=ExtResource("1_char")]
+[node name="Char_6" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -40)
 
-[node name="FlinchController" type="Node" parent="Char_Far_2"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_6"]
+script = ExtResource("3_builder")
+skeleton_path = NodePath("../Skeleton3D")
+
+[node name="PhysicsRigSync" type="Node" parent="Char_6"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_6"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_6"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_6"]
 script = ExtResource("8_flinch")
 animation_player_path = NodePath("../AnimationPlayer")
 character_path = NodePath("..")
 
-[node name="KickbackCharacter" type="Node" parent="Char_Far_2"]
+[node name="KickbackCharacter" type="Node" parent="Char_6"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
 
-[node name="Char_VeryFar" parent="." instance=ExtResource("1_char")]
+[node name="Char_7" parent="." instance=ExtResource("1_char")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -55)
 
-[node name="KickbackCharacter" type="Node" parent="Char_VeryFar"]
+[node name="PhysicsRigBuilder" type="Node3D" parent="Char_7"]
+script = ExtResource("3_builder")
+skeleton_path = NodePath("../Skeleton3D")
+
+[node name="PhysicsRigSync" type="Node" parent="Char_7"]
+script = ExtResource("4_sync")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="SpringResolver" type="Node" parent="Char_7"]
+script = ExtResource("5_spring")
+skeleton_path = NodePath("../Skeleton3D")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+
+[node name="ActiveRagdollController" type="Node" parent="Char_7"]
+script = ExtResource("6_active")
+spring_resolver_path = NodePath("../SpringResolver")
+rig_builder_path = NodePath("../PhysicsRigBuilder")
+animation_player_path = NodePath("../AnimationPlayer")
+character_root_path = NodePath("..")
+
+[node name="FlinchController" type="Node" parent="Char_7"]
+script = ExtResource("8_flinch")
+animation_player_path = NodePath("../AnimationPlayer")
+character_path = NodePath("..")
+
+[node name="KickbackCharacter" type="Node" parent="Char_7"]
 script = ExtResource("9_coordinator")
 skeleton_path = NodePath("../Skeleton3D")
 animation_player_path = NodePath("../AnimationPlayer")
