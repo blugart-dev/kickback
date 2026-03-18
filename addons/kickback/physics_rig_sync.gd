@@ -13,6 +13,7 @@ var _neck_idx: int = -1
 
 
 func _ready() -> void:
+	JoltCheck.warn_if_not_jolt()
 	_skeleton = get_node(skeleton_path) as Skeleton3D
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
 	_spine1_idx = _skeleton.find_bone("mixamorig_Spine1")

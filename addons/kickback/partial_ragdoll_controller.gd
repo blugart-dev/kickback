@@ -38,6 +38,7 @@ func _build_bone_map() -> void:
 func apply_hit(event: HitEvent) -> void:
 	var chain := _get_bone_chain(event.hit_bone_name)
 	if chain.is_empty():
+		push_warning("PartialRagdollController: bone '%s' has no simulated chain" % event.hit_bone_name)
 		return
 
 	# If already reacting during blend-out, extend instead of full restart

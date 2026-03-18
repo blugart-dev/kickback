@@ -170,12 +170,12 @@ func _create_joint(config: Dictionary) -> void:
 
 func set_enabled(value: bool) -> void:
 	if value and _built:
-		_snap_to_skeleton()
+		snap_to_skeleton()
 	for body: RigidBody3D in _bodies.values():
 		body.freeze = not value
 
 
-func _snap_to_skeleton() -> void:
+func snap_to_skeleton() -> void:
 	for rig_name: String in _bodies:
 		var body: RigidBody3D = _bodies[rig_name]
 		var bone_name: String = _rig_to_bone[rig_name]

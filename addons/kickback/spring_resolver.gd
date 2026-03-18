@@ -7,16 +7,16 @@ extends Node
 @export var foot_pin_strength: float = 0.4
 @export var default_pin_strength: float = 0.1
 @export var recovery_rate: float = 0.3
+@export var settle_duration: float = 0.6
+@export var settle_linear_threshold: float = 0.5
+@export var settle_angular_threshold: float = 0.3
 
 var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
 var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
 var _settle_timer: float = 0.0
-
-const SETTLE_LINEAR_THRESHOLD := 0.5
-const SETTLE_ANGULAR_THRESHOLD := 0.3
-const SETTLE_DURATION := 0.6
+var _default_recovery_rate: float = 0.3
 
 const STRENGTH_MAP: Dictionary = {
 	"Hips": 0.65, "Spine": 0.60, "Chest": 0.60,
@@ -32,8 +32,10 @@ const MAX_LINEAR_VEL := 10.0
 
 
 func _ready() -> void:
+	JoltCheck.warn_if_not_jolt()
 	_skeleton = get_node(skeleton_path) as Skeleton3D
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
+	_default_recovery_rate = recovery_rate
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -78,17 +80,13 @@ func _physics_process(delta: float) -> void:
 	if not _active or _bones.is_empty():
 		return
 
-	# Recover strength + restore gravity as strength returns
 	for rig_name: String in _bones:
 		var state: Dictionary = _bones[rig_name]
 		state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
-		# Scale gravity and damping by how weakened the bone is
-		var strength_ratio: float = state.strength / state.base_strength if state.base_strength > 0.001 else 1.0
-		state.body.gravity_scale = (1.0 - strength_ratio) * 0.5
-		# Low strength = low damping (limbs swing freely on hit)
-		# Full strength = full damping (stable pose hold)
-		state.body.angular_damp = 1.0 + 2.0 * strength_ratio  # 1.0 when hit, 3.0 at full
-		state.body.linear_damp = 0.5 + 1.5 * strength_ratio   # 0.5 when hit, 2.0 at full
+		var ratio := _strength_ratio(state)
+		state.body.gravity_scale = (1.0 - ratio) * 0.5
+		state.body.angular_damp = 1.0 + 2.0 * ratio
+		state.body.linear_damp = 0.5 + 1.5 * ratio
 
 	var skel_global := _skeleton.global_transform
 
@@ -100,25 +98,24 @@ func _physics_process(delta: float) -> void:
 		if strength < 0.001:
 			continue
 
-		# Read animation target (ignoring sync overrides)
 		var target_xform := skel_global * _get_animation_bone_global(bone_idx)
 		var current_xform := body.global_transform
 
-		# Angular spring: drive rotation toward animation pose
 		_apply_angular_spring(body, target_xform, current_xform, strength, delta)
 
-		# Position pin: scale by strength ratio so hit limbs drift freely
 		var base_pin := _get_pin_strength(rig_name)
-		var strength_ratio: float = strength / state.base_strength if state.base_strength > 0.001 else 1.0
-		var pin := base_pin * strength_ratio
+		var pin := base_pin * _strength_ratio(state)
 		var pos_error := target_xform.origin - current_xform.origin
 		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
 
-		# Clamp to prevent runaway velocities
 		if body.angular_velocity.length() > MAX_ANGULAR_VEL:
 			body.angular_velocity = body.angular_velocity.normalized() * MAX_ANGULAR_VEL
 		if body.linear_velocity.length() > MAX_LINEAR_VEL:
 			body.linear_velocity = body.linear_velocity.normalized() * MAX_LINEAR_VEL
+
+
+func _strength_ratio(state: Dictionary) -> float:
+	return state.strength / state.base_strength if state.base_strength > 0.001 else 1.0
 
 
 func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Transform3D, strength: float, delta: float) -> void:
@@ -149,7 +146,6 @@ func _get_pin_strength(rig_name: String) -> float:
 
 
 func _get_animation_bone_global(bone_idx: int) -> Transform3D:
-	# Compute global pose from local animation poses (ignores sync overrides)
 	var xform := _skeleton.get_bone_pose(bone_idx)
 	var parent_idx := _skeleton.get_bone_parent(bone_idx)
 	while parent_idx >= 0:
@@ -157,6 +153,8 @@ func _get_animation_bone_global(bone_idx: int) -> Transform3D:
 		parent_idx = _skeleton.get_bone_parent(parent_idx)
 	return xform
 
+
+# --- Public API ---
 
 func get_bone_strength(rig_name: String) -> float:
 	if rig_name in _bones:
@@ -169,19 +167,33 @@ func set_bone_strength(rig_name: String, value: float) -> void:
 		_bones[rig_name].strength = value
 
 
+func get_base_strength(rig_name: String) -> float:
+	if rig_name in _bones:
+		return _bones[rig_name].base_strength
+	return 0.0
+
+
+func get_all_bone_names() -> PackedStringArray:
+	return PackedStringArray(_bones.keys())
+
+
+func get_default_recovery_rate() -> float:
+	return _default_recovery_rate
+
+
 func is_settled(delta: float) -> bool:
 	if _bones.is_empty():
 		return false
 	for state: Dictionary in _bones.values():
 		var body: RigidBody3D = state.body
-		if body.linear_velocity.length() > SETTLE_LINEAR_THRESHOLD:
+		if body.linear_velocity.length() > settle_linear_threshold:
 			_settle_timer = 0.0
 			return false
-		if body.angular_velocity.length() > SETTLE_ANGULAR_THRESHOLD:
+		if body.angular_velocity.length() > settle_angular_threshold:
 			_settle_timer = 0.0
 			return false
 	_settle_timer += delta
-	return _settle_timer >= SETTLE_DURATION
+	return _settle_timer >= settle_duration
 
 
 func reset_settle_timer() -> void:
