@@ -5,7 +5,7 @@ extends Node
 @export var rig_builder_path: NodePath
 @export var animation_player_path: NodePath
 @export var character_root_path: NodePath
-@export var recovery_duration: float = 1.5
+@export var recovery_duration: float = 2.0
 @export var safety_timeout: float = 5.0
 
 enum State { NORMAL, RAGDOLL, GETTING_UP }
@@ -62,9 +62,11 @@ func _physics_process(delta: float) -> void:
 		State.GETTING_UP:
 			_recovery_elapsed += delta
 			var t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
+			# Ease-in curve: springs engage gently at first, accelerate later
+			var eased_t := t * t * t  # Cubic ease-in
 			for rig_name: String in _spring.get_all_bone_names():
 				var base: float = _spring.get_base_strength(rig_name)
-				_spring.set_bone_strength(rig_name, base * t)
+				_spring.set_bone_strength(rig_name, base * eased_t)
 
 			if (_spring.get_max_rotation_error() < 0.15 and t >= 0.9) or _recovery_elapsed > safety_timeout:
 				_finish_recovery()
@@ -116,9 +118,13 @@ func _start_recovery() -> void:
 	var head_body: RigidBody3D = bodies.get("Head")
 
 	# Detect orientation BEFORE moving root
+	# Check which way the chest is facing: Z axis (forward) dot with UP
+	# If chest forward points up → character is face-down (chest toward ground)
+	# If chest forward points down → character is face-up (chest toward sky)
 	var face_up := true
 	if chest_body:
-		face_up = chest_body.global_basis.y.dot(Vector3.UP) > 0
+		var chest_forward_dot := chest_body.global_basis.z.dot(Vector3.UP)
+		face_up = chest_forward_dot > 0
 
 	# Save all body world transforms before moving root
 	var saved_transforms: Dictionary = {}
@@ -133,7 +139,10 @@ func _start_recovery() -> void:
 
 		if head_body:
 			var head_pos := head_body.global_position
+			# Head-to-hip = forward when face-down, backward when face-up
 			var facing := Vector3(head_pos.x - hip_pos.x, 0.0, head_pos.z - hip_pos.z)
+			if face_up:
+				facing = -facing
 			if facing.length_squared() > 0.01:
 				_character_root.global_rotation.y = atan2(facing.x, facing.z)
 
@@ -145,7 +154,7 @@ func _start_recovery() -> void:
 		body.linear_velocity = Vector3.ZERO
 		body.angular_velocity = Vector3.ZERO
 
-	# Play get-up animation
+	# Play get-up animation based on orientation
 	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
 	if _anim_player:
 		if _anim_player.has_animation(anim_name):
@@ -164,7 +173,7 @@ func _finish_recovery() -> void:
 		_spring.set_bone_strength(rig_name, base)
 
 	if _anim_player and _anim_player.has_animation("idle"):
-		_anim_player.play("idle")
+		_anim_player.play("idle", 0.5)  # 0.5s crossfade from get-up to idle
 
 
 func get_state() -> int:
