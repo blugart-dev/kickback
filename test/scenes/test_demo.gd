@@ -1,4 +1,5 @@
 ## Interactive demo: multiple patrolling agents with weapon switching.
+## Uses DemoAgent (professional-grade patrol AI with smooth animation transitions).
 ## Controls:
 ##   LMB = shoot, RMB + WASD = fly camera, Scroll = zoom
 ##   1-5 = switch weapon, K = kill nearest, R = revive all
@@ -99,8 +100,15 @@ func _process(_delta: float) -> void:
 		if kc.get_current_tier() == KickbackCharacter.Tier.ACTIVE_RAGDOLL:
 			active_count += 1
 
-		info_parts.append("A%d:%s(%s,%.0fm)" % [
-			i + 1, kc.get_tier_name(), kc.get_active_state_name(), dist])
+		# Show DemoAgent anim state if available
+		var agent_info := ""
+		if root:
+			var agent := root.get_node_or_null("PatrolAgent") as DemoAgent
+			if agent:
+				agent_info = "/%s" % agent.get_anim_state_name()
+
+		info_parts.append("A%d:%s(%s%s,%.0fm)" % [
+			i + 1, kc.get_tier_name(), kc.get_active_state_name(), agent_info, dist])
 
 	_state_label.text = "[%d] %s | FPS: %d | Active: %d | %s" % [
 		_current_weapon + 1, _profile_names[_current_weapon],

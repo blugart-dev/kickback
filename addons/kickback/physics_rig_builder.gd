@@ -141,11 +141,21 @@ func _create_joint(joint_def: JointDefinition) -> void:
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_z.y))
 
 
+## Enables the physics rig. On first enable, snaps bodies to skeleton and unfreezes
+## them permanently. Subsequent calls are no-ops — bodies stay always-simulated
+## so tier transitions have zero visual snap.
 func set_enabled(value: bool) -> void:
 	if value and _built:
-		snap_to_skeleton()
-	for body: RigidBody3D in _bodies.values():
-		body.freeze = not value
+		# Only snap + unfreeze on first enable. After that, bodies stay alive.
+		var any_frozen := false
+		for body: RigidBody3D in _bodies.values():
+			if body.freeze:
+				any_frozen = true
+				break
+		if any_frozen:
+			snap_to_skeleton()
+			for body: RigidBody3D in _bodies.values():
+				body.freeze = false
 
 
 func snap_to_skeleton() -> void:

@@ -81,6 +81,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/` for inspector drag
 - **Force ragdoll from code?** `kickback_character.trigger_ragdoll()` (auto-recovers)
 - **Persistent ragdoll (death/knockdown)?** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
 - **Override LOD tier?** `kickback_character.force_tier(KickbackCharacter.Tier.ACTIVE_RAGDOLL)`
+- **Find all characters?** `KickbackCharacter.find_all(scene_root)` returns all Kickback characters in the scene tree
 - **Slope-adapted recovery?** Set `RagdollTuning.align_to_slope = true`
 
 ## Collision Layers
@@ -124,7 +125,7 @@ Controllers emit signals — `RagdollAnimator` is a default handler you can repl
 
 ## Testing
 
-27 automated tests using [GUT](https://github.com/bitwes/Gut):
+51 automated tests using [GUT](https://github.com/bitwes/Gut):
 
 ```bash
 godot --headless -s addons/gut/gut_cmdln.gd

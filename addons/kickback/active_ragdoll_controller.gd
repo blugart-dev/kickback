@@ -46,6 +46,9 @@ signal recovery_started(face_up: bool)
 ## Emitted when recovery completes and springs are fully restored.
 ## Connect to this to play idle or transition animations.
 signal recovery_finished()
+## Emitted when a hit reduces spring strength but does NOT trigger ragdoll.
+## Useful for subtle visual feedback (stagger, pain sound) in NORMAL state.
+signal hit_absorbed(rig_name: String, new_strength: float)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -90,6 +93,8 @@ func _physics_process(delta: float) -> void:
 		State.PERSISTENT:
 			pass  # Stay ragdolled permanently
 		State.GETTING_UP:
+			if not _spring or not _spring.get_skeleton():
+				return
 			_recovery_elapsed += delta
 
 			# Phase 1: Pose interpolation — blend ragdoll landing pose toward animation
@@ -123,14 +128,20 @@ func _physics_process(delta: float) -> void:
 				var base: float = _spring.get_base_strength(rig_name)
 				_spring.set_bone_strength(rig_name, base * eased_t)
 
+			# Recovery completion: physics-driven, independent of animation duration.
+			# recovery_finished fires when springs converge, not when animation ends.
+			# Users who need animation-synchronized timing should check animation
+			# state in their recovery_finished handler.
 			var global_t := clampf(_recovery_elapsed / _tuning.recovery_duration, 0.0, 1.0)
-			if (_spring.get_max_rotation_error() < 0.3 and global_t >= 0.85) or _recovery_elapsed > _tuning.safety_timeout:
+			if (_spring.get_max_rotation_error() < _tuning.recovery_rotation_threshold and global_t >= _tuning.recovery_completion_threshold) or _recovery_elapsed > _tuning.safety_timeout:
 				_finish_recovery()
 
 
 ## Applies a hit reaction to [param body] using the given impact [param profile].
 ## Reduces spring strengths, applies impulse, and may trigger full ragdoll.
 func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
+	if not is_instance_valid(body):
+		return
 	if _state == State.GETTING_UP:
 		_full_ragdoll()
 		return
@@ -149,6 +160,8 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 
 	if randf() < profile.ragdoll_probability:
 		_full_ragdoll()
+	else:
+		hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
 
 
 ## Forces an immediate transition to full ragdoll, zeroing all spring strengths.

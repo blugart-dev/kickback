@@ -67,7 +67,9 @@ func apply_hit(event: HitEvent) -> void:
 		push_warning("PartialRagdollController: bone '%s' not part of PhysicalBoneSimulator3D — partial ragdoll hit ignored" % event.hit_bone_name)
 		return
 
-	# If already reacting during blend-out, extend instead of full restart
+	# If already reacting during blend-out, extend instead of full restart.
+	# Killing the tween abandons the old _blend_out() coroutine's await — this is
+	# safe because _is_reacting stays true throughout, and a new blend-out takes over.
 	if _is_reacting and _active_tween and _active_tween.is_valid():
 		_active_tween.kill()
 		# Apply additional impulse to the already-simulating bones

@@ -41,6 +41,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_W:
 				_walking = true
+				_walk_speed = 1.2
 				_anim_player.play("walk", 0.3)
 			KEY_R:
 				_walking = true
@@ -58,8 +59,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_shoot(event.position)
 
 
-func _physics_process(_delta: float) -> void:
-	pass
+func _physics_process(delta: float) -> void:
+	if not _walking or _controller.get_state() != ActiveRagdollController.State.NORMAL:
+		return
+	_character.global_position += -_character.global_basis.z * _walk_speed * delta
 
 
 func _shoot(screen_pos: Vector2) -> void:

@@ -20,7 +20,7 @@ extends Resource
 ## How much spring strength is reduced on the hit bone (0 = none, 1 = full).
 @export_range(0.0, 1.0) var strength_reduction: float = 0.4
 ## How many neighbor bones also lose strength (0 = hit bone only).
-@export_range(0, 10) var strength_spread: int = 1
+@export_range(0, 99) var strength_spread: int = 1
 
 @export_group("Recovery")
 ## How fast spring strength recovers per second after a hit.

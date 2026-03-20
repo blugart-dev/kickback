@@ -10,13 +10,21 @@ extends Resource
 ## Physics collision mask for ragdoll bodies.
 @export_flags_3d_physics var collision_mask: int = 14
 
-@export_group("Body Defaults")
-## Default gravity scale for ragdoll bodies when springs are inactive.
+@export_group("Body Defaults (Springs Inactive)")
+## Gravity scale for ragdoll bodies when springs are inactive (full ragdoll).
 @export var gravity_scale: float = 0.8
-## Default angular damping for ragdoll bodies when springs are inactive.
+## Angular damping for ragdoll bodies when springs are inactive.
 @export var angular_damp: float = 8.0
-## Default linear damping for ragdoll bodies when springs are inactive.
+## Linear damping for ragdoll bodies when springs are inactive.
 @export var linear_damp: float = 2.0
+
+@export_group("Body Defaults (Springs Active)")
+## Gravity scale for ragdoll bodies when springs are driving them.
+@export var spring_active_gravity: float = 0.0
+## Angular damping when springs are active.
+@export var spring_active_angular_damp: float = 3.0
+## Linear damping when springs are active.
+@export var spring_active_linear_damp: float = 2.0
 
 @export_group("Spring Strengths")
 ## Per-bone base spring strength. Keys are rig names (e.g. "Hips": 0.65).
@@ -48,6 +56,14 @@ extends Resource
 ## Maximum recovery time before forced completion.
 @export var safety_timeout: float = 3.5
 
+@export_group("Recovery Thresholds")
+## Fraction of recovery_duration that must elapse before early completion is allowed.
+## At this percentage, if rotation error is below recovery_rotation_threshold, recovery completes.
+@export_range(0.5, 1.0) var recovery_completion_threshold: float = 0.95
+## Maximum rotation error (radians) for recovery to complete early.
+## All bones must be within this angle of their animation target.
+@export_range(0.1, 1.0) var recovery_rotation_threshold: float = 0.3
+
 @export_group("Settle Detection")
 ## How long bodies must be below velocity thresholds to count as settled.
 @export var settle_duration: float = 0.6
@@ -68,6 +84,14 @@ extends Resource
 ## Whether to align the character root to the ground slope during recovery.
 ## If false (default), the character stays upright regardless of slope angle.
 @export var align_to_slope: bool = false
+
+@export_group("Root Motion")
+## Strip horizontal (XZ) root motion from the root bone's animation pose.
+## Prevents drift when using animations with root motion (e.g., Mixamo staggers).
+## The Y component is preserved for crouch/jump motion.
+@export var strip_root_motion: bool = true
+## Rig name of the root bone whose root motion should be stripped.
+@export var root_motion_bone: String = "Hips"
 
 
 ## Creates a RagdollTuning with the default values matching the original

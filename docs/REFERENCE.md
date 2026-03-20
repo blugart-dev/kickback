@@ -6,7 +6,9 @@ For each RigidBody3D bone, every `_physics_process(delta)`:
 
 ```gdscript
 # 1. Get target rotation from animation skeleton
-var target_xform = anim_skeleton.global_transform * anim_skeleton.get_bone_global_pose(anim_bone_idx)
+# Note: actual code uses get_bone_pose() + parent walk-up instead of get_bone_global_pose()
+# because get_bone_global_pose() can return stale data (see GODOT_CONSTRAINTS.md).
+var target_xform = anim_skeleton.global_transform * get_animation_bone_global(anim_bone_idx)
 var current_xform = rigid_body.global_transform
 
 # 2. Compute rotation error as axis-angle

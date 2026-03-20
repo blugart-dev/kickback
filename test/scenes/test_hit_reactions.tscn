@@ -7,7 +7,6 @@
 [ext_resource type="Script" uid="uid://20hh4yh8kh35" path="res://addons/kickback/spring_resolver.gd" id="5_spring"]
 [ext_resource type="Script" uid="uid://dt16s4lggj7ff" path="res://addons/kickback/active_ragdoll_controller.gd" id="6_controller"]
 [ext_resource type="Script" uid="uid://xw0eygpvfwsp" path="res://test/helpers/orbit_camera.gd" id="7_orbit"]
-[ext_resource type="Script" uid="uid://cqthlelxvfegl" path="res://test/helpers/raycast_weapon.gd" id="8_weapon"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 
@@ -214,11 +213,6 @@ spring_resolver_path = NodePath("../SpringResolver")
 rig_builder_path = NodePath("../PhysicsRigBuilder")
 animation_player_path = NodePath("../AnimationPlayer")
 character_root_path = NodePath("..")
-
-[node name="Weapon" type="Node3D" parent="." unique_id=234533973]
-unique_name_in_owner = true
-script = ExtResource("8_weapon")
-impulse_magnitude = 15.0
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1956654342]
 

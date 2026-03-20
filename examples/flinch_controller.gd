@@ -26,6 +26,10 @@ enum Direction {
 ## Connect to this signal to play flinch animations.
 signal flinch_triggered(direction: int)
 
+## The impulse magnitude of the most recent hit that triggered a flinch.
+## Read this in your flinch_triggered handler for intensity-aware animation.
+var last_hit_intensity: float = 0.0
+
 var _character: Node3D
 var _ragdoll_ctrl: PartialRagdollController
 var _tuning: RagdollTuning
@@ -53,6 +57,7 @@ func on_hit(event: HitEvent) -> void:
 		return
 
 	var direction := _get_flinch_direction(event)
+	last_hit_intensity = event.impulse_magnitude
 	flinch_triggered.emit(direction)
 
 

@@ -71,3 +71,47 @@ func test_all_strengths_zero_after_ragdoll():
 	for bone_name: String in _spring.get_all_bone_names():
 		assert_eq(_spring.get_bone_strength(bone_name), 0.0,
 			"Bone '%s' should be zero after ragdoll" % bone_name)
+
+
+func test_apply_hit_reduces_bone_strength():
+	var bodies := _rig_builder.get_bodies()
+	var hip_body: RigidBody3D = bodies.get("Hips")
+	assert_not_null(hip_body, "Hips body should exist")
+	var base := _spring.get_base_strength("Hips")
+	var profile := ImpactProfile.create_bullet()
+	profile.ragdoll_probability = 0.0  # Prevent ragdoll
+	_controller.apply_hit(hip_body, Vector3.FORWARD, hip_body.global_position, profile)
+	assert_lt(_spring.get_bone_strength("Hips"), base,
+		"Hips strength should be reduced after hit")
+
+
+func test_apply_hit_no_ragdoll_on_zero_probability():
+	var bodies := _rig_builder.get_bodies()
+	var hip_body: RigidBody3D = bodies.get("Hips")
+	var profile := ImpactProfile.create_bullet()
+	profile.ragdoll_probability = 0.0
+	_controller.apply_hit(hip_body, Vector3.FORWARD, hip_body.global_position, profile)
+	assert_eq(_controller.get_state(), ActiveRagdollController.State.NORMAL,
+		"State should remain NORMAL with zero ragdoll probability")
+
+
+func test_persistent_state_enter_and_exit():
+	_controller.set_persistent(true)
+	assert_eq(_controller.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"Should be PERSISTENT after set_persistent(true)")
+	_controller.set_persistent(false)
+	assert_eq(_controller.get_state(), ActiveRagdollController.State.GETTING_UP,
+		"Should be GETTING_UP after set_persistent(false)")
+
+
+func test_ragdoll_started_signal_emitted():
+	watch_signals(_controller)
+	_controller.trigger_ragdoll()
+	assert_signal_emitted(_controller, "ragdoll_started")
+
+
+func test_state_changed_carries_ragdoll_value():
+	watch_signals(_controller)
+	_controller.trigger_ragdoll()
+	assert_signal_emitted_with_parameters(_controller, "state_changed",
+		[ActiveRagdollController.State.RAGDOLL])

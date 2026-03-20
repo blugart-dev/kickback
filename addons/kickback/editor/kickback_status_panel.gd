@@ -21,7 +21,7 @@ func _build_ui() -> void:
 	# Setup validation
 	_add_section("Setup")
 	_add_check("Skeleton3D", _check_node_path(_kc, "skeleton_path", "Skeleton3D"))
-	_add_check("AnimationPlayer", _check_node_path(_kc, "animation_player_path", "AnimationPlayer"))
+	_add_check("AnimationPlayer (optional)", _check_node_path(_kc, "animation_player_path", "AnimationPlayer"))
 	_add_check("Character Root", _check_node_path(_kc, "character_root_path", "Node3D"))
 	_add_check("PhysicalBoneSimulator3D", _check_simulator())
 	_add_check("Jolt Physics", JoltCheck.is_jolt_active())
@@ -33,17 +33,7 @@ func _build_ui() -> void:
 		_add_check("PhysicsRigBuilder", _has_sibling_of_type(parent, "PhysicsRigBuilder"))
 		_add_check("SpringResolver", _has_sibling_of_type(parent, "SpringResolver"))
 		_add_check("ActiveRagdollController", _has_sibling_of_type(parent, "ActiveRagdollController"))
-		_add_check("PartialRagdollController", _has_sibling_of_type(parent, "PartialRagdollController"))
-		_add_check("FlinchController", _has_sibling_of_type(parent, "FlinchController"))
-		_add_check("RagdollAnimator", _has_sibling_of_type(parent, "RagdollAnimator"))
-
-	# Animation checklist
-	var anim_player := _resolve_anim_player()
-	if anim_player:
-		_add_section("Animations")
-		var expected := KickbackCharacter.get_expected_animations()
-		for anim_name: StringName in expected:
-			_add_check(String(anim_name), anim_player.has_animation(anim_name))
+		_add_check("PartialRagdollController (optional)", _has_sibling_of_type(parent, "PartialRagdollController"))
 
 	# Tips
 	add_child(HSeparator.new())

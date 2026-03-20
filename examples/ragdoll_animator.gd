@@ -97,14 +97,22 @@ func _direction_to_anim(direction: int) -> StringName:
 func _validate_animations() -> void:
 	if not _anim_player:
 		return
-	var anims: Array[StringName] = [
-		idle_anim, get_up_face_up_anim, get_up_face_down_anim,
-		flinch_front_anim, flinch_back_anim,
-		flinch_left_anim, flinch_right_anim,
-	]
 	var missing := PackedStringArray()
-	for anim: StringName in anims:
+	for anim: StringName in get_expected_animations():
 		if not _anim_player.has_animation(anim):
 			missing.append(anim)
 	if not missing.is_empty():
 		push_warning("RagdollAnimator: missing animations: %s" % ", ".join(missing))
+
+
+## Returns the list of animation names this RagdollAnimator expects.
+static func get_expected_animations() -> Array[StringName]:
+	return [
+		&"idle",
+		&"get_up_face_up",
+		&"get_up_face_down",
+		&"flinch_front",
+		&"flinch_back",
+		&"flinch_left",
+		&"flinch_right",
+	]

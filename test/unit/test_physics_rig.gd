@@ -73,3 +73,35 @@ func test_spring_set_and_get_strength():
 
 func test_jolt_check_detects_jolt():
 	assert_true(JoltCheck.is_jolt_active(), "Jolt should be active in this project")
+
+
+func test_bodies_use_correct_collision_layer():
+	var tuning := RagdollTuning.create_default()
+	var bodies := _rig_builder.get_bodies()
+	for rig_name: String in bodies:
+		var body: RigidBody3D = bodies[rig_name]
+		assert_eq(body.collision_layer, tuning.collision_layer,
+			"Body '%s' collision_layer should match tuning default" % rig_name)
+
+
+func test_bodies_use_correct_collision_mask():
+	var tuning := RagdollTuning.create_default()
+	var bodies := _rig_builder.get_bodies()
+	for rig_name: String in bodies:
+		var body: RigidBody3D = bodies[rig_name]
+		assert_eq(body.collision_mask, tuning.collision_mask,
+			"Body '%s' collision_mask should match tuning default" % rig_name)
+
+
+func test_all_base_strengths_match_tuning():
+	var tuning := RagdollTuning.create_default()
+	for rig_name: String in _spring.get_all_bone_names():
+		var expected: float = tuning.strength_map.get(rig_name, tuning.default_spring_strength)
+		assert_almost_eq(_spring.get_base_strength(rig_name), expected, 0.01,
+			"Base strength for '%s' should match tuning" % rig_name)
+
+
+func test_root_motion_stripping_enabled_by_default():
+	var tuning := RagdollTuning.create_default()
+	assert_true(tuning.strip_root_motion, "Root motion stripping should be on by default")
+	assert_eq(tuning.root_motion_bone, "Hips", "Root motion bone should default to Hips")

@@ -27,6 +27,8 @@ func _ready() -> void:
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
 
 
+## Enables or disables skeleton sync. When the rig is always-simulated,
+## sync should stay on permanently — bodies always drive the visible skeleton.
 func set_active(value: bool) -> void:
 	_active = value
 	if not value and _skeleton:

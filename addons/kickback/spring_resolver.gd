@@ -25,6 +25,8 @@ var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary bl
 var _tuning: RagdollTuning
 var _max_angular_vel_sq: float = 400.0
 var _max_linear_vel_sq: float = 100.0
+var _strip_root_motion: bool = true
+var _root_motion_bone: String = "Hips"
 
 const PROPERTY_THRESHOLD := 0.01
 
@@ -50,6 +52,8 @@ func _ready() -> void:
 func _ensure_tuning() -> void:
 	if not _tuning:
 		_tuning = RagdollTuning.create_default()
+	_strip_root_motion = _tuning.strip_root_motion
+	_root_motion_bone = _tuning.root_motion_bone
 
 
 func _init_bones() -> void:
@@ -73,21 +77,18 @@ func get_skeleton() -> Skeleton3D:
 	return _skeleton
 
 
-## Enables or disables the spring resolver. When active, bodies are driven toward
-## animation poses. When inactive, bodies use passive ragdoll damping and gravity.
+## Enables or disables hit-reactive mode. Springs ALWAYS run — when inactive,
+## they switch to passive tracking mode (high strength + high pin + high damping)
+## so bodies perfectly follow the animation with zero visual difference.
+## This eliminates visual snaps on tier transitions.
 func set_active(value: bool) -> void:
 	_ensure_tuning()
 	_active = value
-	for rig_name: String in _bones:
-		var body: RigidBody3D = _bones[rig_name].body
-		if value:
-			body.angular_damp = 3.0
-			body.linear_damp = 2.0
-			body.gravity_scale = 0.0
-		else:
-			body.angular_damp = _tuning.angular_damp
-			body.linear_damp = _tuning.linear_damp
-			body.gravity_scale = _tuning.gravity_scale
+	# In passive mode, override all bones to max strength so they track animation perfectly
+	if not value:
+		for rig_name: String in _bones:
+			var state: Dictionary = _bones[rig_name]
+			state.strength = state.base_strength
 
 
 ## Returns true if the spring resolver is currently active.
@@ -96,7 +97,7 @@ func is_active() -> bool:
 
 
 func _physics_process(delta: float) -> void:
-	if not _active or _bones.is_empty():
+	if _bones.is_empty() or not _skeleton:
 		return
 
 	# Cache animation bone globals once per frame
@@ -108,14 +109,24 @@ func _physics_process(delta: float) -> void:
 		var state: Dictionary = _bones[rig_name]
 		var body: RigidBody3D = state.body
 
-		# Strength recovery
-		state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
+		# Strength recovery (only when hit-reactive mode is active)
+		if _active:
+			state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
 		var ratio := _strength_ratio(state)
 
-		# Property updates — skip if unchanged
-		var new_gravity := (1.0 - ratio) * 0.5
-		var new_ang_damp := 1.0 + 2.0 * ratio
-		var new_lin_damp := 0.5 + 1.5 * ratio
+		# Property updates — passive mode uses high damping for tight animation tracking
+		var new_gravity: float
+		var new_ang_damp: float
+		var new_lin_damp: float
+		if _active:
+			new_gravity = (1.0 - ratio) * 0.5
+			new_ang_damp = 1.0 + 2.0 * ratio
+			new_lin_damp = 0.5 + 1.5 * ratio
+		else:
+			# Passive tracking: high damping, no gravity — bodies follow animation tightly
+			new_gravity = 0.0
+			new_ang_damp = _tuning.spring_active_angular_damp + 5.0
+			new_lin_damp = _tuning.spring_active_linear_damp + 3.0
 		if absf(body.gravity_scale - new_gravity) > PROPERTY_THRESHOLD:
 			body.gravity_scale = new_gravity
 		if absf(body.angular_damp - new_ang_damp) > PROPERTY_THRESHOLD:
@@ -132,7 +143,11 @@ func _physics_process(delta: float) -> void:
 		if has_overrides and rig_name in _target_overrides:
 			target_xform = _target_overrides[rig_name]
 		else:
-			target_xform = skel_global * get_animation_bone_global(state.bone_idx)
+			var anim_pose := get_animation_bone_global(state.bone_idx)
+			if _strip_root_motion and rig_name == _root_motion_bone:
+				anim_pose.origin.x = 0.0
+				anim_pose.origin.z = 0.0
+			target_xform = skel_global * anim_pose
 		var current_xform := body.global_transform
 
 		_apply_angular_spring(body, target_xform, current_xform, strength, delta)

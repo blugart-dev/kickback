@@ -35,8 +35,10 @@ const LOD_COLORS := [
 	Color(0.9, 0.5, 0.2, 0.6),   # Flinch — orange
 ]
 const LOD_LABELS := ["ACTIVE", "PARTIAL", "FLINCH"]
-const LOD_DISTANCES := [10.0, 25.0, 50.0]
+const DEFAULT_LOD_DISTANCES := [10.0, 25.0, 50.0]
 const LOD_SEGMENTS := 48
+
+var _lod_distances: Array = [10.0, 25.0, 50.0]
 
 
 func _ready() -> void:
@@ -46,8 +48,32 @@ func _ready() -> void:
 		_rig_builder = get_node_or_null(rig_builder_path) as PhysicsRigBuilder
 	if not kickback_character_path.is_empty():
 		_kickback_char = get_node_or_null(kickback_character_path) as KickbackCharacter
+	_discover_lod_distances()
 	visible = false
 	print("Kickback: Press F3 for debug overlay (Shift+F3 for LOD zones)")
+
+
+func _discover_lod_distances() -> void:
+	# Check autoload first (same pattern as KickbackCharacter)
+	var manager := get_node_or_null("/root/KickbackManager") as KickbackManager
+	if not manager:
+		var root := get_tree().current_scene
+		if root:
+			manager = _find_manager(root)
+	if manager:
+		_lod_distances = manager.lod_distances
+	else:
+		_lod_distances = DEFAULT_LOD_DISTANCES.duplicate()
+
+
+func _find_manager(node: Node) -> KickbackManager:
+	if node is KickbackManager:
+		return node
+	for child in node.get_children():
+		var found := _find_manager(child)
+		if found:
+			return found
+	return null
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -164,8 +190,8 @@ func _ratio_to_color(ratio: float) -> Color:
 
 
 func _draw_lod_zones(camera: Camera3D, center: Vector3) -> void:
-	for i in LOD_DISTANCES.size():
-		var radius: float = LOD_DISTANCES[i]
+	for i in _lod_distances.size():
+		var radius: float = _lod_distances[i]
 		var color: Color = LOD_COLORS[i]
 		var label: String = LOD_LABELS[i]
 		var points := PackedVector2Array()

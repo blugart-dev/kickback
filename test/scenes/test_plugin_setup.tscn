@@ -10,7 +10,7 @@
 [ext_resource type="Script" uid="uid://20hh4yh8kh35" path="res://addons/kickback/spring_resolver.gd" id="8_mjgtp"]
 [ext_resource type="Script" uid="uid://dt16s4lggj7ff" path="res://addons/kickback/active_ragdoll_controller.gd" id="9_wu74j"]
 [ext_resource type="Script" uid="uid://bbcswrkf8nwyl" path="res://addons/kickback/partial_ragdoll_controller.gd" id="10_ysx8s"]
-[ext_resource type="Script" uid="uid://cve0fs6dwfp8y" path="res://addons/kickback/flinch_controller.gd" id="11_huean"]
+[ext_resource type="Script" uid="uid://cve0fs6dwfp8y" path="res://examples/flinch_controller.gd" id="11_huean"]
 
 [sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_1"]
 

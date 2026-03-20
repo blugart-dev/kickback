@@ -48,3 +48,23 @@ func test_get_tier_boundary_values():
 	assert_eq(_manager.get_tier(10.0), 1, "Exactly 10m = partial")
 	assert_eq(_manager.get_tier(25.0), 2, "Exactly 25m = flinch")
 	assert_eq(_manager.get_tier(50.0), 3, "Exactly 50m = none")
+
+
+func test_zero_max_denies_all_requests():
+	_manager.max_active_ragdolls = 0
+	assert_false(_manager.request_active_ragdoll(), "Should deny when max is 0")
+	assert_eq(_manager.get_active_ragdoll_count(), 0)
+
+
+func test_get_tier_at_zero_distance():
+	assert_eq(_manager.get_tier(0.0), 0, "0m should be active ragdoll (tier 0)")
+
+
+func test_custom_lod_distances():
+	_manager.lod_distances = [5.0, 15.0, 30.0]
+	assert_eq(_manager.get_tier(3.0), 0, "3m with [5,15,30] = active")
+	assert_eq(_manager.get_tier(5.0), 1, "5m with [5,15,30] = partial")
+	assert_eq(_manager.get_tier(10.0), 1, "10m with [5,15,30] = partial")
+	assert_eq(_manager.get_tier(15.0), 2, "15m with [5,15,30] = flinch")
+	assert_eq(_manager.get_tier(30.0), 3, "30m with [5,15,30] = none")
+	assert_eq(_manager.get_tier(100.0), 3, "100m with [5,15,30] = none")

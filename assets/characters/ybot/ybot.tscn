@@ -11,6 +11,17 @@
 [ext_resource type="Animation" path="res://assets/animations/ybot/get_up_face_up.res" id="9_getup_faceup"]
 [ext_resource type="Animation" path="res://assets/animations/ybot/walk.res" id="10_walk"]
 [ext_resource type="Animation" path="res://assets/animations/ybot/run.res" id="11_run"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/react_front.res" id="12_react_front"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/react_back.res" id="13_react_back"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/react_left.res" id="14_react_left"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/react_right.res" id="15_react_right"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/kip_up.res" id="16_kip_up"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_walk.res" id="17_injured_walk"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_walk_back.res" id="18_injured_walk_back"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_walk_left.res" id="19_injured_walk_left"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_walk_right.res" id="20_injured_walk_right"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_back_left.res" id="21_injured_back_left"]
+[ext_resource type="Animation" path="res://assets/animations/ybot/injured_back_right.res" id="22_injured_back_right"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_xoyn8"]
 radius = 0.12
@@ -95,7 +106,18 @@ _data = {
 &"get_up_face_down": ExtResource("8_getup_facedown"),
 &"get_up_face_up": ExtResource("9_getup_faceup"),
 &"walk": ExtResource("10_walk"),
-&"run": ExtResource("11_run")
+&"run": ExtResource("11_run"),
+&"react_front": ExtResource("12_react_front"),
+&"react_back": ExtResource("13_react_back"),
+&"react_left": ExtResource("14_react_left"),
+&"react_right": ExtResource("15_react_right"),
+&"kip_up": ExtResource("16_kip_up"),
+&"injured_walk": ExtResource("17_injured_walk"),
+&"injured_walk_back": ExtResource("18_injured_walk_back"),
+&"injured_walk_left": ExtResource("19_injured_walk_left"),
+&"injured_walk_right": ExtResource("20_injured_walk_right"),
+&"injured_back_left": ExtResource("21_injured_back_left"),
+&"injured_back_right": ExtResource("22_injured_back_right")
 }
 
 [node name="ybot" unique_id=1687264501 instance=ExtResource("1_ieaut")]

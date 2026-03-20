@@ -3,7 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="1_char"]
 [ext_resource type="Script" path="res://test/scenes/test_combined.gd" id="2_script"]
 [ext_resource type="Script" path="res://addons/kickback/partial_ragdoll_controller.gd" id="3_ragdoll"]
-[ext_resource type="Script" path="res://addons/kickback/flinch_controller.gd" id="4_flinch"]
+[ext_resource type="Script" path="res://examples/flinch_controller.gd" id="4_flinch"]
 [ext_resource type="Script" path="res://test/helpers/raycast_weapon.gd" id="5_weapon"]
 [ext_resource type="Script" path="res://test/helpers/orbit_camera.gd" id="6_orbit"]
 

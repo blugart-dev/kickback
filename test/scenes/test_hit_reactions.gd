@@ -6,15 +6,12 @@ extends Node3D
 @onready var _rig_sync: PhysicsRigSync = %PhysicsRigSync
 @onready var _spring: SpringResolver = %SpringResolver
 @onready var _controller: ActiveRagdollController = %ActiveRagdollController
-@onready var _weapon: RaycastWeapon = %Weapon
 
 
 func _ready() -> void:
 	var simulator := %Character.get_node_or_null("Skeleton3D/PhysicalBoneSimulator3D")
 	if simulator:
 		simulator.queue_free()
-
-	_weapon.hit_reported.connect(_on_hit_reported)
 
 	# Auto-enable after rig is built
 	await get_tree().process_frame
@@ -64,7 +61,3 @@ func _process(_delta: float) -> void:
 	var head_str := _spring.get_bone_strength("Head")
 	_state_label.text = "FPS: %d  |  Hips: %.2f  Chest: %.2f  Head: %.2f  |  LMB = shoot  |  RMB = orbit" % [
 		Engine.get_frames_per_second(), hips_str, chest_str, head_str]
-
-
-func _on_hit_reported(bone_name: String) -> void:
-	_hit_label.text = "Hit: %s" % bone_name
