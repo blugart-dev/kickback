@@ -8,12 +8,15 @@
 - **`is_staggering()`** — query whether character is in stagger state.
 - **Debug gizmos rewrite** — self-contained, auto-discovers all KickbackCharacter nodes. Color-coded bone dots for active ragdoll (red/yellow/green by strength), cyan/yellow for partial ragdoll. Scales with distance. No configuration needed.
 - **`StrengthDebugHUD.set_target()`** — optional API for dynamically switching which character the HUD displays.
-- **5 demo scenes** in `demo/`:
+- **8 demo scenes** in `demo/`:
   - `demo.tscn` — Active vs Partial side-by-side comparison
   - `shooting_range.tscn` — FPS controller with 5 targets and juicy weapon profiles
   - `signal_showcase.tscn` — floating 3D popups + signal log showing every signal
   - `tuning_playground.tscn` — live sliders for runtime parameter tuning
   - `stress_test.tscn` — 20 characters, mass ragdoll, budget slider
+  - `animated_npc.tscn` — signal-driven NPC: walk → flinch → stagger → ragdoll → get-up → injured → walk
+  - `ball_throw.tscn` — throw physics balls at NPCs, velocity-scaled impact, loose springs
+  - `tuning_presets.tscn` — 4 characters (Tank/Standard/Loose/Fragile) hit simultaneously
 
 ### Changed
 - **No more LOD switching** — Active Ragdoll and Partial Ragdoll are independent modes. Pick one per character. `KickbackCharacter` uses `Mode` enum (ACTIVE/PARTIAL/NONE) set once at startup, replacing the `Tier` enum and runtime distance-based switching.

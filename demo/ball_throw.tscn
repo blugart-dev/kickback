@@ -1,0 +1,112 @@
+[gd_scene format=3 uid="uid://bsmvg2knxaovf"]
+
+[ext_resource type="Script" uid="uid://ckfemtv54af8f" path="res://demo/ball_throw.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="Material_1"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundary_1"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_1"]
+radius = 0.3
+height = 1.8
+
+[node name="BallThrow" type="Node3D" unique_id=1518240580]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1541454719]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=2139836391]
+collision_layer = 2
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=1198109915]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("Material_1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=556326253]
+shape = SubResource("WorldBoundary_1")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1940874808]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 6)
+collision_mask = 2
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1499763028]
+shape = SubResource("CapsuleShape_1")
+
+[node name="Camera3D" type="Camera3D" parent="Player" unique_id=938090356]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+
+[node name="Targets" type="Node3D" parent="." unique_id=1566892979]
+
+[node name="Target1" type="Node3D" parent="Targets" unique_id=665669904]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 0)
+
+[node name="ybot" parent="Targets/Target1" unique_id=899525563 instance=ExtResource("2_ybot")]
+
+[node name="Target2" type="Node3D" parent="Targets" unique_id=1660826919]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, -1)
+
+[node name="ybot" parent="Targets/Target2" unique_id=1957198734 instance=ExtResource("2_ybot")]
+
+[node name="Target3" type="Node3D" parent="Targets" unique_id=409119081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="ybot" parent="Targets/Target3" unique_id=220720916 instance=ExtResource("2_ybot")]
+
+[node name="Target4" type="Node3D" parent="Targets" unique_id=1317425891]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -1)
+
+[node name="ybot" parent="Targets/Target4" unique_id=147834930 instance=ExtResource("2_ybot")]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1988508414]
+
+[node name="Crosshair" type="Label" parent="HUD" unique_id=1536134960]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -10.0
+offset_top = -12.0
+offset_right = 10.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 24
+text = "o"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StrengthLabel" type="Label" parent="HUD" unique_id=755675254]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 35.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "Throw: 15  [scroll]"
+horizontal_alignment = 2
+
+[node name="ControlsLabel" type="Label" parent="HUD" unique_id=2142947332]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -100.0
+offset_right = 350.0
+offset_bottom = -10.0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 13
+text = "WASD: Move    Mouse: Look    LMB: Throw ball
+Scroll: Throw strength    ESC: Release mouse
+F3: Debug gizmos"

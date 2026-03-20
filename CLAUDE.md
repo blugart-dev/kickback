@@ -55,7 +55,10 @@ kickback/
 │   ├── shooting_range.tscn/gd       # FPS shooting range with 5 weapon profiles
 │   ├── signal_showcase.tscn/gd      # Visualizes all signals with floating popups
 │   ├── tuning_playground.tscn/gd    # Live sliders to tweak physics parameters
-│   └── stress_test.tscn/gd          # 20 characters, budget system, mass ragdoll
+│   ├── stress_test.tscn/gd          # 20 characters, budget system, mass ragdoll
+│   ├── animated_npc.tscn/gd         # Signal-driven NPC with full animation lifecycle
+│   ├── ball_throw.tscn/gd           # Throw physics balls, velocity-scaled impact
+│   └── tuning_presets.tscn/gd       # 4 characters: Tank/Standard/Loose/Fragile
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)

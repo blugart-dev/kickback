@@ -1,0 +1,137 @@
+[gd_scene format=3 uid="uid://cccyw48dmpwe0"]
+
+[ext_resource type="Script" uid="uid://t2fu6mwqr648" path="res://demo/tuning_presets.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 12)
+
+[sub_resource type="StandardMaterial3D" id="Material_1"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundary_1"]
+
+[node name="TuningPresets" type="Node3D" unique_id=103630605]
+script = ExtResource("1_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=153927720]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1692778514]
+collision_layer = 2
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=257268183]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("Material_1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=1473675682]
+shape = SubResource("WorldBoundary_1")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=395681275]
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 1.5, 7)
+
+[node name="Characters" type="Node3D" parent="." unique_id=106764089]
+
+[node name="Tank" type="Node3D" parent="Characters" unique_id=1633870811]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0, 0)
+
+[node name="ybot" parent="Characters/Tank" unique_id=204283217 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="Characters/Tank" unique_id=24946523]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "TANK
+Stiff springs, high pin
+Barely moves"
+font_size = 24
+outline_size = 8
+
+[node name="Standard" type="Node3D" parent="Characters" unique_id=1056726919]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 0)
+
+[node name="ybot" parent="Characters/Standard" unique_id=2032349425 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="Characters/Standard" unique_id=88358701]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "STANDARD
+Plugin defaults
+Balanced baseline"
+font_size = 24
+outline_size = 8
+
+[node name="Loose" type="Node3D" parent="Characters" unique_id=1284767815]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 0)
+
+[node name="ybot" parent="Characters/Loose" unique_id=471306828 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="Characters/Loose" unique_id=678511312]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "LOOSE
+Weak springs, low pin
+Exaggerated wobble"
+font_size = 24
+outline_size = 8
+
+[node name="Fragile" type="Node3D" parent="Characters" unique_id=2089446236]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 0, 0)
+
+[node name="ybot" parent="Characters/Fragile" unique_id=1630179681 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="Characters/Fragile" unique_id=1103861346]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.3, 0)
+billboard = 1
+text = "FRAGILE
+Normal springs but
+falls over easily"
+font_size = 24
+outline_size = 8
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1316971748]
+
+[node name="Crosshair" type="Label" parent="HUD" unique_id=541252758]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -10.0
+offset_top = -12.0
+offset_right = 10.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 20
+text = "+"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WeaponLabel" type="Label" parent="HUD" unique_id=1139069985]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 35.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "Weapon: Bullet  [1-5]"
+horizontal_alignment = 2
+
+[node name="ControlsLabel" type="Label" parent="HUD" unique_id=781414997]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -80.0
+offset_right = 350.0
+offset_bottom = -10.0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 13
+text = "LMB: Shoot one    Space: Shoot ALL
+RMB: Orbit    Scroll: Zoom
+1-5: Switch weapon    F3: Debug gizmos"
