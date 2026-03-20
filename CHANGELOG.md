@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.5.0] - 2026-03-20
+
+### Added
+- **Stagger state** — new state between hit absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable via `RagdollTuning`: `stagger_threshold`, `stagger_duration`, `stagger_strength_floor`, `stagger_ragdoll_bonus`. Signals: `stagger_started(hit_direction)`, `stagger_finished()`.
+- **`trigger_stagger(hit_dir)`** — force stagger from code via KickbackCharacter or ActiveRagdollController.
+- **`is_staggering()`** — query whether character is in stagger state.
+- **Debug gizmos rewrite** — self-contained, auto-discovers all KickbackCharacter nodes. Color-coded bone dots for active ragdoll (red/yellow/green by strength), cyan/yellow for partial ragdoll. Scales with distance. No configuration needed.
+- **`StrengthDebugHUD.set_target()`** — optional API for dynamically switching which character the HUD displays.
+- **5 demo scenes** in `demo/`:
+  - `demo.tscn` — Active vs Partial side-by-side comparison
+  - `shooting_range.tscn` — FPS controller with 5 targets and juicy weapon profiles
+  - `signal_showcase.tscn` — floating 3D popups + signal log showing every signal
+  - `tuning_playground.tscn` — live sliders for runtime parameter tuning
+  - `stress_test.tscn` — 20 characters, mass ragdoll, budget slider
+
+### Changed
+- **No more LOD switching** — Active Ragdoll and Partial Ragdoll are independent modes. Pick one per character. `KickbackCharacter` uses `Mode` enum (ACTIVE/PARTIAL/NONE) set once at startup, replacing the `Tier` enum and runtime distance-based switching.
+- **Setup tool presets** — "Active Ragdoll" and "Partial Ragdoll" replace "Full (Active + Partial)" and "Active Ragdoll Only".
+- **Inspector status panel** — shows only controllers relevant to the detected mode.
+- **KickbackManager** — now purely a budget manager. Removed `lod_distances` and `get_tier()`.
+- Plugin version bumped to 0.5.0.
+
+### Removed
+- `Tier` enum, `tier_changed` signal, `force_tier()`, `clear_forced_tier()`, `get_current_tier()`, `get_tier_name()`
+- `_process()` LOD distance logic in KickbackCharacter
+- `_set_tier()` state machine (collision layer toggling, rig sync toggling)
+- LOD zone visualization (Shift+F3)
+- Per-bone strength table and legend from debug HUD (dots show it visually)
+
+### Fixed
+- PhysicalBoneSimulator3D colliders blocking active ragdoll raycasts
+- `draw_polyline` crash with fewer than 2 points in debug HUD
+- Debug HUD blocking mouse input (mouse_filter set to IGNORE)
+- Camera snap during ragdoll recovery (smooth pivot lerp)
+
 ## [0.3.0] - 2026-03-20
 
 ### Added

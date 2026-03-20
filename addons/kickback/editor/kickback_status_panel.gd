@@ -18,27 +18,45 @@ func _build_ui() -> void:
 
 	add_child(HSeparator.new())
 
+	# Detect which mode based on sibling controllers
+	var parent := _kc.get_parent()
+	var has_active := _has_sibling_of_type(parent, "ActiveRagdollController") if parent else false
+	var has_partial := _has_sibling_of_type(parent, "PartialRagdollController") if parent else false
+
+	# Mode label
+	var mode_name := "Active Ragdoll" if has_active else ("Partial Ragdoll" if has_partial else "None")
+	var mode_label := Label.new()
+	mode_label.text = "Mode: %s" % mode_name
+	mode_label.add_theme_font_size_override("font_size", 12)
+	mode_label.add_theme_color_override("font_color", Color(0.45, 0.75, 0.45))
+	add_child(mode_label)
+
 	# Setup validation
 	_add_section("Setup")
 	_add_check("Skeleton3D", _check_node_path(_kc, "skeleton_path", "Skeleton3D"))
-	_add_check("AnimationPlayer (optional)", _check_node_path(_kc, "animation_player_path", "AnimationPlayer"))
 	_add_check("Character Root", _check_node_path(_kc, "character_root_path", "Node3D"))
-	_add_check("PhysicalBoneSimulator3D", _check_simulator())
 	_add_check("Jolt Physics", JoltCheck.is_jolt_active())
 
-	# Controller siblings
+	# Controller siblings — show only what's relevant
 	_add_section("Controllers")
-	var parent := _kc.get_parent()
-	if parent:
+	if has_active:
 		_add_check("PhysicsRigBuilder", _has_sibling_of_type(parent, "PhysicsRigBuilder"))
+		_add_check("PhysicsRigSync", _has_sibling_of_type(parent, "PhysicsRigSync"))
 		_add_check("SpringResolver", _has_sibling_of_type(parent, "SpringResolver"))
-		_add_check("ActiveRagdollController", _has_sibling_of_type(parent, "ActiveRagdollController"))
-		_add_check("PartialRagdollController (optional)", _has_sibling_of_type(parent, "PartialRagdollController"))
+		_add_check("ActiveRagdollController", true)
+	elif has_partial:
+		_add_check("PartialRagdollController", true)
+		_add_check("PhysicalBoneSimulator3D", _check_simulator())
+	else:
+		_add_check("No controller found", false)
 
 	# Tips
 	add_child(HSeparator.new())
 	var tips := Label.new()
-	tips.text = "F3: debug overlay | Shift+F3: LOD zones\nKickbackRaycast.shoot_from_camera() for testing"
+	if has_active:
+		tips.text = "F3: debug overlay\nKickbackRaycast.shoot_from_camera() for testing"
+	else:
+		tips.text = "KickbackRaycast.shoot_from_camera() for testing"
 	tips.add_theme_font_size_override("font_size", 11)
 	tips.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 	add_child(tips)
@@ -84,7 +102,7 @@ func _add_check(label_text: String, passed: bool) -> void:
 	add_child(hbox)
 
 
-func _check_node_path(kc: KickbackCharacter, property: String, expected_type: String) -> bool:
+func _check_node_path(kc: KickbackCharacter, property: String, _expected_type: String) -> bool:
 	var path: NodePath = kc.get(property)
 	if path.is_empty():
 		return false
@@ -109,15 +127,7 @@ func _has_sibling_of_type(parent: Node, type_name: String) -> bool:
 	return false
 
 
-func _resolve_anim_player() -> AnimationPlayer:
-	var path: NodePath = _kc.get("animation_player_path")
-	if path.is_empty():
-		return null
-	return _kc.get_node_or_null(path) as AnimationPlayer
-
-
 func _refresh() -> void:
-	# Clear and rebuild
 	for child in get_children():
 		child.queue_free()
 	await get_tree().process_frame

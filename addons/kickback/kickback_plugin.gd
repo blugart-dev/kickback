@@ -66,14 +66,14 @@ func _show_preset_dialog() -> void:
 	# Each preset: [radio_label, description, nodes_created]
 	var presets := [
 		[
-			"Full (Active + Partial)",
-			"Active ragdoll up close, partial ragdoll at distance.\nAutomatically switches based on camera distance.",
-			"6 nodes — Physics rig, springs, active + partial controllers",
+			"Active Ragdoll",
+			"Full physics rig with spring-driven joints.\nStagger, ragdoll, and physics-driven recovery.\nBest for main characters and close-range NPCs.",
+			"5 nodes — PhysicsRigBuilder, PhysicsRigSync, SpringResolver, ActiveRagdollController, KickbackCharacter",
 		],
 		[
-			"Active Ragdoll Only",
-			"Full physics-driven reactions at all distances.\nNo LOD switching. Best for small scenes.",
-			"5 nodes — Physics rig, springs, active controller",
+			"Partial Ragdoll",
+			"Lightweight bone-level reactions using PhysicalBoneSimulator3D.\nHit bones simulate briefly then blend back to animation.\nBest for background NPCs or when full ragdoll isn't needed.",
+			"2 nodes — PartialRagdollController, KickbackCharacter + PhysicalBoneSimulator3D",
 		],
 	]
 
@@ -105,7 +105,7 @@ func _show_preset_dialog() -> void:
 	vbox.add_child(HSeparator.new())
 
 	var note := Label.new()
-	note.text = "You can add or remove controller nodes later.\nKickbackCharacter adapts automatically."
+	note.text = "Active and Partial are independent modes — pick one per character.\nKickbackCharacter detects which controller is present."
 	note.add_theme_font_size_override("font_size", 10)
 	note.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	vbox.add_child(note)
@@ -114,7 +114,7 @@ func _show_preset_dialog() -> void:
 
 	dialog.confirmed.connect(func():
 		var pressed: BaseButton = btn_group.get_pressed_button()
-		var preset_label: String = pressed.text if pressed else "Full LOD"
+		var preset_label: String = pressed.text if pressed else "Active Ragdoll"
 		dialog.queue_free()
 		_execute_preset(preset_label)
 	)
@@ -150,11 +150,10 @@ func _execute_preset(preset_name: String) -> void:
 	var include_partial := false
 
 	match preset_name:
-		"Full (Active + Partial)":
+		"Active Ragdoll":
 			include_active = true
+		"Partial Ragdoll":
 			include_partial = true
-		"Active Ragdoll Only":
-			include_active = true
 
 	# Auto-create PhysicalBoneSimulator3D if partial ragdoll is included
 	if include_partial:
@@ -254,7 +253,7 @@ func _execute_preset(preset_name: String) -> void:
 
 
 func _show_setup_report(character_name: String, anim_player: AnimationPlayer, bone_mapping: Dictionary, node_count: int, preset_name: String) -> void:
-	var report := "Preset: %s\nCreated %d nodes on '%s'.\n\n" % [preset_name, node_count, character_name]
+	var report := "Mode: %s\nCreated %d nodes on '%s'.\n\n" % [preset_name, node_count, character_name]
 
 	if not bone_mapping.is_empty():
 		report += "Skeleton: Auto-detected %d bones\n" % bone_mapping.size()
@@ -272,35 +271,29 @@ func _show_setup_report(character_name: String, anim_player: AnimationPlayer, bo
 	else:
 		report += "Skeleton: Using Mixamo defaults (auto-detection failed)\n\n"
 
-	if anim_player:
-		var expected_anims := {
-			"idle": "post-recovery idle",
-			"get_up_face_up": "ragdoll recovery (face up)",
-			"get_up_face_down": "ragdoll recovery (face down)",
-			"flinch_front": "flinch from front",
-			"flinch_back": "flinch from back",
-			"flinch_left": "flinch from left",
-			"flinch_right": "flinch from right",
-		}
+	report += "Collision Layers:\n"
+	if preset_name == "Active Ragdoll":
+		report += "  Layer 2: Environment (ground raycasts during recovery)\n"
+		report += "  Layer 4: Active ragdoll bodies (RigidBody3D)\n"
+	elif preset_name == "Partial Ragdoll":
+		report += "  Layer 2: Environment\n"
+		report += "  Layer 5: Partial ragdoll bones (PhysicalBone3D)\n"
 
-		report += "Animations:\n"
-		for anim_name_key: String in expected_anims:
-			var purpose: String = expected_anims[anim_name_key]
-			if anim_player.has_animation(anim_name_key):
-				report += "  + %s (%s)\n" % [anim_name_key, purpose]
-			else:
-				report += "  - %s — missing (%s)\n" % [anim_name_key, purpose]
-	else:
-		report += "Animations: No AnimationPlayer — use AnimationTree or custom handling.\n"
-
-	report += "\nCollision Layers:\n"
-	report += "  Layer 2: Environment (floors/walls)\n"
-	report += "  Layer 4: Active ragdoll bodies (auto-configured)\n"
-	report += "  Layer 5: Partial ragdoll bones (auto-configured)\n"
+	report += "\nSignals (connect in your code to handle animations):\n"
+	if preset_name == "Active Ragdoll":
+		report += "  stagger_started(hit_direction)  — character wobbles, stays on feet\n"
+		report += "  stagger_finished()              — recovered from stagger\n"
+		report += "  ragdoll_started()               — full ragdoll triggered\n"
+		report += "  recovery_started(face_up)       — getting up from ragdoll\n"
+		report += "  recovery_finished()             — fully recovered\n"
+		report += "  hit_absorbed(rig_name, strength) — light hit, no state change\n"
+	elif preset_name == "Partial Ragdoll":
+		report += "  state_changed(is_reacting)      — true on hit, false on blend-out\n"
 
 	report += "\nQuick Start:\n"
 	report += "  KickbackRaycast.shoot_from_camera(get_viewport(), mouse_pos, profile)\n"
-	report += "  Preset profiles: res://addons/kickback/presets/ (bullet, shotgun, etc.)\n"
+	report += "  Preset profiles: res://addons/kickback/presets/\n"
+	report += "  F3 at runtime: debug overlay (Active Ragdoll only)\n"
 
 	var dialog := AcceptDialog.new()
 	dialog.title = "Kickback Setup Complete"

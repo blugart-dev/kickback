@@ -1,0 +1,106 @@
+[gd_scene format=3 uid="uid://4m2ptmravcgo"]
+
+[ext_resource type="Script" uid="uid://cph4ayrpc23xn" path="res://demo/demo.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="Material_1"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundary_1"]
+
+[node name="Demo" type="Node3D" unique_id=923890610]
+script = ExtResource("1_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=535447733]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=2081362761]
+collision_layer = 2
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=1346268604]
+mesh = SubResource("PlaneMesh_1")
+surface_material_override/0 = SubResource("Material_1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=737684118]
+shape = SubResource("WorldBoundary_1")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1623353532]
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 1.5, 5)
+
+[node name="ActiveChar" type="Node3D" parent="." unique_id=1244361286]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
+
+[node name="ybot" parent="ActiveChar" unique_id=1171507845 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="ActiveChar" unique_id=1066399606]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+billboard = 1
+text = "ACTIVE RAGDOLL
+Full physics rig + springs
+Stagger / Ragdoll / Recovery"
+outline_size = 8
+
+[node name="PartialChar" type="Node3D" parent="." unique_id=798756492]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="ybot" parent="PartialChar" unique_id=1151189161 instance=ExtResource("2_ybot")]
+
+[node name="Label" type="Label3D" parent="PartialChar" unique_id=266495867]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+billboard = 1
+text = "PARTIAL RAGDOLL
+PhysicalBoneSimulator3D
+Lightweight bone reactions"
+outline_size = 8
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1352574968]
+
+[node name="Crosshair" type="Label" parent="HUD" unique_id=1653151979]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -10.0
+offset_top = -12.0
+offset_right = 10.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 20
+text = "+"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WeaponLabel" type="Label" parent="HUD" unique_id=2073460712]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 35.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "Weapon: Bullet  [1-5]"
+horizontal_alignment = 2
+
+[node name="ControlsLabel" type="Label" parent="HUD" unique_id=474955296]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -120.0
+offset_right = 300.0
+offset_bottom = -10.0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 13
+text = "LMB: Shoot    RMB: Orbit camera
+Scroll: Zoom    1-5: Switch weapon
+R: Ragdoll    T: Stagger    P: Persistent
+F3: Debug gizmos"

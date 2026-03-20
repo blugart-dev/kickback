@@ -3,6 +3,10 @@
 > **Note**: This document is historical — all steps and milestones are complete.
 > Test scenes have been reorganized into `test/scenes/` and some early scenes
 > were consolidated. See `CLAUDE.md` for the current project structure.
+>
+> **v0.5.0 update**: Step 8 (LOD system) was removed. Active Ragdoll and Partial
+> Ragdoll are now independent modes — pick one per character, no runtime switching.
+> A new STAGGER state was added to the active ragdoll state machine.
 
 Do these in order. Each step builds on the previous. Each has a test scene and
 concrete pass/fail criteria. Do NOT proceed to the next step until the current

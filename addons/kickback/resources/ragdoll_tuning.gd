@@ -93,6 +93,17 @@ extends Resource
 ## Rig name of the root bone whose root motion should be stripped.
 @export var root_motion_bone: String = "Hips"
 
+@export_group("Stagger")
+## Average strength ratio below which a non-ragdoll hit triggers stagger.
+## Set to 0.0 to disable stagger entirely.
+@export_range(0.0, 1.0) var stagger_threshold: float = 0.55
+## Duration of stagger state before auto-recovery (seconds).
+@export_range(0.1, 3.0) var stagger_duration: float = 0.6
+## Minimum strength ratio during stagger (fraction of base_strength per bone).
+@export_range(0.1, 0.8) var stagger_strength_floor: float = 0.35
+## Multiplier on ragdoll_probability when hit during active stagger.
+@export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
+
 
 ## Creates a RagdollTuning with the default values matching the original
 ## hardcoded constants from the Kickback plugin.
@@ -129,6 +140,11 @@ static func create_default() -> RagdollTuning:
 		"LowerLeg_L": 0.08, "LowerLeg_R": 0.08,
 		"Foot_L": 0.05, "Foot_R": 0.05,
 	}
+
+	tuning.stagger_threshold = 0.55
+	tuning.stagger_duration = 0.6
+	tuning.stagger_strength_floor = 0.35
+	tuning.stagger_ragdoll_bonus = 1.5
 
 	return tuning
 

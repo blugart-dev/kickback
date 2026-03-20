@@ -7,17 +7,15 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 ## Features
 
 - **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.
-- **Partial ragdoll** (optional) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Used as a cheaper alternative at distance.
-- **Automatic LOD** — when both active and partial controllers are present, switches automatically based on camera distance with hysteresis to prevent flickering.
-- **Always-simulated rig** — physics bodies never freeze, springs toggle between active (hit-reactive) and passive (animation tracking) modes. Zero visual snap on LOD transitions.
-- **Node-based configuration** — add only the controllers you need. KickbackCharacter detects available siblings and adapts. One tier? No LOD switching.
-- **Configurable setup tool** — "Add Kickback to Selected" offers presets: Full (Active + Partial) or Active Ragdoll Only.
+- **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
+- **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
+- **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
 - **Skeleton auto-detection** — `SkeletonDetector` identifies humanoid bones in Mixamo, Rigify, Unreal Mannequin, and custom skeletons.
-- **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. No AnimationPlayer dependency in the physics core.
+- **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. Controllers emit signals; animation is the user's responsibility.
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
-- **Root motion stripping** — automatically strips horizontal root motion from the root bone so Mixamo animations with root motion work without drift.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
-- **Debug overlay** — F3 for per-bone spring strength, state, distance, FPS.
+- **Debug gizmos** — F3 for color-coded bone dots on all characters (red=weak, yellow=recovering, green=full).
+- **5 demo scenes** — basic comparison, FPS shooting range, signal showcase, tuning playground, stress test.
 
 ## Requirements
 
@@ -38,11 +36,11 @@ Select your character node (must have a `Skeleton3D` child), then:
 
 **Project > Tools > "Add Kickback to Selected"**
 
-Choose a preset:
-- **Full (Active + Partial)** — active ragdoll up close, partial ragdoll at distance
-- **Active Ragdoll Only** — full physics at all distances, no LOD
+Choose a mode:
+- **Active Ragdoll** — full physics rig with springs. Stagger, ragdoll, recovery.
+- **Partial Ragdoll** — lightweight bone-level reactions using PhysicalBoneSimulator3D.
 
-The plugin will auto-detect humanoid bones, generate a `RagdollProfile`, and create the controller nodes.
+Pick one per character. The plugin auto-detects humanoid bones and creates the controller nodes.
 
 ### 2. Send hits from your game
 
@@ -74,8 +72,10 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 
 ### 4. Customize
 
+- **Force stagger:** `kickback_character.trigger_stagger(hit_direction)`
 - **Force ragdoll:** `kickback_character.trigger_ragdoll()`
 - **Persistent ragdoll (death):** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
+- **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
 - **Different skeleton?** Auto-detects, or create a `RagdollProfile` manually
 - **Different physics feel?** Create a `RagdollTuning` resource
 - **Find all characters:** `KickbackCharacter.find_all(scene_root)`
@@ -83,18 +83,35 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 ## Architecture
 
 ```
-Character
-├── KickbackCharacter (coordinator + configuration)
-├── PhysicsRigBuilder (16 RigidBody3D + 15 Generic6DOFJoint3D)
-├── PhysicsRigSync (physics → skeleton overrides)
+Character (Node3D)
+├── KickbackCharacter (coordinator — detects mode, routes hits)
+├── PhysicsRigBuilder (creates 16 RigidBody3D + 15 joints)
+├── PhysicsRigSync (physics → skeleton bone overrides)
 ├── SpringResolver (animation → physics velocity springs)
-├── ActiveRagdollController (NORMAL/RAGDOLL/GETTING_UP/PERSISTENT state machine)
-└── PartialRagdollController (optional — selective bone simulation at distance)
+└── ActiveRagdollController (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
 ```
 
-Controllers emit signals — connect to `recovery_started`, `recovery_finished`, `hit_absorbed` for custom animation handling.
+**Active Ragdoll signals** (connect for custom animation handling):
+- `stagger_started(hit_direction)` — character wobbles, stays on feet
+- `stagger_finished()` — recovered from stagger
+- `ragdoll_started()` — full ragdoll triggered
+- `recovery_started(face_up)` — getting up from ragdoll
+- `recovery_finished()` — fully recovered
+- `hit_absorbed(rig_name, strength)` — light hit, no state change
 
 **Important:** All root movement and rotation must happen in `_physics_process`, not `_process`, to stay in sync with the spring resolver.
+
+## Demo Scenes
+
+Run any scene from `demo/` to see the plugin in action:
+
+| Scene | What it shows |
+|-------|--------------|
+| `demo.tscn` | Active vs Partial side-by-side comparison |
+| `shooting_range.tscn` | FPS controller, 5 targets, 5 weapon profiles |
+| `signal_showcase.tscn` | Floating popups + log showing every signal |
+| `tuning_playground.tscn` | Live sliders to adjust physics parameters |
+| `stress_test.tscn` | 20 characters, mass ragdoll, budget system |
 
 ## Collision Layers
 
@@ -108,7 +125,7 @@ Use `KickbackRaycast` which targets layers 4+5 automatically.
 
 ## Debug Tools
 
-- **F3** — Toggle debug overlay (per-bone spring strength, state, FPS)
+- **F3** — Toggle bone gizmos (color-coded dots on all characters)
 - **Inspector** — Select KickbackCharacter to see setup status and validation
 - **Visible Collision Shapes** (Debug menu) — See ragdoll collision shapes
 

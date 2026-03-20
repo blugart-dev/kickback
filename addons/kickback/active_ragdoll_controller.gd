@@ -1,4 +1,4 @@
-## Manages the active ragdoll state machine (NORMAL -> RAGDOLL -> GETTING_UP).
+## Manages the active ragdoll state machine (NORMAL -> STAGGER/RAGDOLL -> GETTING_UP).
 ## Coordinates hit reactions, full ragdoll transitions, and recovery sequences
 ## by driving the SpringResolver's per-bone strengths and pose blending.
 ## Animation playback is NOT handled here — connect to the signals and handle
@@ -18,6 +18,7 @@ extends Node
 ## Character state for the active ragdoll lifecycle.
 enum State {
 	NORMAL,      ## Fully animated; springs at full strength.
+	STAGGER,     ## Hit-reactive but on feet; springs at reduced strength.
 	RAGDOLL,     ## All springs zeroed; physics drives the body.
 	GETTING_UP,  ## Recovering from ragdoll; springs ramping back up.
 	PERSISTENT,  ## Persistent ragdoll; stays until set_persistent(false) is called.
@@ -31,11 +32,13 @@ var _state: int = State.NORMAL
 var _recovery_elapsed: float = 0.0
 var _ragdoll_elapsed: float = 0.0
 var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
+var _stagger_elapsed: float = 0.0
+var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
 ## Emitted whenever the controller transitions between states.
-## [param new_state] is one of [enum State] values (NORMAL, RAGDOLL, GETTING_UP, PERSISTENT).
+## [param new_state] is one of [enum State] values (NORMAL, STAGGER, RAGDOLL, GETTING_UP, PERSISTENT).
 signal state_changed(new_state: int)
 ## Emitted when the character enters full ragdoll (all springs zeroed).
 signal ragdoll_started()
@@ -47,8 +50,13 @@ signal recovery_started(face_up: bool)
 ## Connect to this to play idle or transition animations.
 signal recovery_finished()
 ## Emitted when a hit reduces spring strength but does NOT trigger ragdoll.
-## Useful for subtle visual feedback (stagger, pain sound) in NORMAL state.
+## Useful for subtle visual feedback (pain sound, flinch animation) in NORMAL state.
 signal hit_absorbed(rig_name: String, new_strength: float)
+## Emitted when the character enters stagger (visible loss of balance, stays on feet).
+## [param hit_direction] is the world-space direction of the triggering hit.
+signal stagger_started(hit_direction: Vector3)
+## Emitted when the character recovers from stagger and returns to NORMAL.
+signal stagger_finished()
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -86,6 +94,16 @@ func _build_adjacency() -> void:
 
 func _physics_process(delta: float) -> void:
 	match _state:
+		State.STAGGER:
+			_stagger_elapsed += delta
+			var floor_ratio: float = _tuning.stagger_strength_floor
+			for rig_name: String in _spring.get_all_bone_names():
+				var base: float = _spring.get_base_strength(rig_name)
+				var floor_val: float = base * floor_ratio
+				if _spring.get_bone_strength(rig_name) < floor_val:
+					_spring.set_bone_strength(rig_name, floor_val)
+			if _stagger_elapsed >= _tuning.stagger_duration:
+				_finish_stagger()
 		State.RAGDOLL:
 			_ragdoll_elapsed += delta
 			if _spring.is_settled(delta) or _ragdoll_elapsed > _tuning.ragdoll_force_recovery_time:
@@ -155,19 +173,47 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		_spring.reset_settle_timer()
 		return
 
+	if _state == State.STAGGER:
+		_reduce_strength(body.name, profile.strength_reduction, profile.strength_spread)
+		_spring.recovery_rate = profile.recovery_rate
+		var boosted_prob := profile.ragdoll_probability * _tuning.stagger_ragdoll_bonus
+		if randf() < boosted_prob:
+			_full_ragdoll()
+		else:
+			_stagger_elapsed = 0.0  # Extend stagger
+			_stagger_hit_dir = hit_dir
+			hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
+		return
+
+	# NORMAL state
 	_reduce_strength(body.name, profile.strength_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 
 	if randf() < profile.ragdoll_probability:
 		_full_ragdoll()
 	else:
-		hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
+		var avg_ratio := _compute_average_strength_ratio()
+		if avg_ratio < _tuning.stagger_threshold:
+			_start_stagger(hit_dir)
+		else:
+			hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
 
 
 ## Forces an immediate transition to full ragdoll, zeroing all spring strengths.
 ## The character will recover automatically after settling.
 func trigger_ragdoll() -> void:
 	_full_ragdoll()
+
+
+## Forces the character into a stagger state. Springs are reduced to the stagger
+## floor and recover automatically after stagger_duration.
+func trigger_stagger(hit_dir: Vector3 = Vector3.FORWARD) -> void:
+	if _state == State.NORMAL:
+		var floor_ratio: float = _tuning.stagger_strength_floor
+		for rig_name: String in _spring.get_all_bone_names():
+			var base: float = _spring.get_base_strength(rig_name)
+			_spring.set_bone_strength(rig_name, base * floor_ratio)
+		_start_stagger(hit_dir)
 
 
 ## Enables or disables persistent ragdoll. When enabled, the character enters
@@ -297,6 +343,7 @@ func get_state() -> int:
 func get_state_name() -> String:
 	match _state:
 		State.NORMAL: return "NORMAL"
+		State.STAGGER: return "STAGGER"
 		State.RAGDOLL: return "RAGDOLL"
 		State.GETTING_UP: return "GETTING UP"
 		State.PERSISTENT: return "PERSISTENT"
@@ -329,3 +376,32 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 					_spring.set_bone_strength(neighbor, maxf(s * (1.0 - reduction * falloff), nfloor))
 
 			current_level = next_level
+
+
+func _compute_average_strength_ratio() -> float:
+	var total := 0.0
+	var count := 0
+	for rig_name: String in _spring.get_all_bone_names():
+		var base: float = _spring.get_base_strength(rig_name)
+		if base > 0.001:
+			total += _spring.get_bone_strength(rig_name) / base
+			count += 1
+	return total / float(count) if count > 0 else 1.0
+
+
+func _start_stagger(hit_dir: Vector3) -> void:
+	_state = State.STAGGER
+	_stagger_elapsed = 0.0
+	_stagger_hit_dir = hit_dir
+	state_changed.emit(_state)
+	stagger_started.emit(hit_dir)
+
+
+func _finish_stagger() -> void:
+	for rig_name: String in _spring.get_all_bone_names():
+		var base: float = _spring.get_base_strength(rig_name)
+		_spring.set_bone_strength(rig_name, base)
+	_state = State.NORMAL
+	_spring.recovery_rate = _spring.get_default_recovery_rate()
+	state_changed.emit(_state)
+	stagger_finished.emit()

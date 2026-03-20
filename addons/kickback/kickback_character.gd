@@ -1,15 +1,15 @@
-## Central coordinator for a Kickback-enabled character. Manages LOD tier switching
-## based on camera distance and routes incoming hits to the appropriate controller
-## (active ragdoll or partial ragdoll).
+## Central coordinator for a Kickback-enabled character. Detects available
+## sibling controllers and routes incoming hits to the appropriate one.
+## If ActiveRagdollController is present, it takes priority over partial.
 @icon("res://addons/kickback/icons/kickback_character.svg")
 class_name KickbackCharacter
 extends Node
 
-## Detail level for hit-reaction simulation, ordered from most expensive to cheapest.
-enum Tier {
-	ACTIVE_RAGDOLL,   ## Full physics rig with spring-driven joints.
-	PARTIAL_RAGDOLL,  ## PhysicalBoneSimulator3D on hit bones only.
-	NONE,             ## No reactions (too far or no controller available).
+## Which controller mode is active for this character.
+enum Mode {
+	ACTIVE,   ## Full physics rig with spring-driven joints.
+	PARTIAL,  ## PhysicalBoneSimulator3D on hit bones only.
+	NONE,     ## No controllers available.
 }
 
 @export_group("References")
@@ -17,7 +17,7 @@ enum Tier {
 @export var skeleton_path: NodePath
 ## Path to the AnimationPlayer (optional — only needed if using RagdollAnimator).
 @export var animation_player_path: NodePath
-## Path to the character's root Node3D, used for camera distance LOD calculations.
+## Path to the character's root Node3D.
 @export var character_root_path: NodePath
 
 @export_group("Configuration")
@@ -31,7 +31,6 @@ enum Tier {
 var _skeleton: Skeleton3D
 var _anim_player: AnimationPlayer
 var _character_root: Node3D
-var _manager: KickbackManager
 var _simulator: PhysicalBoneSimulator3D
 
 var _rig_builder: PhysicsRigBuilder
@@ -40,15 +39,9 @@ var _spring: SpringResolver
 var _active_controller: ActiveRagdollController
 var _partial_controller: PartialRagdollController
 
-var _current_tier: int = Tier.NONE
-var _active_ragdoll_enabled: bool = false
+var _mode: int = Mode.NONE
 var _ready_complete: bool = false
-var _forced_tier: int = -1
-var _available_tiers: Array[int] = []
-var _single_tier: int = -1
 
-## Emitted when the character transitions to a different LOD tier.
-signal tier_changed(new_tier: int)
 ## Emitted when all controllers are initialized and the character is ready for use.
 signal setup_complete()
 
@@ -64,12 +57,6 @@ func _ready() -> void:
 
 	if not character_root_path.is_empty():
 		_character_root = get_node_or_null(character_root_path) as Node3D
-
-	_manager = get_node_or_null("/root/KickbackManager") as KickbackManager
-	if not _manager:
-		var root := get_tree().current_scene
-		if root:
-			_manager = _find_manager(root)
 
 	# Find simulator and controllers in siblings
 	if _skeleton:
@@ -99,98 +86,43 @@ func _ready() -> void:
 	if _partial_controller:
 		_partial_controller.configure(ragdoll_profile, ragdoll_tuning)
 
-	# Detect which tiers are available based on sibling controllers.
-	# If only one tier has controllers, skip LOD and always use that tier.
-	_available_tiers.clear()
+	# Determine mode: active ragdoll takes priority if all its nodes are present
 	if _rig_builder and _spring and _rig_sync and _active_controller:
-		_available_tiers.append(Tier.ACTIVE_RAGDOLL)
-	if _partial_controller and _simulator:
-		_available_tiers.append(Tier.PARTIAL_RAGDOLL)
-
-	_single_tier = _available_tiers[0] if _available_tiers.size() == 1 else -1
+		_mode = Mode.ACTIVE
+	elif _partial_controller and _simulator:
+		_mode = Mode.PARTIAL
 
 	_validate_setup()
 
-	# Disable simulator initially (will enable when PARTIAL tier is set)
-	if _simulator:
-		_simulator.active = false
-
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# Enable rig + sync permanently. Bodies stay always-simulated to eliminate
-	# tier transition snaps. Springs start in passive tracking mode.
-	if _rig_builder:
+	# Enable the chosen mode
+	if _mode == Mode.ACTIVE:
 		_rig_builder.set_enabled(true)
-	if _rig_sync:
 		_rig_sync.set_active(true)
-	if _spring:
-		_spring.set_active(false)
+		_spring.set_active(true)
+		# Disable simulator so its PhysicalBone3D colliders don't intercept raycasts
+		if _simulator:
+			_simulator.active = false
+	elif _mode == Mode.PARTIAL:
+		_simulator.active = true
 
 	_ready_complete = true
 	setup_complete.emit()
 
 
-func _find_manager(node: Node) -> KickbackManager:
-	if node is KickbackManager:
-		return node
-	for child in node.get_children():
-		var found := _find_manager(child)
-		if found:
-			return found
-	return null
-
-
-func _process(_delta: float) -> void:
-	if not _ready_complete:
-		return
-
-	var camera := get_viewport().get_camera_3d()
-	if not camera or not _character_root:
-		return
-
-	var target_tier: int = Tier.NONE
-
-	if _forced_tier >= 0:
-		target_tier = _forced_tier
-	elif _single_tier >= 0:
-		target_tier = _single_tier
-	else:
-		var distance := camera.global_position.distance_to(_character_root.global_position)
-
-		if _manager:
-			var tier_idx := _manager.get_tier(distance)
-			target_tier = clampi(tier_idx, 0, Tier.NONE)
-		else:
-			var hyst := 1.0 if _current_tier != Tier.NONE else 0.0
-			if distance < 10.0 + (hyst if _current_tier == Tier.ACTIVE_RAGDOLL else 0.0):
-				target_tier = Tier.ACTIVE_RAGDOLL
-			elif distance < 25.0 + (hyst if _current_tier == Tier.PARTIAL_RAGDOLL else 0.0):
-				target_tier = Tier.PARTIAL_RAGDOLL
-			else:
-				target_tier = Tier.NONE
-
-		# Fallback if controller for target tier doesn't exist
-		if target_tier == Tier.ACTIVE_RAGDOLL and not _rig_builder:
-			target_tier = Tier.PARTIAL_RAGDOLL
-		if target_tier == Tier.PARTIAL_RAGDOLL and (not _partial_controller or not _simulator):
-			target_tier = Tier.NONE
-
-	if target_tier != _current_tier:
-		_set_tier(target_tier)
-
-
-## Routes an incoming hit to the controller for the current LOD tier.
+## Routes an incoming hit to the active controller.
 ## [param body_or_bone] should be a RigidBody3D (active) or PhysicalBone3D (partial).
 func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
-	match _current_tier:
-		Tier.ACTIVE_RAGDOLL:
+	match _mode:
+		Mode.ACTIVE:
 			if _active_controller and body_or_bone is RigidBody3D:
 				_active_controller.apply_hit(body_or_bone, hit_dir, hit_pos, profile)
-		Tier.PARTIAL_RAGDOLL:
+		Mode.PARTIAL:
 			if _partial_controller and body_or_bone is PhysicalBone3D:
 				var event := HitEvent.new()
 				event.hit_position = hit_pos
@@ -202,64 +134,44 @@ func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vec
 				_partial_controller.apply_hit(event)
 
 
-func _set_tier(new_tier: int) -> void:
-	# --- Deactivate old tier ---
-	if _current_tier == Tier.ACTIVE_RAGDOLL:
-		if _spring:
-			_spring.set_active(false)
-		if _active_ragdoll_enabled and _manager:
-			_manager.release_active_ragdoll()
-			_active_ragdoll_enabled = false
-	elif _current_tier == Tier.PARTIAL_RAGDOLL:
-		if _simulator:
-			_simulator.active = false
-			_simulator.physical_bones_stop_simulation()
-			_simulator.influence = 1.0
-
-	_current_tier = new_tier
-	tier_changed.emit(new_tier)
-
-	# --- Activate new tier ---
-	match new_tier:
-		Tier.ACTIVE_RAGDOLL:
-			if _simulator:
-				_simulator.active = false
-				_simulator.physical_bones_stop_simulation()
-			var allowed := true
-			if _manager:
-				allowed = _manager.request_active_ragdoll()
-			if allowed and _spring:
-				_spring.set_active(true)
-				_active_ragdoll_enabled = true
-			else:
-				_current_tier = Tier.PARTIAL_RAGDOLL
-				if _simulator:
-					_simulator.active = true
-
-		Tier.PARTIAL_RAGDOLL:
-			if _simulator:
-				_simulator.active = true
+## Returns the current mode as a [enum Mode] value.
+func get_mode() -> int:
+	return _mode
 
 
-## Returns the current LOD tier as a [enum Tier] value.
-func get_current_tier() -> int:
-	return _current_tier
-
-
-## Returns a human-readable label for the current tier.
-func get_tier_name() -> String:
-	match _current_tier:
-		Tier.ACTIVE_RAGDOLL: return "ACTIVE"
-		Tier.PARTIAL_RAGDOLL: return "PARTIAL"
-		Tier.NONE: return "NONE"
+## Returns a human-readable label for the current mode.
+func get_mode_name() -> String:
+	match _mode:
+		Mode.ACTIVE: return "ACTIVE"
+		Mode.PARTIAL: return "PARTIAL"
+		Mode.NONE: return "NONE"
 	return "UNKNOWN"
 
 
-## Returns true if the active ragdoll controller is not in NORMAL state.
+## Returns true if the character is in full ragdoll, getting up, or persistent ragdoll.
+## Does NOT return true during stagger — use [method is_staggering] for that.
 func is_ragdolled() -> bool:
 	if _active_controller:
-		return _active_controller.get_state() != ActiveRagdollController.State.NORMAL
+		var s := _active_controller.get_state()
+		return s == ActiveRagdollController.State.RAGDOLL \
+			or s == ActiveRagdollController.State.GETTING_UP \
+			or s == ActiveRagdollController.State.PERSISTENT
 	return false
+
+
+## Returns true if the character is currently staggering (hit-reactive but on feet).
+func is_staggering() -> bool:
+	if _active_controller:
+		return _active_controller.get_state() == ActiveRagdollController.State.STAGGER
+	return false
+
+
+## Forces the character into a stagger. Recovers automatically after stagger_duration.
+func trigger_stagger(hit_dir: Vector3 = Vector3.FORWARD) -> void:
+	if _active_controller:
+		_active_controller.trigger_stagger(hit_dir)
+	else:
+		push_warning("KickbackCharacter: no ActiveRagdollController available for trigger_stagger()")
 
 
 ## Returns the active ragdoll state name, or "N/A" if no active controller.
@@ -290,19 +202,7 @@ func set_persistent(enabled: bool) -> void:
 		push_warning("KickbackCharacter: no ActiveRagdollController available for set_persistent()")
 
 
-## Forces a specific LOD tier, bypassing distance-based selection.
-func force_tier(tier: int) -> void:
-	_forced_tier = tier
-	if _ready_complete:
-		_set_tier(tier)
-
-
-## Returns to automatic distance-based LOD tier selection.
-func clear_forced_tier() -> void:
-	_forced_tier = -1
-
-
-## Returns the character root Node3D used for distance calculations.
+## Returns the character root Node3D.
 func get_character_root() -> Node3D:
 	return _character_root
 
@@ -328,7 +228,7 @@ func _validate_setup() -> void:
 		warnings.append("Jolt Physics is not active — enable in Project Settings > Physics > 3D > Physics Engine")
 
 	if not _simulator and _partial_controller:
-		warnings.append("No PhysicalBoneSimulator3D on Skeleton3D — partial ragdoll tier disabled")
+		warnings.append("No PhysicalBoneSimulator3D on Skeleton3D — partial ragdoll disabled")
 
 	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
 	var profile := ragdoll_profile if ragdoll_profile else RagdollProfile.create_mixamo_default()
@@ -336,11 +236,11 @@ func _validate_setup() -> void:
 	for w: String in tuning_warnings:
 		warnings.append(w)
 
-	if _available_tiers.is_empty():
+	if _mode == Mode.NONE:
 		warnings.append("No physics controllers found — add ActiveRagdollController or PartialRagdollController as siblings")
 
 	if warnings.is_empty():
-		print("Kickback [%s]: setup OK (%s)" % [get_parent().name, "single tier" if _single_tier >= 0 else "LOD"])
+		print("Kickback [%s]: setup OK (mode: %s)" % [get_parent().name, get_mode_name()])
 	else:
 		var msg := "Kickback [%s]: %d issue(s):" % [get_parent().name, warnings.size()]
 		for w: String in warnings:

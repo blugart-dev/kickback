@@ -24,18 +24,18 @@ kickback/
 │   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg
 │       ├── kickback_plugin.gd       # Editor tool: "Add Kickback to Selected"
-│       ├── kickback_character.gd    # Coordinator (detects controllers, routes hits)
+│       ├── kickback_character.gd    # Coordinator (detects mode, routes hits)
 │       ├── kickback_manager.gd      # Global budget manager
 │       ├── kickback_raycast.gd      # Hit detection utility (one-liner)
 │       ├── skeleton_detector.gd     # Auto-detect humanoid bones in any skeleton
 │       ├── physics_rig_builder.gd   # Builds RigidBody3D ragdoll rig
 │       ├── physics_rig_sync.gd      # Syncs physics → visible skeleton
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
-│       ├── active_ragdoll_controller.gd  # State machine (NORMAL/RAGDOLL/GETTING_UP/PERSISTENT)
-│       ├── partial_ragdoll_controller.gd # Selective bone simulation at distance
+│       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
+│       ├── partial_ragdoll_controller.gd # Standalone selective bone simulation
 │       ├── hit_event.gd             # Hit data object
 │       ├── jolt_check.gd            # Jolt physics verification
-│       ├── strength_debug_hud.gd    # F3 debug overlay
+│       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)
 │       ├── editor/                  # Editor-only tooling
 │       │   ├── kickback_inspector_plugin.gd
 │       │   ├── kickback_status_panel.gd
@@ -50,6 +50,12 @@ kickback/
 │           ├── bone_definition.gd
 │           ├── joint_definition.gd
 │           └── intermediate_bone_entry.gd
+├── demo/                            # Demo scenes (not part of plugin)
+│   ├── demo.tscn/gd                 # Side-by-side Active vs Partial comparison
+│   ├── shooting_range.tscn/gd       # FPS shooting range with 5 weapon profiles
+│   ├── signal_showcase.tscn/gd      # Visualizes all signals with floating popups
+│   ├── tuning_playground.tscn/gd    # Live sliders to tweak physics parameters
+│   └── stress_test.tscn/gd          # 20 characters, budget system, mass ragdoll
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)
@@ -59,22 +65,24 @@ kickback/
 ## Architecture
 
 ### Design principles
-- **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `recovery_started`, `recovery_finished`, `hit_absorbed` signals.
+- **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `stagger_started`, `recovery_started`, `recovery_finished`, `hit_absorbed` signals.
 - **Animation-agnostic.** The physics core reads `Skeleton3D.get_bone_pose()` — works with AnimationPlayer, AnimationTree, or custom animation systems.
 - **All configuration via Resources.** `RagdollProfile` (skeleton mapping) and `RagdollTuning` (physics feel) are assignable on `KickbackCharacter`. Null = auto-detected Mixamo defaults.
-- **Node-based configuration.** KickbackCharacter detects available sibling controllers and adapts. Only active ragdoll nodes present? No LOD. Both active + partial? Automatic LOD switching.
-- **Always-simulated rig.** Physics bodies never freeze. Springs toggle between active (hit-reactive, low damping) and passive (animation tracking, high damping). This eliminates visual snaps on tier transitions.
+- **Pick one mode per character.** Active Ragdoll or Partial Ragdoll — KickbackCharacter detects which controller is present and uses it. No runtime switching between modes.
+- **Always-simulated rig (Active Ragdoll).** Physics bodies never freeze. Springs are always active, driving bodies toward animation poses. Hit reactions reduce spring strength, letting physics take over temporarily.
 
 ### Active Ragdoll
 - `PhysicsRigBuilder` creates 16 RigidBody3D + 15 Generic6DOFJoint3D
 - `PhysicsRigSync` writes physics transforms to skeleton as bone pose overrides
 - `SpringResolver` drives physics bodies toward animation poses via velocity lerp
-- `ActiveRagdollController` manages NORMAL → RAGDOLL → GETTING_UP → NORMAL state machine
+- `ActiveRagdollController` manages NORMAL → STAGGER/RAGDOLL → GETTING_UP → NORMAL state machine
+- `STAGGER` state: springs reduced to floor strength, character wobbles but stays on feet, auto-recovers
 - `PERSISTENT` state: stays ragdolled until `set_persistent(false)` is called
 
-### Partial Ragdoll (optional, for LOD)
+### Partial Ragdoll (standalone alternative)
 - `PartialRagdollController` uses PhysicalBoneSimulator3D for selective bone simulation
-- Only activates when camera is at mid-range distance
+- Independent mode — not used alongside Active Ragdoll on the same character
+- Best for lightweight bone-level reactions on background NPCs
 
 ### Key technical decisions
 - **RigidBody3D + Generic6DOFJoint3D** for active ragdoll (NOT PhysicalBone3D — see GODOT_CONSTRAINTS.md for why)
@@ -90,7 +98,7 @@ kickback/
 - `SkeletonDetector.detect_humanoid_bones()` for auto-mapping any humanoid skeleton
 - `KickbackRaycast.shoot_from_camera()` for one-line hit detection
 - Collision: layer 4 (active ragdoll), layer 5 (partial ragdoll)
-- Setup tool offers presets: "Full (Active + Partial)" or "Active Ragdoll Only"
+- Setup tool offers presets: "Active Ragdoll" or "Partial Ragdoll"
 
 ## Locomotion with active ragdoll
 - **All root movement and rotation MUST happen in `_physics_process`**, not `_process`. The spring resolver runs in `_physics_process` — modifying the root in `_process` causes spring targets to jump.
@@ -101,3 +109,4 @@ kickback/
 - Don't disable AnimationTree/AnimationPlayer during ragdoll (springs need target poses)
 - Don't play animations directly from physics controllers (use signals)
 - Don't move or rotate the character root in `_process` during active ragdoll — use `_physics_process`
+- Don't use Active Ragdoll and Partial Ragdoll on the same character simultaneously
