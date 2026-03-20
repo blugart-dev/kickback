@@ -18,6 +18,10 @@
 - **Persistent ragdoll** — `set_persistent(true)` keeps character ragdolled indefinitely (death/knockdown). Reversible with `set_persistent(false)` which triggers normal recovery.
 - **Slope-adapted recovery** — opt-in `RagdollTuning.align_to_slope` aligns character root to ground normal during get-up. Default off (upright recovery).
 - **Ragdoll-to-ragdoll collision** — same-tier collision between characters (active↔active on layer 4, partial↔partial on layer 5). PhysicalBone3D nodes auto-configured with correct collision layers.
+- **Demo scene** — `test_demo.tscn` with 5 patrolling AI agents, weapon switching (1-5), kill/revive (K/R), full Kickback integration. Demonstrates locomotion with active ragdoll.
+- **PatrolAgent** — reusable test helper that walks between waypoints, handles Kickback signals (ragdoll, recovery, flinch), and owns all animation. Reference implementation for locomotion with active ragdoll.
+- **`KickbackCharacter.setup_complete` signal** — emitted when initialization finishes. Game code should wait for this before starting gameplay.
+- **`KickbackCharacter.is_setup_complete()`** — public getter for initialization status.
 
 ### Changed
 - `WeaponProfile` renamed to `ImpactProfile` (weapon_name → profile_name)

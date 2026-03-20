@@ -50,6 +50,8 @@ var _forced_tier: int = -1
 
 ## Emitted when the character transitions to a different LOD tier.
 signal tier_changed(new_tier: int)
+## Emitted when all controllers are initialized and the character is ready for use.
+signal setup_complete()
 
 
 func _ready() -> void:
@@ -119,6 +121,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_ready_complete = true
+	setup_complete.emit()
 
 
 func _find_manager(node: Node) -> KickbackManager:
@@ -271,6 +274,11 @@ func get_active_state_name() -> String:
 	if _active_controller:
 		return _active_controller.get_state_name()
 	return "N/A"
+
+
+## Returns true if the Kickback system has finished initializing on this character.
+func is_setup_complete() -> bool:
+	return _ready_complete
 
 
 ## Forces the character to ragdoll immediately. The character will recover automatically.

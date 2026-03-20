@@ -112,9 +112,16 @@ kickback/
 - `RagdollTuning.align_to_slope` for slope-adapted recovery positioning (opt-in, default off)
 - Editor integration: `EditorInspectorPlugin` shows status panel on KickbackCharacter
 
+## Locomotion with active ragdoll
+- **All root movement and rotation MUST happen in `_physics_process`**, not `_process`. The spring resolver runs in `_physics_process` — modifying the root in `_process` (between physics ticks) causes the spring targets to jump, breaking the animation visually.
+- Play animations once on state transitions, not every frame.
+- See `test/helpers/patrol_agent.gd` for a working reference implementation.
+- See `test/scenes/test_demo.tscn` for a full demo with 5 patrolling agents.
+
 ## What NOT to do
 - Don't use PhysicalBone3D for the active ragdoll layer
 - Don't disable AnimationTree during ragdoll
 - Don't play animations directly from physics controllers (use signals + RagdollAnimator)
 - Don't hardcode animation names in controllers (they belong on RagdollAnimator)
 - Don't hardcode bone names in controllers (they come from RagdollProfile)
+- Don't move or rotate the character root in `_process` during active ragdoll — use `_physics_process`

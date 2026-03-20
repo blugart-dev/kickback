@@ -130,7 +130,9 @@ Controllers emit signals — `RagdollAnimator` is a default handler you can repl
 godot --headless -s addons/gut/gut_cmdln.gd
 ```
 
-7 interactive test scenes in `test/scenes/` for visual verification.
+8 interactive test scenes in `test/scenes/` for visual verification, including a full demo with 5 patrolling AI agents (`test_demo.tscn`).
+
+**Important:** When moving characters with active ragdoll, all root movement and rotation must happen in `_physics_process`, not `_process`. See `test/helpers/patrol_agent.gd` for a reference implementation.
 
 ## License
 
