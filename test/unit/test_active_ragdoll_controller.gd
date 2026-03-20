@@ -36,7 +36,6 @@ func before_each():
 	_controller.name = "ActiveRagdollController"
 	_controller.spring_resolver_path = NodePath("../SpringResolver")
 	_controller.rig_builder_path = NodePath("../PhysicsRigBuilder")
-	_controller.animation_player_path = NodePath("../AnimationPlayer")
 	_controller.character_root_path = NodePath("..")
 	_character.add_child(_controller)
 

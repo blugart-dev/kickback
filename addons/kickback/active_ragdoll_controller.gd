@@ -1,72 +1,78 @@
 ## Manages the active ragdoll state machine (NORMAL -> RAGDOLL -> GETTING_UP).
 ## Coordinates hit reactions, full ragdoll transitions, and recovery sequences
 ## by driving the SpringResolver's per-bone strengths and pose blending.
+## Animation playback is NOT handled here — connect to the signals and handle
+## animations externally (or use the optional RagdollAnimator node).
+@icon("res://addons/kickback/icons/active_ragdoll_controller.svg")
 class_name ActiveRagdollController
 extends Node
 
 @export_group("References")
+## Path to the SpringResolver node that drives spring-based bone tracking.
 @export var spring_resolver_path: NodePath
+## Path to the PhysicsRigBuilder that owns the ragdoll RigidBody3D nodes.
 @export var rig_builder_path: NodePath
-@export var animation_player_path: NodePath
+## Path to the character root Node3D for repositioning during get-up recovery.
 @export var character_root_path: NodePath
-@export_group("Recovery")
-@export var recovery_duration: float = 2.0
-@export var safety_timeout: float = 3.5
 
 ## Character state for the active ragdoll lifecycle.
 enum State {
 	NORMAL,      ## Fully animated; springs at full strength.
 	RAGDOLL,     ## All springs zeroed; physics drives the body.
 	GETTING_UP,  ## Recovering from ragdoll; springs ramping back up.
+	PERSISTENT,  ## Persistent ragdoll; stays until set_persistent(false) is called.
 }
 
 var _spring: SpringResolver
 var _rig_builder: PhysicsRigBuilder
-var _anim_player: AnimationPlayer
 var _character_root: Node3D
 var _adjacency: Dictionary = {}
 var _state: int = State.NORMAL
 var _recovery_elapsed: float = 0.0
 var _ragdoll_elapsed: float = 0.0
 var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
+var _profile: RagdollProfile
+var _tuning: RagdollTuning
 
 ## Emitted whenever the controller transitions between states.
+## [param new_state] is one of [enum State] values (NORMAL, RAGDOLL, GETTING_UP, PERSISTENT).
 signal state_changed(new_state: int)
+## Emitted when the character enters full ragdoll (all springs zeroed).
+signal ragdoll_started()
+## Emitted when recovery begins after ragdoll settles. [param face_up] indicates
+## whether the character landed face-up (true) or face-down (false).
+## Connect to this to play get-up animations.
+signal recovery_started(face_up: bool)
+## Emitted when recovery completes and springs are fully restored.
+## Connect to this to play idle or transition animations.
+signal recovery_finished()
 
-const RAGDOLL_FORCE_RECOVERY_TIME := 3.0
-const POSE_BLEND_DURATION := 0.4
 
-const RAMP_DELAY: Dictionary = {
-	"Hips": 0.0, "Spine": 0.0, "Chest": 0.05,
-	"Head": 0.25,
-	"UpperArm_L": 0.2, "LowerArm_L": 0.25, "Hand_L": 0.3,
-	"UpperArm_R": 0.2, "LowerArm_R": 0.25, "Hand_R": 0.3,
-	"UpperLeg_L": 0.1, "LowerLeg_L": 0.15, "Foot_L": 0.2,
-	"UpperLeg_R": 0.1, "LowerLeg_R": 0.15, "Foot_R": 0.2,
-}
-
-const MIN_STRENGTH: Dictionary = {
-	"Hips": 0.15, "Spine": 0.10, "Chest": 0.10,
-	"UpperLeg_L": 0.10, "UpperLeg_R": 0.10,
-	"LowerLeg_L": 0.08, "LowerLeg_R": 0.08,
-	"Foot_L": 0.05, "Foot_R": 0.05,
-}
+func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
+	_profile = profile
+	_tuning = tuning
 
 
 func _ready() -> void:
-	JoltCheck.warn_if_not_jolt()
 	_spring = get_node(spring_resolver_path) as SpringResolver
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
-	_anim_player = get_node(animation_player_path) as AnimationPlayer
 	if not character_root_path.is_empty():
 		_character_root = get_node(character_root_path) as Node3D
+	_ensure_config()
 	_build_adjacency()
 
 
+func _ensure_config() -> void:
+	if not _profile:
+		_profile = RagdollProfile.create_mixamo_default()
+	if not _tuning:
+		_tuning = RagdollTuning.create_default()
+
+
 func _build_adjacency() -> void:
-	for joint in PhysicsRigBuilder.JOINT_MAP:
-		var p: String = joint.parent
-		var c: String = joint.child
+	for joint_def: JointDefinition in _profile.joints:
+		var p: String = joint_def.parent_rig
+		var c: String = joint_def.child_rig
 		if p not in _adjacency:
 			_adjacency[p] = PackedStringArray()
 		if c not in _adjacency:
@@ -79,16 +85,18 @@ func _physics_process(delta: float) -> void:
 	match _state:
 		State.RAGDOLL:
 			_ragdoll_elapsed += delta
-			if _spring.is_settled(delta) or _ragdoll_elapsed > RAGDOLL_FORCE_RECOVERY_TIME:
+			if _spring.is_settled(delta) or _ragdoll_elapsed > _tuning.ragdoll_force_recovery_time:
 				_start_recovery()
+		State.PERSISTENT:
+			pass  # Stay ragdolled permanently
 		State.GETTING_UP:
 			_recovery_elapsed += delta
 
 			# Phase 1: Pose interpolation — blend ragdoll landing pose toward animation
-			var blend_t := clampf(_recovery_elapsed / POSE_BLEND_DURATION, 0.0, 1.0)
+			var blend_t := clampf(_recovery_elapsed / _tuning.pose_blend_duration, 0.0, 1.0)
 			if blend_t < 1.0 and not _ragdoll_poses.is_empty():
 				var eased_blend := blend_t * blend_t  # Quadratic ease-in
-				var skel_global := _spring._skeleton.global_transform
+				var skel_global := _spring.get_skeleton().global_transform
 				var overrides: Dictionary = {}
 				for rig_name: String in _ragdoll_poses:
 					var bone_idx: int = _spring.get_bone_idx(rig_name)
@@ -107,22 +115,22 @@ func _physics_process(delta: float) -> void:
 
 			# Phase 2: Per-bone staggered strength ramp
 			for rig_name: String in _spring.get_all_bone_names():
-				var delay: float = RAMP_DELAY.get(rig_name, 0.0)
+				var delay: float = _tuning.ramp_delay.get(rig_name, 0.0)
 				var effective_elapsed := maxf(0.0, _recovery_elapsed - delay)
-				var effective_duration := maxf(0.1, recovery_duration - delay)
+				var effective_duration := maxf(0.1, _tuning.recovery_duration - delay)
 				var t := clampf(effective_elapsed / effective_duration, 0.0, 1.0)
 				var eased_t := t * t * t  # Cubic ease-in per bone
 				var base: float = _spring.get_base_strength(rig_name)
 				_spring.set_bone_strength(rig_name, base * eased_t)
 
-			var global_t := clampf(_recovery_elapsed / recovery_duration, 0.0, 1.0)
-			if (_spring.get_max_rotation_error() < 0.3 and global_t >= 0.85) or _recovery_elapsed > safety_timeout:
+			var global_t := clampf(_recovery_elapsed / _tuning.recovery_duration, 0.0, 1.0)
+			if (_spring.get_max_rotation_error() < 0.3 and global_t >= 0.85) or _recovery_elapsed > _tuning.safety_timeout:
 				_finish_recovery()
 
 
-## Applies a hit reaction to [param body] using the given weapon [param profile].
+## Applies a hit reaction to [param body] using the given impact [param profile].
 ## Reduces spring strengths, applies impulse, and may trigger full ragdoll.
-func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: WeaponProfile) -> void:
+func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
 	if _state == State.GETTING_UP:
 		_full_ragdoll()
 		return
@@ -144,8 +152,22 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: W
 
 
 ## Forces an immediate transition to full ragdoll, zeroing all spring strengths.
+## The character will recover automatically after settling.
 func trigger_ragdoll() -> void:
 	_full_ragdoll()
+
+
+## Enables or disables persistent ragdoll. When enabled, the character enters
+## full ragdoll and stays down until set_persistent(false) is called.
+## When disabled, triggers normal recovery (GETTING_UP state).
+func set_persistent(enabled: bool) -> void:
+	if enabled:
+		_full_ragdoll()
+		_state = State.PERSISTENT
+		state_changed.emit(_state)
+	else:
+		if _state == State.PERSISTENT:
+			_start_recovery()
 
 
 func _full_ragdoll() -> void:
@@ -158,6 +180,7 @@ func _full_ragdoll() -> void:
 	_spring.clear_target_overrides()
 	_ragdoll_poses.clear()
 	state_changed.emit(_state)
+	ragdoll_started.emit()
 
 
 func _start_recovery() -> void:
@@ -171,9 +194,6 @@ func _start_recovery() -> void:
 	var head_body: RigidBody3D = bodies.get("Head")
 
 	# Detect orientation BEFORE moving root
-	# Check which way the chest is facing: Z axis (forward) dot with UP
-	# If chest forward points up → character is face-down (chest toward ground)
-	# If chest forward points down → character is face-up (chest toward sky)
 	var face_up := true
 	if chest_body:
 		var chest_forward_dot := chest_body.global_basis.z.dot(Vector3.UP)
@@ -185,7 +205,7 @@ func _start_recovery() -> void:
 		var body: RigidBody3D = bodies[rig_name]
 		saved_transforms[rig_name] = body.global_transform
 
-	# Reposition character root to ragdoll landing position
+	# Reposition character root to ragdoll landing position (physics-essential)
 	if _character_root and hip_body:
 		var hip_pos := hip_body.global_position
 
@@ -195,24 +215,38 @@ func _start_recovery() -> void:
 		var ray_origin := Vector3(hip_pos.x, hip_pos.y + 1.0, hip_pos.z)
 		var ray_end := Vector3(hip_pos.x, hip_pos.y - 3.0, hip_pos.z)
 		var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
-		query.collision_mask = 2  # Environment layer only
+		query.collision_mask = _tuning.ground_raycast_mask
 		query.collide_with_bodies = true
 		var result := space_state.intersect_ray(query)
+		var ground_normal := Vector3.UP
 		if not result.is_empty():
 			ground_y = result["position"].y
+			ground_normal = result["normal"]
 
 		_character_root.global_position = Vector3(hip_pos.x, ground_y, hip_pos.z)
 
+		# Compute facing direction from head-hip vector
+		var facing := Vector3.FORWARD
 		if head_body:
 			var head_pos := head_body.global_position
-			var facing := Vector3(head_pos.x - hip_pos.x, 0.0, head_pos.z - hip_pos.z)
+			facing = Vector3(head_pos.x - hip_pos.x, 0.0, head_pos.z - hip_pos.z)
 			if face_up:
 				facing = -facing
-			if facing.length_squared() > 0.01:
+
+		# Set character root orientation
+		if facing.length_squared() > 0.01:
+			if _tuning.align_to_slope and ground_normal.dot(Vector3.UP) > 0.5:
+				# Align to slope: project facing onto the slope plane
+				var slope_forward := facing.slide(ground_normal).normalized()
+				if slope_forward.length_squared() > 0.001:
+					_character_root.global_basis = Basis.looking_at(slope_forward, ground_normal)
+				else:
+					_character_root.global_rotation.y = atan2(facing.x, facing.z)
+			else:
+				# Stay upright (default)
 				_character_root.global_rotation.y = atan2(facing.x, facing.z)
 
 	# Restore body world transforms — bodies stay where they were
-	# Spring ramp will gradually pull them toward the get-up animation
 	for rig_name: String in saved_transforms:
 		var body: RigidBody3D = bodies[rig_name]
 		body.global_transform = saved_transforms[rig_name]
@@ -222,13 +256,8 @@ func _start_recovery() -> void:
 	# Capture ragdoll poses for pose interpolation during recovery
 	_ragdoll_poses = saved_transforms.duplicate()
 
-	# Play get-up animation based on orientation
-	var anim_name := "get_up_face_up" if face_up else "get_up_face_down"
-	if _anim_player:
-		if _anim_player.has_animation(anim_name):
-			_anim_player.play(anim_name)
-		else:
-			push_warning("ActiveRagdollController: missing animation '%s'" % anim_name)
+	# Signal that recovery has started — RagdollAnimator (or user code) handles animation
+	recovery_started.emit(face_up)
 
 
 func _finish_recovery() -> void:
@@ -242,8 +271,8 @@ func _finish_recovery() -> void:
 		var base: float = _spring.get_base_strength(rig_name)
 		_spring.set_bone_strength(rig_name, base)
 
-	if _anim_player and _anim_player.has_animation("idle"):
-		_anim_player.play("idle", 0.5)  # 0.5s crossfade from get-up to idle
+	# Signal that recovery is complete — RagdollAnimator (or user code) handles animation
+	recovery_finished.emit()
 
 
 ## Returns the current state as a [enum State] integer value.
@@ -257,12 +286,13 @@ func get_state_name() -> String:
 		State.NORMAL: return "NORMAL"
 		State.RAGDOLL: return "RAGDOLL"
 		State.GETTING_UP: return "GETTING UP"
+		State.PERSISTENT: return "PERSISTENT"
 	return "UNKNOWN"
 
 
 func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 	var current := _spring.get_bone_strength(rig_name)
-	var floor: float = MIN_STRENGTH.get(rig_name, 0.0)
+	var floor: float = _tuning.min_strength.get(rig_name, 0.0)
 	_spring.set_bone_strength(rig_name, maxf(current * (1.0 - reduction), floor))
 
 	if spread > 0:
@@ -282,7 +312,7 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 					visited[neighbor] = true
 					next_level.append(neighbor)
 					var s := _spring.get_bone_strength(neighbor)
-					var nfloor: float = MIN_STRENGTH.get(neighbor, 0.0)
+					var nfloor: float = _tuning.min_strength.get(neighbor, 0.0)
 					_spring.set_bone_strength(neighbor, maxf(s * (1.0 - reduction * falloff), nfloor))
 
 			current_level = next_level

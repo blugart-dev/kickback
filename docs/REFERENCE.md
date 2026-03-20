@@ -101,56 +101,49 @@ Hips (root, no parent joint)
 Note: "0 to 150" for elbows/knees means they can only bend one way. Tune in-engine
 with Debug → Visible Collision Shapes.
 
-## Weapon profiles
+## Impact profiles
 
-### WeaponProfile resource properties
+### ImpactProfile resource properties
 
 ```gdscript
-class_name WeaponProfile extends Resource
+class_name ImpactProfile extends Resource
 
-@export var weapon_name: StringName = &""
-@export var base_impulse: float = 8.0
-@export var impulse_transfer_ratio: float = 0.3
-@export var bone_spread_levels: int = 0       # 0 = hit bone only
-@export var upward_bias: float = 0.0          # Extra Y impulse (0.0-0.5)
-@export var sustained_frames: int = 0         # > 0 = apply force over N frames
-@export var ragdoll_probability: float = 0.0  # 0-1, chance of full ragdoll
-@export var strength_reduction: float = 0.4   # How much spring strength drops (0-1)
-@export var strength_spread: int = 1          # How many neighbor bones lose strength
-@export var recovery_rate: float = 1.0        # Strength recovery per second
+@export var profile_name: StringName = &""
+@export_range(0.0, 100.0) var base_impulse: float = 8.0           # Force applied to hit body
+@export_range(0.0, 1.0) var impulse_transfer_ratio: float = 0.3   # Fraction transferred
+@export_range(0.0, 1.0) var upward_bias: float = 0.0              # Extra upward force
+@export_range(0.0, 1.0) var ragdoll_probability: float = 0.0      # Chance of full ragdoll
+@export_range(0.0, 1.0) var strength_reduction: float = 0.4       # Spring strength drop on hit
+@export_range(0, 10) var strength_spread: int = 1                  # Neighbor bones affected
+@export_range(0.0, 5.0) var recovery_rate: float = 1.0            # Strength recovery per second
 ```
+
+Factory methods: `ImpactProfile.create_bullet()`, `.create_shotgun()`, `.create_explosion()`, `.create_melee()`, `.create_arrow()`
+
+Presets shipped in `addons/kickback/presets/`.
 
 ### Preset values
 
-| Profile   | impulse | transfer | spread | upward | sustained | ragdoll_prob | str_reduc | str_spread | recovery |
-|-----------|---------|----------|--------|--------|-----------|--------------|-----------|------------|----------|
-| Bullet    | 8       | 0.15     | 0      | 0.0    | 0         | 0.05         | 0.4       | 1          | 1.5      |
-| Shotgun   | 20      | 0.40     | 2      | 0.05   | 0         | 0.40         | 0.7       | 3          | 0.8      |
-| Explosion | 40      | 1.00     | 99     | 0.40   | 0         | 0.95         | 1.0       | 99         | 0.5      |
-| Melee     | 15      | 0.60     | 1      | 0.0    | 7         | 0.15         | 0.5       | 2          | 1.2      |
-| Arrow     | 12      | 0.30     | 0      | 0.0    | 0         | 0.10         | 0.5       | 1          | 1.0      |
+| Profile   | impulse | transfer | upward | ragdoll_prob | str_reduc | str_spread | recovery |
+|-----------|---------|----------|--------|--------------|-----------|------------|----------|
+| Bullet    | 8       | 0.15     | 0.0    | 0.05         | 0.85      | 1          | 0.4      |
+| Shotgun   | 20      | 0.40     | 0.05   | 0.40         | 0.92      | 3          | 0.25     |
+| Explosion | 40      | 1.00     | 0.40   | 0.95         | 1.0       | 99         | 0.15     |
+| Melee     | 15      | 0.60     | 0.0    | 0.15         | 0.88      | 2          | 0.3      |
+| Arrow     | 12      | 0.30     | 0.0    | 0.10         | 0.88      | 1          | 0.3      |
 
 ### Impulse calculation
 
 ```gdscript
 var final_impulse = profile.base_impulse * profile.impulse_transfer_ratio
-var direction = hit_direction + Vector3.UP * profile.upward_bias
-direction = direction.normalized()
+var direction = (hit_direction + Vector3.UP * profile.upward_bias).normalized()
 body.apply_impulse(direction * final_impulse, local_hit_offset)
-```
-
-For sustained force (melee):
-```gdscript
-# Apply over multiple frames instead of single impulse
-var force_per_frame = (direction * final_impulse) / (profile.sustained_frames * delta)
-body.apply_force(force_per_frame, local_hit_offset)
-# Decrement sustained_frames counter each frame
 ```
 
 ### Strength reduction on hit
 
 ```gdscript
-func reduce_strength(hit_bone: StringName, profile: WeaponProfile):
+func reduce_strength(hit_bone: StringName, profile: ImpactProfile):
     # Hit bone: full reduction
     bones[hit_bone].strength *= (1.0 - profile.strength_reduction)
 

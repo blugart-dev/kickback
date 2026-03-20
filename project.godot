@@ -11,13 +11,13 @@ config_version=5
 [application]
 
 config/name="kickback"
-run/main_scene="res://test/test_passive_ragdoll.tscn"
+run/main_scene="res://test/scenes/test_hit_reactions.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/kickback/plugin.cfg")
+enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/kickback/plugin.cfg")
 
 [physics]
 

@@ -1,5 +1,9 @@
 # Step-by-Step Implementation Plan
 
+> **Note**: This document is historical — all steps and milestones are complete.
+> Test scenes have been reorganized into `test/scenes/` and some early scenes
+> were consolidated. See `CLAUDE.md` for the current project structure.
+
 Do these in order. Each step builds on the previous. Each has a test scene and
 concrete pass/fail criteria. Do NOT proceed to the next step until the current
 one passes.
@@ -229,7 +233,7 @@ core active ragdoll system.
 - On raycast hit: identify which RigidBody3D was struck
 - Apply impulse directly: `body.apply_impulse(direction * magnitude, local_hit_offset)`
 - Reduce `strength` on hit body and neighbors:
-  - Hit bone: multiply strength by (1.0 - weapon_profile.strength_reduction)
+  - Hit bone: multiply strength by (1.0 - impact_profile.strength_reduction)
   - Neighbors (parent + children, 1-2 levels): apply with distance falloff
 - Recover strength: in _physics_process, `strength = move_toward(strength, base_strength, recovery_rate * delta)`
 - Recovery rate: ~1.0/second (full recovery in ~0.5-1.0s for a bullet)
@@ -255,14 +259,14 @@ core active ragdoll system.
 **Goal**: Different weapons produce distinctly different reactions.
 
 **Status**: Complete. Key learnings:
-- WeaponProfile Resource class drives all hit parameters (impulse, reduction, spread, recovery)
-- ActiveRagdollController accepts WeaponProfile instead of hardcoded values
+- ImpactProfile Resource class drives all hit parameters (impulse, reduction, spread, recovery)
+- ActiveRagdollController accepts ImpactProfile instead of hardcoded values
 - MIN_STRENGTH floor on load-bearing bones prevents full collapse from stacking hits
 - Only ragdoll_probability roll causes true full ragdoll (bypasses floors)
 - Adjusted values from REFERENCE.md to match our tuned spring system (higher reduction, slower recovery)
 
 **Tasks**:
-- Create `WeaponProfile` Resource class with exported properties
+- Create `ImpactProfile` Resource class with exported properties
 - Create .tres files for each weapon type (see REFERENCE.md for values)
 - Wire weapon selection into test scene (number keys to switch)
 - Implement bone spread (impulse applied to neighbors with falloff)

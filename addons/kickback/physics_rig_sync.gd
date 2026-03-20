@@ -3,30 +3,33 @@
 class_name PhysicsRigSync
 extends Node
 
+## Path to the Skeleton3D whose bone poses are overridden by physics bodies.
 @export var skeleton_path: NodePath
+## Path to the PhysicsRigBuilder that provides the physics body transforms.
 @export var rig_builder_path: NodePath
 
 var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
 var _active: bool = false
+var _profile: RagdollProfile
 
-var _spine1_idx: int = -1
-var _neck_idx: int = -1
-var _bone_cache: Array = []  # [{body: RigidBody3D, bone_idx: int}, ...]
+var _bone_cache: Array[Dictionary] = []  # [{body: RigidBody3D, bone_idx: int}, ...]
+var _intermediate_cache: Array[Dictionary] = []  # [{bone_idx, body_a, body_b, weight, use_a_basis}]
 var _cache_built: bool = false
 
 
+func configure(profile: RagdollProfile) -> void:
+	_profile = profile
+
+
 func _ready() -> void:
-	JoltCheck.warn_if_not_jolt()
 	_skeleton = get_node(skeleton_path) as Skeleton3D
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
-	_spine1_idx = _skeleton.find_bone("mixamorig_Spine1")
-	_neck_idx = _skeleton.find_bone("mixamorig_Neck")
 
 
 func set_active(value: bool) -> void:
 	_active = value
-	if not value:
+	if not value and _skeleton:
 		for bone_idx in _skeleton.get_bone_count():
 			_skeleton.set_bone_global_pose_override(bone_idx, Transform3D(), 0.0, false)
 
@@ -36,6 +39,9 @@ func is_active() -> bool:
 
 
 func _build_cache() -> void:
+	if not _profile:
+		_profile = RagdollProfile.create_mixamo_default()
+
 	_bone_cache.clear()
 	var bodies := _rig_builder.get_bodies()
 	for rig_name: String in bodies:
@@ -43,6 +49,19 @@ func _build_cache() -> void:
 		var bone_idx := _skeleton.find_bone(bone_name)
 		if bone_idx >= 0:
 			_bone_cache.append({"body": bodies[rig_name], "bone_idx": bone_idx})
+
+	_intermediate_cache.clear()
+	for entry: IntermediateBoneEntry in _profile.intermediate_bones:
+		var bone_idx := _skeleton.find_bone(entry.skeleton_bone)
+		if bone_idx >= 0 and entry.rig_body_a in bodies and entry.rig_body_b in bodies:
+			_intermediate_cache.append({
+				"bone_idx": bone_idx,
+				"body_a": entry.rig_body_a,
+				"body_b": entry.rig_body_b,
+				"weight": entry.blend_weight,
+				"use_a_basis": entry.use_a_basis,
+			})
+
 	_cache_built = true
 
 
@@ -61,21 +80,17 @@ func _process(_delta: float) -> void:
 		var local_pose: Transform3D = skel_global_inv * body.global_transform
 		_safe_set_bone_override(entry.bone_idx, local_pose)
 
-	# Interpolate skipped bones (Spine1, Neck)
+	# Interpolate intermediate bones
 	var bodies := _rig_builder.get_bodies()
-	if _spine1_idx >= 0 and "Spine" in bodies and "Chest" in bodies:
-		var spine_pos: Vector3 = bodies["Spine"].global_position
-		var chest_pos: Vector3 = bodies["Chest"].global_position
-		var mid := (spine_pos + chest_pos) * 0.5
-		var local_pose := skel_global_inv * Transform3D(bodies["Spine"].global_basis, mid)
-		_safe_set_bone_override(_spine1_idx, local_pose)
-
-	if _neck_idx >= 0 and "Chest" in bodies and "Head" in bodies:
-		var chest_pos: Vector3 = bodies["Chest"].global_position
-		var head_pos: Vector3 = bodies["Head"].global_position
-		var mid := (chest_pos + head_pos) * 0.5
-		var local_pose := skel_global_inv * Transform3D(bodies["Chest"].global_basis, mid)
-		_safe_set_bone_override(_neck_idx, local_pose)
+	for entry: Dictionary in _intermediate_cache:
+		var body_a: RigidBody3D = bodies[entry.body_a]
+		var body_b: RigidBody3D = bodies[entry.body_b]
+		var pos_a: Vector3 = body_a.global_position
+		var pos_b: Vector3 = body_b.global_position
+		var mid := pos_a.lerp(pos_b, entry.weight)
+		var basis_source: Basis = body_a.global_basis if entry.use_a_basis else body_b.global_basis
+		var local_pose := skel_global_inv * Transform3D(basis_source, mid)
+		_safe_set_bone_override(entry.bone_idx, local_pose)
 
 
 func _safe_set_bone_override(bone_idx: int, xform: Transform3D) -> void:

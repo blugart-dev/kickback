@@ -1,5 +1,6 @@
 ## Global manager for Kickback. Tracks active ragdoll count and LOD distance
 ## thresholds. Add as an autoload or place in the scene root.
+@icon("res://addons/kickback/icons/kickback_manager.svg")
 class_name KickbackManager
 extends Node
 

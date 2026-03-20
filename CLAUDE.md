@@ -2,96 +2,119 @@
 
 ## What this is
 
-An open-source system for Euphoria-like hit reactions in Godot 4.6+.
-Characters react dynamically to shots, explosions, melee, and arrows using
-physics-driven ragdoll and additive animation blending.
+An open-source plugin for Euphoria-like hit reactions in Godot 4.6+.
+Characters react dynamically to impacts using physics-driven ragdoll
+and spring-based pose matching. Fully configurable and extensible.
 
-**Engine**: Godot 4.6.1+ with Jolt physics (built-in default).
-**Language**: GDScript. No C#, no GDExtension unless profiling demands it.
+**Engine**: Godot 4.6.1+ with Jolt physics.
+**Language**: GDScript.
 
 ## Project structure
 
 ```
 kickback/
-├── CLAUDE.md                        # You are here
-├── README.md                        # Public repo readme
-├── LICENSE                          # MIT
+├── CLAUDE.md
+├── README.md
+├── LICENSE
 ├── docs/
-│   ├── STEP_BY_STEP.md             # Implementation plan (8 steps, do them in order)
-│   ├── GODOT_CONSTRAINTS.md        # Engine-specific quirks, API gaps, workarounds
-│   └── REFERENCE.md                # Technical reference: PD math, weapon profiles, bone mapping
+│   ├── STEP_BY_STEP.md              # Implementation history (8 steps)
+│   ├── GODOT_CONSTRAINTS.md         # Engine quirks and workarounds
+│   └── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
 ├── addons/
-│   └── kickback/                      # The plugin (all source goes here)
+│   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg
-│       └── ... (scripts, resources)
-├── test/                           # Test scenes (one per step)
-│   ├── test_passive_ragdoll.tscn
-│   ├── test_partial_ragdoll.tscn
-│   ├── test_flinch.tscn
-│   ├── test_active_ragdoll.tscn
-│   └── ...
+│       ├── kickback_plugin.gd       # Editor tool: "Add Kickback to Selected"
+│       ├── kickback_character.gd    # LOD tier coordinator
+│       ├── kickback_manager.gd      # Global budget manager
+│       ├── kickback_raycast.gd      # Hit detection utility (one-liner)
+│       ├── skeleton_detector.gd     # Auto-detect humanoid bones in any skeleton
+│       ├── physics_rig_builder.gd   # Builds RigidBody3D ragdoll rig
+│       ├── physics_rig_sync.gd      # Syncs physics → visible skeleton
+│       ├── spring_resolver.gd       # Velocity-based spring pose matching
+│       ├── active_ragdoll_controller.gd  # Close-range state machine
+│       ├── partial_ragdoll_controller.gd # Mid-range bone simulation
+│       ├── flinch_controller.gd     # Far-range direction calculator
+│       ├── ragdoll_animator.gd      # Optional animation handler (signals)
+│       ├── hit_event.gd             # Hit data object
+│       ├── jolt_check.gd            # Jolt physics verification
+│       ├── strength_debug_hud.gd    # F3 debug overlay with LOD zones
+│       ├── editor/                  # Editor-only tooling
+│       │   ├── kickback_inspector_plugin.gd  # Inspector integration
+│       │   └── kickback_status_panel.gd      # Status panel UI
+│       ├── icons/                   # Scene tree icons (16x16 SVG)
+│       │   └── *.svg (9 icons)
+│       ├── presets/                  # Starter ImpactProfile .tres files
+│       │   ├── bullet.tres
+│       │   ├── shotgun.tres
+│       │   ├── explosion.tres
+│       │   ├── melee.tres
+│       │   └── arrow.tres
+│       └── resources/               # Resource class definitions
+│           ├── impact_profile.gd    # Impact parameters (impulse, ragdoll chance, etc.)
+│           ├── ragdoll_profile.gd   # Skeleton mapping (bones, joints, shapes)
+│           ├── ragdoll_tuning.gd    # Physics tuning (strengths, recovery, collision)
+│           ├── bone_definition.gd
+│           ├── joint_definition.gd
+│           └── intermediate_bone_entry.gd
+├── test/
+│   ├── helpers/                     # Test utility scripts
+│   │   ├── orbit_camera.gd
+│   │   ├── free_camera.gd
+│   │   └── raycast_weapon.gd
+│   ├── scenes/                      # 7 interactive test scenes
+│   ├── resources/                   # Test-only impact presets
+│   └── unit/                        # GUT unit tests (27 tests)
+├── assets/                          # Demo character (not part of plugin)
 └── project.godot
 ```
 
-## How to work
+## Architecture
 
-1. Read `docs/STEP_BY_STEP.md` — it defines 8 incremental steps
-2. Read `docs/GODOT_CONSTRAINTS.md` before writing any physics code
-3. Use `docs/REFERENCE.md` for math, gain values, and weapon profiles
-4. Implement ONE step at a time. Each step has a test scene and pass criteria.
-5. Do NOT skip ahead. Each step validates assumptions the next step depends on.
+### Design principles
+- **Physics controllers emit signals, don't play animations.** Animation is handled by the optional `RagdollAnimator` node. Users can replace or extend it.
+- **All configuration via Resources.** `RagdollProfile` (skeleton mapping) and `RagdollTuning` (physics feel) are assignable on `KickbackCharacter`. Null = auto-detected or Mixamo defaults.
+- **Auto-detection.** `SkeletonDetector` pattern-matches bone names to identify humanoid bones in any skeleton (Mixamo, Rigify, Unreal Mannequin, custom). Generates a `RagdollProfile` and `PhysicalBone3D` nodes automatically during setup.
+- **Composable node structure.** Each controller is an independent node. Users add/remove as needed.
 
-## Architecture overview
+### LOD tiers (by camera distance)
 
-Two parallel approaches, layered by distance to camera:
+**Tier 1 — Active Ragdoll (< 10m):**
+- `PhysicsRigBuilder` creates 16 RigidBody3D + 15 Generic6DOFJoint3D
+- `PhysicsRigSync` writes physics transforms to skeleton
+- `SpringResolver` drives physics bodies toward animation poses via velocity lerp
+- `ActiveRagdollController` manages NORMAL → RAGDOLL → GETTING_UP → NORMAL state machine
+- `PERSISTENT` state: stays ragdolled until `set_persistent(false)` is called (for death/knockdown)
 
-### Close range (< 10m): Dual-skeleton active ragdoll
-- **Animation Skeleton** (invisible): plays animations via AnimationTree, provides target poses
-- **Physics Skeleton** (invisible): RigidBody3D nodes connected by Generic6DOFJoint3D
-- **Visible Mesh**: reads transforms from whichever skeleton has authority
-- A spring resolver drives each physics body toward the animation pose
-- Hit reactions reduce spring strength → physics wins → character reacts → strength recovers
+**Tier 2 — Partial Ragdoll (10-25m):**
+- `PartialRagdollController` uses PhysicalBoneSimulator3D for selective bone simulation
 
-### Mid range (10-25m): Partial ragdoll via PhysicalBoneSimulator3D
-- Uses Godot's built-in PhysicalBone3D system
-- On hit: selectively simulate hit bone + neighbors, apply impulse, blend back
+**Tier 3 — Flinch (25-50m):**
+- `FlinchController` computes hit direction, emits `flinch_triggered(Direction)` signal
 
-### Far range (25m+): Additive animation only
-- Directional flinch animations layered via AnimationTree Add2 nodes
-- No physics involvement
+**Optional — Animation:**
+- `RagdollAnimator` connects to controller signals and plays get-up/flinch/idle animations
 
-**CRITICAL DECISION**: The active ragdoll layer uses raw RigidBody3D + Generic6DOFJoint3D,
-NOT PhysicalBone3D. PhysicalBone3D lacks apply_force(), apply_torque(), collision signals,
-and has broken joint springs in Jolt. Every successful Godot active ragdoll project
-bypasses PhysicalBone3D. PhysicalBoneSimulator3D is ONLY used for the mid-range partial
-ragdoll tier where its limitations are acceptable.
-
-## Key technical decisions
-
-- **Velocity-based spring resolver**, not torque-based PD controller. Simpler, more stable with Jolt.
-  Each frame: compute rotation error → convert to target angular velocity → lerp current velocity toward target.
-- **Jolt physics only**. Verify in Project Settings → Physics → 3D. GodotPhysics cannot handle ragdolls.
-- **AnimationTree stays active** during all ragdoll states. It provides target poses for the spring resolver.
-- **Collision layers**: character controller on layer 1, ragdoll physics bodies on layer 4,
-  environment on layer 2. Physics bodies collide with environment but not with the character controller.
-- **One test scene per step**. Each must be runnable independently. Include a simple raycast weapon
-  (click to shoot) and on-screen debug info.
+### Key technical decisions
+- **RigidBody3D + Generic6DOFJoint3D** for active ragdoll (NOT PhysicalBone3D)
+- **Velocity-based springs**, not torque PD controllers
+- **Jolt physics required** — GodotPhysics cannot handle ragdoll joints
+- **AnimationTree stays active** during ragdoll — provides target poses for springs
 
 ## Conventions
-
-- All scripts use `class_name` registration
-- Resources (weapon profiles) go in `addons/kickback/resources/`
-- Node naming: PascalCase for nodes, snake_case for scripts
-- Export key tuning parameters with `@export` and sensible defaults
-- Every script that touches physics must handle the case where Jolt is not active (print warning, return)
-- Prefer `lerp` / `move_toward` over tweens for per-frame physics blending
-- Use `Tween` only for one-shot time-based transitions (influence blend-back, flinch fadeout)
+- All scripts use `class_name` registration with `@icon()` annotations
+- Controllers use `configure(profile, tuning)` pattern called by KickbackCharacter before `_ready()`
+- Resources use `create_*_default()` factory methods for zero-config usage
+- Signals for extensibility: controllers emit intent, RagdollAnimator handles behavior
+- `SkeletonDetector.detect_humanoid_bones()` for auto-mapping any humanoid skeleton
+- `KickbackRaycast.shoot_from_camera()` for one-line hit detection
+- Impact profiles in `addons/kickback/presets/` and via `ImpactProfile.create_bullet()` etc.
+- Collision: layer 4 (active ragdoll, mask 2+3+4), layer 5 (partial ragdoll, mask 2+5) — same-tier cross-character collision enabled
+- `RagdollTuning.align_to_slope` for slope-adapted recovery positioning (opt-in, default off)
+- Editor integration: `EditorInspectorPlugin` shows status panel on KickbackCharacter
 
 ## What NOT to do
-
 - Don't use PhysicalBone3D for the active ragdoll layer
 - Don't disable AnimationTree during ragdoll
-- Don't use Engine.time_scale for per-character hitstop
-- Don't use _integrate_forces() unless absolutely necessary (velocity modification is simpler)
-- Don't over-engineer. Each step should be < 200 lines of new code.
-- Don't add any UI framework, menu system, or game logic. Test scenes are minimal: character + weapon + floor.
+- Don't play animations directly from physics controllers (use signals + RagdollAnimator)
+- Don't hardcode animation names in controllers (they belong on RagdollAnimator)
+- Don't hardcode bone names in controllers (they come from RagdollProfile)

@@ -10,7 +10,6 @@ func before_each():
 
 	_flinch = FlinchController.new()
 	_flinch.name = "FlinchController"
-	_flinch.animation_player_path = NodePath("../AnimationPlayer")
 	_flinch.character_path = NodePath("..")
 	_character.add_child(_flinch)
 

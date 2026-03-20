@@ -1,41 +1,56 @@
 ## Mid-range hit reaction using PhysicalBoneSimulator3D. On hit, selectively
 ## simulates the struck bone and its neighbors, applies impulse, then blends
 ## back to animation over a short duration.
+@icon("res://addons/kickback/icons/partial_ragdoll_controller.svg")
 class_name PartialRagdollController
 extends Node
 
 @export_group("References")
+## Path to the PhysicalBoneSimulator3D used for selective bone simulation.
 @export var simulator_path: NodePath
+## Path to the Skeleton3D for bone hierarchy traversal.
 @export var skeleton_path: NodePath
-@export var animation_player_path: NodePath
 @export_group("Timing")
 ## How long the hit bone stays in physics simulation before blend-back.
 @export var hold_time: float = 0.18
-## Duration of the influence blend from 1.0 (physics) to 0.0 (animation).
+## Duration in seconds for blending from physics simulation back to animation.
 @export var blend_duration: float = 0.4
 
 ## Emitted when the controller starts or finishes reacting to a hit.
+## [param is_reacting] is true when a reaction begins, false when blend-out completes.
+## Unlike ActiveRagdollController.state_changed (which emits a State enum int),
+## this emits a bool since partial ragdoll has only two states.
 signal state_changed(is_reacting: bool)
 
 var _simulator: PhysicalBoneSimulator3D
 var _skeleton: Skeleton3D
-var _anim_player: AnimationPlayer
 var _bone_map: Dictionary  # bone_name (String) → PhysicalBone3D
 var _active_tween: Tween
 var _is_reacting: bool = false
+var _profile: RagdollProfile
+var _tuning: RagdollTuning
+
+
+func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
+	_profile = profile
+	_tuning = tuning
 
 
 func _ready() -> void:
-	JoltCheck.warn_if_not_jolt()
 	_simulator = get_node_or_null(simulator_path) as PhysicalBoneSimulator3D
 	_skeleton = get_node_or_null(skeleton_path) as Skeleton3D
-	_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
 	if not _simulator:
 		push_warning("PartialRagdollController: No PhysicalBoneSimulator3D found at '%s' — partial ragdoll disabled" % simulator_path)
 		return
-	if _anim_player and _anim_player.has_animation("idle"):
-		_anim_player.play("idle")
+	_ensure_config()
 	_build_bone_map()
+
+
+func _ensure_config() -> void:
+	if not _profile:
+		_profile = RagdollProfile.create_mixamo_default()
+	if not _tuning:
+		_tuning = RagdollTuning.create_default()
 
 
 func _build_bone_map() -> void:
@@ -49,7 +64,7 @@ func _build_bone_map() -> void:
 func apply_hit(event: HitEvent) -> void:
 	var chain := _get_bone_chain(event.hit_bone_name)
 	if chain.is_empty():
-		push_warning("PartialRagdollController: bone '%s' has no simulated chain" % event.hit_bone_name)
+		push_warning("PartialRagdollController: bone '%s' not part of PhysicalBoneSimulator3D — partial ragdoll hit ignored" % event.hit_bone_name)
 		return
 
 	# If already reacting during blend-out, extend instead of full restart
@@ -83,7 +98,7 @@ func _get_bone_chain(bone_name: String) -> PackedStringArray:
 	var parent_idx := _skeleton.get_bone_parent(hit_idx)
 	if parent_idx >= 0:
 		var parent_name := _skeleton.get_bone_name(parent_idx)
-		if parent_name in _bone_map and parent_name != "mixamorig_Hips":
+		if parent_name in _bone_map and parent_name != _profile.root_bone:
 			chain.append(parent_name)
 
 	return chain

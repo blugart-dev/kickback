@@ -1,86 +1,81 @@
-## Plays directional flinch animations in response to hits. Used for the far-range
-## LOD tier where physics simulation is too expensive. Selects front/back/left/right
-## animation based on hit direction relative to the character.
+## Computes directional flinch responses to hits. Used for the far-range LOD
+## tier where physics simulation is too expensive. Calculates front/back/left/right
+## direction based on hit direction relative to the character and emits a signal.
+## Animation playback is handled by RagdollAnimator or user code.
+@icon("res://addons/kickback/icons/flinch_controller.svg")
 class_name FlinchController
 extends Node
 
+## Flinch direction computed from hit angle relative to character facing.
+enum Direction {
+	FRONT, ## Hit from the front.
+	BACK,  ## Hit from the back.
+	LEFT,  ## Hit from the left.
+	RIGHT, ## Hit from the right.
+	HEAD,  ## Headshot (region-based, not angle-based).
+}
+
 @export_group("References")
-@export var animation_player_path: NodePath
+## Path to the character's root Node3D for computing hit direction.
 @export var character_path: NodePath
+## Path to the PartialRagdollController; flinch is skipped while it is reacting.
 @export var ragdoll_controller_path: NodePath
-@export_group("Animation")
-@export var blend_time: float = 0.1
 
-## Emitted when a flinch animation starts. [param direction_name] is the animation
-## name chosen (e.g. "flinch_front", "flinch_back").
-signal flinch_triggered(direction_name: String)
+## Emitted when a flinch direction is determined from a hit.
+## [param direction] is one of [enum Direction] values.
+## Connect to this signal to play flinch animations.
+signal flinch_triggered(direction: int)
 
-var _anim_player: AnimationPlayer
 var _character: Node3D
 var _ragdoll_ctrl: PartialRagdollController
+var _tuning: RagdollTuning
 
-const REQUIRED_ANIMS := ["flinch_front", "flinch_back", "flinch_left", "flinch_right"]
+
+func configure(tuning: RagdollTuning) -> void:
+	_tuning = tuning
 
 
 func _ready() -> void:
-	_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
 	_character = get_node_or_null(character_path) as Node3D
-	if not _anim_player:
-		push_warning("FlinchController: AnimationPlayer not found at '%s'" % animation_player_path)
 	if not _character:
 		push_warning("FlinchController: character not found at '%s'" % character_path)
 	if not ragdoll_controller_path.is_empty():
 		_ragdoll_ctrl = get_node_or_null(ragdoll_controller_path) as PartialRagdollController
-	_validate_animations()
 
 
-func _validate_animations() -> void:
-	if not _anim_player:
-		return
-	for anim_name in REQUIRED_ANIMS:
-		if not _anim_player.has_animation(anim_name):
-			push_warning("FlinchController: missing animation '%s'" % anim_name)
-
-
-## Triggers a directional flinch animation based on the hit event.
+## Computes the flinch direction from a hit event and emits [signal flinch_triggered].
 func on_hit(event: HitEvent) -> void:
-	if not _anim_player or not _character:
+	if not _character:
 		return
 
 	# Skip flinch if ragdoll is actively reacting (ragdoll takes priority)
 	if _ragdoll_ctrl and _ragdoll_ctrl.is_reacting():
 		return
 
-	var anim_name := _get_flinch_animation(event)
-	flinch_triggered.emit(anim_name)
-	_anim_player.play(anim_name, blend_time)
-	_anim_player.queue("idle")
+	var direction := _get_flinch_direction(event)
+	flinch_triggered.emit(direction)
 
 
-func _get_flinch_animation(event: HitEvent) -> String:
-	# Headshot: use flinch_head if available
-	if event.hit_bone_region == "head" and _anim_player.has_animation("flinch_head"):
-		return "flinch_head"
-	return _get_flinch_direction(event)
+func _get_flinch_direction(event: HitEvent) -> int:
+	# Headshot: use HEAD direction if region matches
+	if event.hit_bone_region == "head":
+		return Direction.HEAD
 
-
-func _get_flinch_direction(event: HitEvent) -> String:
 	var local_dir := _character.global_basis.inverse() * event.hit_direction
 	local_dir.y = 0.0
 
 	if local_dir.length_squared() < 0.001:
-		return "flinch_front"
+		return Direction.FRONT
 
 	local_dir = local_dir.normalized()
 
-	# Animations named by hit source: "flinch_front" = hit from front = recoil back
 	if absf(local_dir.z) > absf(local_dir.x):
 		if local_dir.z < 0:
-			return "flinch_front"
+			return Direction.FRONT
 		else:
-			return "flinch_back"
+			return Direction.BACK
 	else:
 		if local_dir.x < 0:
-			return "flinch_left"
+			return Direction.LEFT
 		else:
-			return "flinch_right"
+			return Direction.RIGHT

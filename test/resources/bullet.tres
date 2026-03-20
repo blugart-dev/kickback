@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ImpactProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/kickback/resources/impact_profile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+profile_name = &"Bullet"
+base_impulse = 8.0
+impulse_transfer_ratio = 0.15
+upward_bias = 0.0
+ragdoll_probability = 0.05
+strength_reduction = 0.85
+strength_spread = 1
+recovery_rate = 0.4

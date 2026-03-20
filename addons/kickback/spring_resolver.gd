@@ -3,23 +3,17 @@
 ## bone and lerps rigid body velocities toward the correction, weighted by
 ## per-bone strength. Strength can be reduced on hit so physics wins temporarily,
 ## then recovers over time.
+@icon("res://addons/kickback/icons/spring_resolver.svg")
 class_name SpringResolver
 extends Node
 
 @export_group("References")
+## Path to the Skeleton3D that provides animation target poses.
 @export var skeleton_path: NodePath
+## Path to the PhysicsRigBuilder whose bodies are spring-driven toward the skeleton.
 @export var rig_builder_path: NodePath
 
-@export_group("Spring Physics")
-@export var hip_pin_strength: float = 0.85
-@export var foot_pin_strength: float = 0.4
-@export var default_pin_strength: float = 0.1
-
-@export_group("Recovery")
-@export var recovery_rate: float = 0.3
-@export var settle_duration: float = 0.6
-@export var settle_linear_threshold: float = 0.5
-@export var settle_angular_threshold: float = 0.3
+var recovery_rate: float = 0.3
 
 var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
@@ -28,32 +22,34 @@ var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, stre
 var _settle_timer: float = 0.0
 var _default_recovery_rate: float = 0.3
 var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
+var _tuning: RagdollTuning
+var _max_angular_vel_sq: float = 400.0
+var _max_linear_vel_sq: float = 100.0
 
-const STRENGTH_MAP: Dictionary = {
-	"Hips": 0.65, "Spine": 0.60, "Chest": 0.60,
-	"Head": 0.35,
-	"UpperArm_L": 0.45, "LowerArm_L": 0.40, "Hand_L": 0.25,
-	"UpperArm_R": 0.45, "LowerArm_R": 0.40, "Hand_R": 0.25,
-	"UpperLeg_L": 0.55, "LowerLeg_L": 0.45, "Foot_L": 0.30,
-	"UpperLeg_R": 0.55, "LowerLeg_R": 0.45, "Foot_R": 0.30,
-}
-
-const MAX_ANGULAR_VEL := 20.0
-const MAX_LINEAR_VEL := 10.0
-const MAX_ANGULAR_VEL_SQ := MAX_ANGULAR_VEL * MAX_ANGULAR_VEL
-const MAX_LINEAR_VEL_SQ := MAX_LINEAR_VEL * MAX_LINEAR_VEL
 const PROPERTY_THRESHOLD := 0.01
 
 
+func configure(tuning: RagdollTuning) -> void:
+	_tuning = tuning
+
+
 func _ready() -> void:
-	JoltCheck.warn_if_not_jolt()
 	_skeleton = get_node(skeleton_path) as Skeleton3D
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
-	_default_recovery_rate = recovery_rate
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
+	_ensure_tuning()
+	recovery_rate = _tuning.recovery_rate
+	_default_recovery_rate = _tuning.recovery_rate
+	_max_angular_vel_sq = _tuning.max_angular_velocity * _tuning.max_angular_velocity
+	_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
 	_init_bones()
+
+
+func _ensure_tuning() -> void:
+	if not _tuning:
+		_tuning = RagdollTuning.create_default()
 
 
 func _init_bones() -> void:
@@ -63,7 +59,7 @@ func _init_bones() -> void:
 		var bone_idx := _skeleton.find_bone(bone_name)
 		if bone_idx < 0:
 			continue
-		var base_str: float = STRENGTH_MAP.get(rig_name, 0.25)
+		var base_str: float = _tuning.strength_map.get(rig_name, _tuning.default_spring_strength)
 		_bones[rig_name] = {
 			"body": bodies[rig_name],
 			"bone_idx": bone_idx,
@@ -72,9 +68,15 @@ func _init_bones() -> void:
 		}
 
 
+## Returns the Skeleton3D used for animation target poses.
+func get_skeleton() -> Skeleton3D:
+	return _skeleton
+
+
 ## Enables or disables the spring resolver. When active, bodies are driven toward
 ## animation poses. When inactive, bodies use passive ragdoll damping and gravity.
 func set_active(value: bool) -> void:
+	_ensure_tuning()
 	_active = value
 	for rig_name: String in _bones:
 		var body: RigidBody3D = _bones[rig_name].body
@@ -83,11 +85,12 @@ func set_active(value: bool) -> void:
 			body.linear_damp = 2.0
 			body.gravity_scale = 0.0
 		else:
-			body.angular_damp = 8.0
-			body.linear_damp = 2.0
-			body.gravity_scale = 0.8
+			body.angular_damp = _tuning.angular_damp
+			body.linear_damp = _tuning.linear_damp
+			body.gravity_scale = _tuning.gravity_scale
 
 
+## Returns true if the spring resolver is currently active.
 func is_active() -> bool:
 	return _active
 
@@ -138,10 +141,10 @@ func _physics_process(delta: float) -> void:
 		var pos_error := target_xform.origin - current_xform.origin
 		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
 
-		if body.angular_velocity.length_squared() > MAX_ANGULAR_VEL_SQ:
-			body.angular_velocity = body.angular_velocity.normalized() * MAX_ANGULAR_VEL
-		if body.linear_velocity.length_squared() > MAX_LINEAR_VEL_SQ:
-			body.linear_velocity = body.linear_velocity.normalized() * MAX_LINEAR_VEL
+		if body.angular_velocity.length_squared() > _max_angular_vel_sq:
+			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
+		if body.linear_velocity.length_squared() > _max_linear_vel_sq:
+			body.linear_velocity = body.linear_velocity.normalized() * _tuning.max_linear_velocity
 
 
 func _strength_ratio(state: Dictionary) -> float:
@@ -168,11 +171,7 @@ func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Tran
 
 
 func _get_pin_strength(rig_name: String) -> float:
-	if rig_name == "Hips":
-		return hip_pin_strength
-	if rig_name == "Foot_L" or rig_name == "Foot_R":
-		return foot_pin_strength
-	return default_pin_strength
+	return _tuning.pin_strength_overrides.get(rig_name, _tuning.default_pin_strength)
 
 
 ## Computes the skeleton-local global transform for a bone by walking the
@@ -219,12 +218,13 @@ func get_default_recovery_rate() -> float:
 
 
 ## Returns true when all bodies have been below velocity thresholds for at least
-## [member settle_duration] seconds, indicating the ragdoll has come to rest.
+## the settle duration, indicating the ragdoll has come to rest.
 func is_settled(delta: float) -> bool:
+	_ensure_tuning()
 	if _bones.is_empty():
 		return false
-	var lin_sq := settle_linear_threshold * settle_linear_threshold
-	var ang_sq := settle_angular_threshold * settle_angular_threshold
+	var lin_sq := _tuning.settle_linear_threshold * _tuning.settle_linear_threshold
+	var ang_sq := _tuning.settle_angular_threshold * _tuning.settle_angular_threshold
 	for state: Dictionary in _bones.values():
 		var body: RigidBody3D = state.body
 		if body.linear_velocity.length_squared() > lin_sq:
@@ -234,7 +234,7 @@ func is_settled(delta: float) -> bool:
 			_settle_timer = 0.0
 			return false
 	_settle_timer += delta
-	return _settle_timer >= settle_duration
+	return _settle_timer >= _tuning.settle_duration
 
 
 func reset_settle_timer() -> void:
