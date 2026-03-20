@@ -40,11 +40,11 @@ extends Resource
 ## Base spring strength recovery rate per second.
 @export var recovery_rate: float = 0.3
 ## Total duration of the get-up recovery sequence in seconds.
-@export var recovery_duration: float = 2.0
+@export var recovery_duration: float = 2.5
 ## Maximum time in ragdoll state before forced recovery.
 @export var ragdoll_force_recovery_time: float = 3.0
 ## Duration of pose interpolation from ragdoll landing to animation target.
-@export var pose_blend_duration: float = 0.4
+@export var pose_blend_duration: float = 0.75
 ## Maximum recovery time before forced completion.
 @export var safety_timeout: float = 3.5
 

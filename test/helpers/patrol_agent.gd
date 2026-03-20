@@ -11,6 +11,8 @@ extends Node
 @export var waypoints: PackedVector3Array = PackedVector3Array()
 @export var pause_at_waypoint: float = 1.0
 @export var turn_speed: float = 5.0
+## Cross-fade duration in seconds when blending between animations.
+@export var blend_time: float = 0.5
 
 @export_group("Kickback Animations")
 @export var get_up_face_up_anim: StringName = &"get_up_face_up"
@@ -141,4 +143,4 @@ func _dir_to_anim(direction: int) -> StringName:
 func _set_anim(anim_name: StringName) -> void:
 	if _anim and _anim.has_animation(anim_name):
 		if _anim.current_animation != anim_name:
-			_anim.play(anim_name, 0.3)
+			_anim.play(anim_name, blend_time)
