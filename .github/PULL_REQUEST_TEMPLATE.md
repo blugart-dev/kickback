@@ -17,7 +17,7 @@
 
 ## Checklist
 
-- [ ] Tests pass (`godot --headless --path . --script test/run_all_tests.gd`)
+- [ ] Tests pass (`godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit`)
 - [ ] No new warnings in Godot console
 - [ ] Documentation updated (if public API changed)
 - [ ] Demo scenes work with changes

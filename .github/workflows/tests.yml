@@ -22,14 +22,7 @@ jobs:
       - name: Import project
         run: |
           ./godot --headless --import --path . 2>&1 || true
-          # Import may "fail" on first run but generates .godot/ cache
 
-      - name: Run tests
+      - name: Run GUT tests
         run: |
-          OUTPUT=$(./godot --headless --path . --script test/run_all_tests.gd 2>&1)
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q "FAIL"; then
-            echo "::error::Tests failed!"
-            exit 1
-          fi
-          echo "All tests passed."
+          ./godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit 2>&1
