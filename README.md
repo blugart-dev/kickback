@@ -4,6 +4,17 @@
 
 Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Characters react dynamically to gunshots, explosions, melee hits, and arrows using active ragdoll physics — every hit produces a unique, physically-driven reaction.
 
+## See It In Action
+
+Run any scene from `demo/` in the Godot editor to see the plugin live:
+- **`euphoria_showcase.tscn`** — Best overview: active resistance, stagger sway, pain escalation, injuries
+- **`shooting_range.tscn`** — FPS shooting with 5 weapon profiles
+- **`tuning_playground.tscn`** — 35+ live sliders to tweak every parameter in real-time
+
+Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full dashboard).
+
+<!-- To add GIFs: record with OBS/ScreenToGif while running euphoria_showcase.tscn and shooting_range.tscn -->
+
 ## Features
 
 - **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.

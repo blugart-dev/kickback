@@ -69,15 +69,17 @@ Used by `ActiveRagdollController` to drive stagger behavior:
 
 ## Per-bone strength values
 
-| Region        | Bones                                  | Strength | Pin | Notes                    |
-|---------------|----------------------------------------|----------|-----|--------------------------|
-| Core          | Hips, Spine, Chest                     | 0.40     | 0.3 (hips only) | Highest — keeps upright |
-| Head          | Head, Neck                             | 0.15     | —   | Low — head should react freely |
-| Upper Limbs   | UpperArm_L/R, LowerArm_L/R            | 0.25     | —   | Arms swing on hit       |
-| Hands         | Hand_L/R                               | 0.10     | —   | Floppy hands look natural |
-| Upper Legs    | UpperLeg_L/R                           | 0.35     | —   | Support weight           |
-| Lower Legs    | LowerLeg_L/R                           | 0.25     | —   | Medium                   |
-| Feet          | Foot_L/R                               | 0.15     | —   | Low                      |
+| Region        | Bones                                  | Strength | Pin  | Notes                    |
+|---------------|----------------------------------------|----------|------|--------------------------|
+| Core          | Hips                                   | 0.65     | 0.85 | Highest — anchors body   |
+| Core          | Spine, Chest                           | 0.60     | 0.1  | Torso stability          |
+| Head          | Head                                   | 0.35     | 0.1  | Reacts freely to hits    |
+| Upper Arms    | UpperArm_L/R                           | 0.45     | 0.1  | Arms swing on hit        |
+| Lower Arms    | LowerArm_L/R                           | 0.40     | 0.1  | Medium tracking          |
+| Hands         | Hand_L/R                               | 0.25     | 0.1  | Loose hands look natural |
+| Upper Legs    | UpperLeg_L/R                           | 0.55     | 0.1  | Support weight           |
+| Lower Legs    | LowerLeg_L/R                           | 0.45     | 0.1  | Medium                   |
+| Feet          | Foot_L/R                               | 0.30     | 0.4  | Foot planting            |
 
 ## Bone list for physics rig (Step 3)
 
@@ -194,6 +196,284 @@ func reduce_strength(hit_bone: StringName, profile: ImpactProfile):
 for bone in bones.values():
     bone.strength = move_toward(bone.strength, bone.base_strength, profile.recovery_rate * delta)
 ```
+
+## Fatigue system
+
+Repeated hits accumulate fatigue that degrades effective spring strength ceiling.
+Fatigued characters recover to lower maxes and wobble more at baseline.
+
+```gdscript
+# On each hit:
+_fatigue = clampf(_fatigue + profile.strength_reduction * tuning.fatigue_gain, 0.0, 1.0)
+
+# Effective base strength (used everywhere instead of raw base):
+func _effective_base_strength(rig_name) -> float:
+    var base = spring.get_base_strength(rig_name)
+    var fatigue_factor = 1.0 - _fatigue * tuning.fatigue_impact      # 0.5 default
+    var injury_factor = 1.0 - injuries[rig_name] * tuning.injury_impact  # 0.4 default
+    return base * fatigue_factor * injury_factor
+
+# Decay per second when not hit:
+_fatigue = move_toward(_fatigue, 0.0, tuning.fatigue_decay * delta)  # 0.05/s default
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `fatigue_gain` | 0.15 | Fatigue added per hit (scaled by strength_reduction) |
+| `fatigue_decay` | 0.05/s | Recovery rate (~20s full recovery) |
+| `fatigue_impact` | 0.5 | How much fatigue reduces effective base (50% at max) |
+
+Signal: `fatigue_changed(level: float)` — emitted when fatigue changes.
+API: `get_fatigue() -> float`, `reset_fatigue()`.
+
+## Pain system
+
+Cumulative pain deterministically escalates reactions instead of relying on dice rolls.
+Sustained fire reliably progresses: flinch → stagger → ragdoll.
+
+```gdscript
+# On each hit:
+_pain = clampf(_pain + effective_reduction * tuning.pain_gain, 0.0, 1.0)
+
+# Thresholds (checked in apply_hit):
+if _pain >= tuning.pain_ragdoll_threshold:   # 0.9 — force ragdoll
+elif _pain >= tuning.pain_stagger_threshold: # 0.5 — force stagger
+
+# Decay:
+_pain = move_toward(_pain, 0.0, tuning.pain_decay * delta)  # 0.15/s default
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `pain_gain` | 0.2 | Pain added per hit (scaled by effective reduction) |
+| `pain_decay` | 0.15/s | Pain recovery rate |
+| `pain_stagger_threshold` | 0.5 | Forces stagger regardless of strength |
+| `pain_ragdoll_threshold` | 0.9 | Forces ragdoll regardless of probability |
+
+Signal: `pain_changed(level: float)`. API: `get_pain() -> float`, `reset_pain()`.
+
+## Hit stacking
+
+Rapid consecutive hits escalate via streak multiplier.
+
+```gdscript
+# Track streak (within rapid_fire_window of 0.3s):
+if time_since_last_hit < tuning.rapid_fire_window:
+    _hit_streak += 1
+else:
+    _hit_streak = 1
+
+# Escalation:
+var streak_multiplier = 1.0 + (_hit_streak * tuning.hit_streak_multiplier)  # 0.3 default
+effective_reduction = profile.strength_reduction * streak_multiplier
+```
+
+Hits during GETTING_UP above `recovery_interrupt_threshold` (0.5) abort recovery
+and re-ragdoll. Signal: `recovery_interrupted()`. API: `get_hit_streak() -> int`.
+
+## Movement-aware instability
+
+Moving characters are less stable and stagger more easily.
+
+```gdscript
+var speed = character_velocity.length()
+var speed_ratio = clampf(
+    (speed - tuning.movement_instability_min_speed) /
+    (tuning.movement_instability_max_speed - tuning.movement_instability_min_speed),
+    0.0, 1.0)
+var movement_multiplier = 1.0 + speed_ratio * tuning.movement_instability_bonus  # 0.3 max
+
+# Applied to effective_reduction:
+effective_reduction *= movement_multiplier
+
+# Stagger direction blends with movement:
+hit_dir = hit_dir.lerp(char_vel.normalized(), tuning.movement_stagger_blend)  # 0.3
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `movement_instability_min_speed` | 1.0 m/s | Below this, no instability |
+| `movement_instability_max_speed` | 5.0 m/s | Full instability at this speed |
+| `movement_instability_bonus` | 0.3 | Max extra reduction (30%) |
+| `movement_stagger_blend` | 0.3 | Stagger direction blend with velocity |
+
+## Injury system
+
+Persistent per-bone damage that outlasts spring recovery. Injured bones have
+reduced effective strength and reduced pin strength (visible sag/limp).
+
+```gdscript
+# On significant hit (effective_reduction > injury_threshold):
+injuries[rig_name] += effective_reduction * tuning.injury_gain  # 0.15 default
+
+# Effects on springs:
+effective_base *= (1.0 - injury * tuning.injury_impact)     # 0.4 — reduces spring ceiling
+pin *= (1.0 - injury * tuning.injury_pin_impact)             # 0.7 — reduces position tracking
+
+# Very slow decay:
+injury = move_toward(injury, 0.0, tuning.injury_decay * delta)  # 0.02/s
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `injury_gain` | 0.15 | Injury per hit (scaled by reduction) |
+| `injury_decay` | 0.02/s | Very slow recovery (~50s) |
+| `injury_threshold` | 0.3 | Minimum hit strength to cause injury |
+| `injury_impact` | 0.4 | Effective base strength reduction per injury |
+| `injury_pin_impact` | 0.7 | Pin strength reduction (visible sag) |
+
+Signal: `region_injured(rig_name: String, severity: float)`.
+API: `get_injury(rig_name) -> float`, `get_all_injuries() -> Dictionary`, `reset_injuries()`.
+
+## Micro-reactions
+
+Immediate torque impulses at the moment of impact for visceral feedback.
+
+```gdscript
+# On hit, applied to specific bones:
+# Head: whip in hit direction
+head_body.apply_torque_impulse(hit_dir.cross(Vector3.UP) * micro_head_whip_strength)
+# Spine/Chest: bend away from hit
+torso_body.apply_torque_impulse(-hit_dir.cross(Vector3.UP) * micro_torso_bend_strength)
+# High-caliber (base_impulse > 10): spin twist
+torso_body.apply_torque_impulse(Vector3.UP * micro_spin_strength)
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `micro_reaction_strength` | 0.5 | Overall multiplier (0.0 = disabled) |
+| `micro_head_whip_strength` | 2.0 | Head whip torque |
+| `micro_torso_bend_strength` | 1.5 | Torso bend torque |
+| `micro_spin_strength` | 1.0 | Spin twist for heavy hits |
+
+## Threat anticipation
+
+Pre-hit defensive flinch. Call when bullets fly nearby or an enemy winds up.
+
+```gdscript
+# API:
+kickback_character.anticipate_threat(threat_direction, urgency)  # urgency 0.0-1.0
+
+# Effect: finds bone closest to threat direction, applies reaction pulse
+# Only works in NORMAL state (not during stagger/ragdoll)
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `threat_anticipation_strength` | 0.4 | Pulse intensity for anticipation |
+
+Signal: `threat_anticipated(direction: Vector3, urgency: float)`.
+
+## Directional bracing
+
+Applied once at stagger entry. Classifies bones by their XZ position relative
+to Hips vs hit direction. Creates asymmetric "fighting to stay up" posture.
+
+```gdscript
+# For each bone, compute dot product of (bone_offset from hips) with (hit_dir on XZ):
+var dot = bone_offset.normalized().dot(hit_xz)
+
+if bone in core_bracing_bones:  # ["Hips", "Spine", "Chest"]
+    # Core resistance: boosted above floor
+    strength = effective_base * (floor_ratio + brace_bonus * 0.5)
+elif dot > bracing_direction_threshold:  # 0.1
+    # Hit side: weakened further below floor
+    strength = effective_base * floor_ratio * (1.0 - dot * bracing_hit_side_multiplier)
+elif dot < -bracing_direction_threshold:
+    # Brace side: strengthened above floor
+    strength = effective_base * (floor_ratio + brace_bonus * abs(dot))
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `brace_strength_bonus` | 0.25 | Extra strength on brace-side bones |
+| `bracing_direction_threshold` | 0.1 | Dot product threshold for classification |
+| `bracing_hit_side_multiplier` | 0.3 | Extra weakening on hit-side bones |
+| `core_bracing_bones` | ["Hips", "Spine", "Chest"] | Always-braced bones |
+
+## Active Resistance
+
+Dynamic per-frame spring adjustment during stagger. Three components run every
+physics frame, scaling with `balance_ratio` and degrading with fatigue:
+
+**1. Counter-imbalance stiffening**: Bones opposite the CoM drift direction stiffen.
+```gdscript
+var counter_dot = -bone_offset.normalized().dot(imbalance_dir)
+boost += max(0, counter_dot) * balance_ratio * resistance_counter_strength * capacity
+```
+
+**2. Core progressive engagement**: Hips/Spine/Chest ramp toward effective base.
+```gdscript
+var core_urgency = clampf(balance_ratio / balance_ragdoll_threshold, 0.0, 1.0)
+boost += core_urgency * resistance_core_ramp * capacity
+```
+
+**3. Load-bearing leg bracing**: Leg on the fall side stiffens as a pillar.
+```gdscript
+boost += balance_ratio * resistance_leg_brace * capacity
+```
+
+All boosts multiplied by velocity spike: `1.0 + clamp(com_speed / velocity_scale) * velocity_spike`.
+Clamped to `effective_base_strength` ceiling. Only increases strength, never weakens.
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `resistance_counter_strength` | 0.40 | Counter-lean intensity |
+| `resistance_core_ramp` | 0.40 | Core engagement intensity |
+| `resistance_leg_brace` | 0.35 | Load-bearing leg boost |
+| `resistance_velocity_spike` | 1.0 | Multiplier on fast CoM sway (up to 2x) |
+| `resistance_velocity_scale` | 2.0 m/s | CoM speed for full velocity spike |
+
+## Stagger sway force
+
+Continuous oscillating force on core bones during stagger. Springs fight this
+force, producing visible wobble. Without it, the initial hit impulse dissipates
+in 2-3 frames and the character snaps back to animation pose.
+
+**Organic sway** uses layered oscillation at irrational frequency ratios
+(never repeats), perpendicular drift for figure-8 wobble, independent upper body
+twist torque, and per-stagger random phase offset.
+
+```gdscript
+var osc_primary = sin(t * freq * TAU)
+var osc_secondary = sin(t * freq * secondary_ratio * TAU) * drift
+var perp = hit_dir.cross(Vector3.UP).normalized()
+var force = (hit_dir * osc_primary + perp * osc_secondary) * sway_strength * decay
+
+hips.apply_central_force(force)
+spine.apply_central_force(force * spine_falloff)
+chest.apply_central_force(force * chest_falloff)
+
+# Upper body twist (independent rotation):
+var twist = sin(t * freq * twist_ratio * TAU)
+var torque = Vector3.UP * sway_strength * twist * decay * sway_twist
+spine.apply_torque(torque)
+chest.apply_torque(torque * chest_falloff)
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `stagger_sway_strength` | 300 N | Force magnitude (0 = disabled) |
+| `stagger_sway_frequency` | 1.5 Hz | Primary oscillation speed |
+| `stagger_sway_drift` | 0.4 | Perpendicular wobble (0 = straight line) |
+| `stagger_sway_twist` | 0.15 | Upper body twist intensity |
+| `stagger_sway_secondary_ratio` | 1.73 | Secondary frequency ratio (irrational = non-repeating) |
+| `stagger_sway_twist_ratio` | 2.17 | Twist frequency ratio |
+| `stagger_sway_spine_falloff` | 0.7 | Spine force as fraction of Hips |
+| `stagger_sway_chest_falloff` | 0.5 | Chest force as fraction of Hips |
+
+Decay is quadratic: `(1.0 - progress)^2` over `stagger_duration`.
+
+## Stagger recovery rate
+
+During stagger, natural spring recovery is suppressed so Active Resistance
+becomes the sole driver of strength changes.
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `stagger_recovery_rate` | 0.03/s | Near-zero vs normal 0.3/s |
+
+Set on stagger entry, restored to default on stagger exit.
 
 ## Bone name matching
 
