@@ -145,12 +145,18 @@ static func detect_humanoid_bones(skeleton: Skeleton3D) -> Dictionary:
 	var all_bones := PackedStringArray()
 	for i in skeleton.get_bone_count():
 		all_bones.append(skeleton.get_bone_name(i))
+	return detect_from_bone_names(all_bones)
 
+
+## Detects humanoid bones from a list of bone names (for testing or manual use).
+## Returns a Dictionary mapping rig slot names to skeleton bone names.
+## Returns empty dict if fewer than 8 bones matched.
+static func detect_from_bone_names(bone_names: PackedStringArray) -> Dictionary:
 	var mapping := {}
 
 	for slot: String in RIG_SLOTS:
 		var patterns: Array = RIG_SLOTS[slot]
-		for bone_name: String in all_bones:
+		for bone_name: String in bone_names:
 			if bone_name in mapping.values():
 				continue  # Already assigned to another slot
 			if _matches_slot(bone_name, patterns):

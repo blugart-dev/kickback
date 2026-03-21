@@ -93,6 +93,7 @@ func set_active(value: bool) -> void:
 		for rig_name: String in _bones:
 			var state: Dictionary = _bones[rig_name]
 			state.strength = state.base_strength
+		_target_overrides.clear()
 
 
 ## Returns true if the spring resolver is currently active.

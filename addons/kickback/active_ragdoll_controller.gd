@@ -18,6 +18,8 @@
 class_name ActiveRagdollController
 extends Node
 
+const _MOVEMENT_VELOCITY_THRESHOLD_SQ := 0.25  # (0.5 m/s)^2
+
 @export_group("References")
 ## Path to the SpringResolver node that drives spring-based bone tracking.
 @export var spring_resolver_path: NodePath
@@ -295,6 +297,9 @@ func _update_recovery(delta: float) -> void:
 func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
 	if not is_instance_valid(body):
 		return
+	if not _tuning or not _spring:
+		push_warning("ActiveRagdollController: apply_hit() called before configure()")
+		return
 
 	# Hit streak: rapid consecutive hits escalate
 	var now := Time.get_ticks_msec() / 1000.0
@@ -560,6 +565,9 @@ func _start_recovery() -> void:
 
 	var bodies := _rig_builder.get_bodies()
 	var hip_body: RigidBody3D = bodies.get("Hips")
+	if not hip_body:
+		_finish_recovery()
+		return
 	var chest_body: RigidBody3D = bodies.get("Chest")
 	var head_body: RigidBody3D = bodies.get("Head")
 
@@ -648,7 +656,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	# Moving characters stagger in their movement direction, not just hit direction
 	if _character_root and _tuning.movement_stagger_blend > 0.0:
 		var char_vel := _get_character_velocity()
-		if char_vel.length_squared() > 0.25:
+		if char_vel.length_squared() > _MOVEMENT_VELOCITY_THRESHOLD_SQ:
 			hit_dir = hit_dir.lerp(char_vel.normalized(), _tuning.movement_stagger_blend).normalized()
 
 	_stagger_hit_dir = hit_dir

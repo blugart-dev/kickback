@@ -85,8 +85,10 @@ func _process(_delta: float) -> void:
 	# Interpolate intermediate bones
 	var bodies := _rig_builder.get_bodies()
 	for entry: Dictionary in _intermediate_cache:
-		var body_a: RigidBody3D = bodies[entry.body_a]
-		var body_b: RigidBody3D = bodies[entry.body_b]
+		var body_a: RigidBody3D = bodies.get(entry.body_a)
+		var body_b: RigidBody3D = bodies.get(entry.body_b)
+		if not body_a or not body_b:
+			continue
 		var pos_a: Vector3 = body_a.global_position
 		var pos_b: Vector3 = body_b.global_position
 		var mid := pos_a.lerp(pos_b, entry.weight)
