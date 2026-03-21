@@ -108,6 +108,14 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "stagger_threshold", 0.0, 1.0, _tuning.stagger_threshold)
 	_add_slider(panel, "stagger_duration", 0.1, 3.0, _tuning.stagger_duration)
 	_add_slider(panel, "stagger_floor", 0.05, 0.5, _tuning.stagger_strength_floor)
+	_add_slider(panel, "sway_strength", 0.0, 1000.0, _tuning.stagger_sway_strength)
+	_add_slider(panel, "sway_frequency", 0.5, 5.0, _tuning.stagger_sway_frequency)
+	_add_slider(panel, "stagger_recovery", 0.0, 0.5, _tuning.stagger_recovery_rate)
+
+	_add_section(panel, "ACTIVE RESISTANCE")
+	_add_slider(panel, "counter_strength", 0.0, 1.0, _tuning.resistance_counter_strength)
+	_add_slider(panel, "core_ramp", 0.0, 1.0, _tuning.resistance_core_ramp)
+	_add_slider(panel, "leg_brace", 0.0, 1.0, _tuning.resistance_leg_brace)
 
 	_add_section(panel, "RECOVERY")
 	_add_slider(panel, "recovery_rate", 0.05, 2.0, _tuning.recovery_rate)
@@ -183,6 +191,12 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 		"stagger_threshold": _tuning.stagger_threshold = value
 		"stagger_duration": _tuning.stagger_duration = value
 		"stagger_floor": _tuning.stagger_strength_floor = value
+		"sway_strength": _tuning.stagger_sway_strength = value
+		"sway_frequency": _tuning.stagger_sway_frequency = value
+		"stagger_recovery": _tuning.stagger_recovery_rate = value
+		"counter_strength": _tuning.resistance_counter_strength = value
+		"core_ramp": _tuning.resistance_core_ramp = value
+		"leg_brace": _tuning.resistance_leg_brace = value
 		"recovery_rate": _tuning.recovery_rate = value
 		"recovery_duration": _tuning.recovery_duration = value
 		"pain_gain": _tuning.pain_gain = value

@@ -136,8 +136,6 @@ func _setup_active(char_root: Node3D) -> KickbackCharacter:
 	_controllers.append(ac)
 
 	var tuning := RagdollTuning.create_default()
-	tuning.stagger_strength_floor = 0.20
-	tuning.stagger_duration = 1.0
 
 	var kc := KickbackCharacter.new()
 	kc.name = "KickbackCharacter"

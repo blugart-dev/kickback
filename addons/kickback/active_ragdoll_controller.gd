@@ -53,6 +53,9 @@ var _last_hit_time: float = 0.0
 var _hit_streak: int = 0
 var _reaction_pulses: Dictionary = {}  # rig_name → {intensity: float, elapsed: float}
 var _injuries: Dictionary = {}  # rig_name → float (0.0-1.0, persistent damage)
+var _prev_com: Vector3 = Vector3.ZERO
+var _com_velocity: Vector3 = Vector3.ZERO
+var _com_initialized: bool = false
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -203,6 +206,12 @@ func _update_stagger(delta: float) -> void:
 		var floor_val: float = effective_base * floor_ratio
 		if _spring.get_bone_strength(rig_name) < floor_val:
 			_spring.set_bone_strength(rig_name, floor_val)
+
+	# Active resistance: dynamic per-frame strength adjustment
+	_apply_active_resistance(delta)
+
+	# Continuous sway force: fights springs to create visible wobble
+	_apply_stagger_sway(delta)
 
 	# Balance-informed stagger
 	var balance := _compute_balance_ratio()
@@ -642,6 +651,8 @@ func _start_stagger(hit_dir: Vector3) -> void:
 			hit_dir = hit_dir.lerp(char_vel.normalized(), _tuning.movement_stagger_blend).normalized()
 
 	_stagger_hit_dir = hit_dir
+	_com_initialized = false
+	_spring.recovery_rate = _tuning.stagger_recovery_rate
 
 	if _tuning.brace_strength_bonus > 0.0:
 		_apply_directional_bracing(hit_dir)
@@ -655,6 +666,7 @@ func _finish_stagger() -> void:
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 	_state = State.NORMAL
 	_balance_stable_timer = 0.0
+	_com_initialized = false
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	state_changed.emit(_state)
 	stagger_finished.emit()
@@ -726,12 +738,13 @@ func _compute_average_strength_ratio() -> float:
 	return total / float(count) if count > 0 else 1.0
 
 
-func _compute_balance_ratio() -> float:
+func _compute_balance_state() -> Dictionary:
+	var empty := {"com": Vector3.ZERO, "support_center": Vector3.ZERO, "balance_ratio": 0.0, "imbalance_dir": Vector2.ZERO}
 	var bodies := _rig_builder.get_bodies()
 	var foot_l: RigidBody3D = bodies.get("Foot_L")
 	var foot_r: RigidBody3D = bodies.get("Foot_R")
 	if not foot_l or not foot_r:
-		return 0.0
+		return empty
 
 	var com := Vector3.ZERO
 	var total_mass := 0.0
@@ -739,7 +752,7 @@ func _compute_balance_ratio() -> float:
 		com += body.global_position * body.mass
 		total_mass += body.mass
 	if total_mass <= 0.001:
-		return 0.0
+		return empty
 	com /= total_mass
 
 	var support_center := (foot_l.global_position + foot_r.global_position) * 0.5
@@ -748,9 +761,20 @@ func _compute_balance_ratio() -> float:
 
 	var com_xz := Vector2(com.x, com.z)
 	var support_xz := Vector2(support_center.x, support_center.z)
-	var offset := com_xz.distance_to(support_xz)
+	var offset_vec := com_xz - support_xz
+	var offset := offset_vec.length()
+	var imbalance_dir := offset_vec.normalized() if offset > 0.001 else Vector2.ZERO
 
-	return clampf(offset / support_radius, 0.0, _tuning.balance_max_ratio)
+	return {
+		"com": com,
+		"support_center": support_center,
+		"balance_ratio": clampf(offset / support_radius, 0.0, _tuning.balance_max_ratio),
+		"imbalance_dir": imbalance_dir,
+	}
+
+
+func _compute_balance_ratio() -> float:
+	return _compute_balance_state().balance_ratio
 
 
 func _apply_reaction_pulse(rig_name: String, intensity: float, spread: int) -> void:
@@ -866,3 +890,135 @@ func _apply_directional_bracing(hit_dir: Vector3) -> void:
 			# Brace side: boost above floor
 			var braced := effective_base * (floor_ratio + brace_bonus * absf(dot))
 			_spring.set_bone_strength(rig_name, minf(braced, effective_base))
+
+
+func _is_leg_bone(rig_name: String) -> bool:
+	return rig_name.begins_with("UpperLeg") or rig_name.begins_with("LowerLeg") or rig_name.begins_with("Foot")
+
+
+func _get_bone_side(rig_name: String) -> String:
+	if rig_name.ends_with("_L"):
+		return "L"
+	elif rig_name.ends_with("_R"):
+		return "R"
+	return ""
+
+
+func _apply_active_resistance(delta: float) -> void:
+	# Early exit if all resistance is disabled
+	if _tuning.resistance_counter_strength <= 0.0 and _tuning.resistance_core_ramp <= 0.0 and _tuning.resistance_leg_brace <= 0.0:
+		return
+
+	var bodies := _rig_builder.get_bodies()
+	var balance_state := _compute_balance_state()
+	var com: Vector3 = balance_state.com
+	var support_center: Vector3 = balance_state.support_center
+	var balance_ratio: float = balance_state.balance_ratio
+	var imbalance_dir: Vector2 = balance_state.imbalance_dir
+
+	# CoM velocity tracking
+	if _com_initialized:
+		_com_velocity = (com - _prev_com) / maxf(delta, 0.001)
+	else:
+		_com_velocity = Vector3.ZERO
+		_com_initialized = true
+	_prev_com = com
+
+	# Skip if perfectly balanced (no resistance needed)
+	if balance_ratio < 0.05:
+		return
+
+	# Resistance capacity degrades with fatigue
+	var resistance_capacity := clampf(1.0 - _fatigue * _tuning.fatigue_impact, 0.0, 1.0)
+
+	# Velocity spike: reflexive tensing when CoM is swaying fast
+	var com_speed_xz := Vector2(_com_velocity.x, _com_velocity.z).length()
+	var velocity_factor := clampf(com_speed_xz / _tuning.resistance_velocity_scale, 0.0, 1.0)
+	var velocity_multiplier := 1.0 + velocity_factor * _tuning.resistance_velocity_spike
+
+	# Determine which leg is load-bearing (closer to the fall direction)
+	var brace_side := ""
+	if _tuning.resistance_leg_brace > 0.0:
+		var foot_l: RigidBody3D = bodies.get("Foot_L")
+		var foot_r: RigidBody3D = bodies.get("Foot_R")
+		if foot_l and foot_r and imbalance_dir.length_squared() > 0.001:
+			var support_xz := Vector2(support_center.x, support_center.z)
+			var fl_xz := Vector2(foot_l.global_position.x, foot_l.global_position.z)
+			var fr_xz := Vector2(foot_r.global_position.x, foot_r.global_position.z)
+			var l_offset := fl_xz - support_xz
+			var r_offset := fr_xz - support_xz
+			var l_dot: float = l_offset.normalized().dot(imbalance_dir) if l_offset.length_squared() > 0.001 else 0.0
+			var r_dot: float = r_offset.normalized().dot(imbalance_dir) if r_offset.length_squared() > 0.001 else 0.0
+			brace_side = "L" if l_dot > r_dot else "R"
+
+	# Hips center for bone offset computation
+	var hips_body: RigidBody3D = bodies.get("Hips")
+	if not hips_body:
+		return
+	var hips_center := Vector2(hips_body.global_position.x, hips_body.global_position.z)
+
+	# Per-bone resistance
+	for rig_name: String in _spring.get_all_bone_names():
+		if _is_bone_protected(rig_name):
+			continue
+
+		var effective_base := _effective_base_strength(rig_name)
+		var boost := 0.0
+
+		# Component 1: Counter-imbalance stiffening
+		if _tuning.resistance_counter_strength > 0.0 and imbalance_dir.length_squared() > 0.001:
+			var body: RigidBody3D = bodies.get(rig_name)
+			if body:
+				var bone_xz := Vector2(body.global_position.x, body.global_position.z)
+				var bone_offset := bone_xz - hips_center
+				if bone_offset.length_squared() > 0.001:
+					var counter_dot := -bone_offset.normalized().dot(imbalance_dir)
+					if counter_dot > 0.0:
+						boost += counter_dot * balance_ratio * _tuning.resistance_counter_strength * resistance_capacity
+
+		# Component 2: Core progressive engagement
+		if _tuning.resistance_core_ramp > 0.0 and rig_name in _tuning.core_bracing_bones:
+			var core_urgency := clampf(balance_ratio / _tuning.balance_ragdoll_threshold, 0.0, 1.0)
+			boost += core_urgency * _tuning.resistance_core_ramp * resistance_capacity
+
+		# Component 3: Load-bearing leg bracing
+		if _tuning.resistance_leg_brace > 0.0 and brace_side != "":
+			if _is_leg_bone(rig_name) and _get_bone_side(rig_name) == brace_side:
+				boost += balance_ratio * _tuning.resistance_leg_brace * resistance_capacity
+
+		# Apply velocity multiplier and clamp to effective base
+		if boost > 0.001:
+			boost *= velocity_multiplier
+			var current := _spring.get_bone_strength(rig_name)
+			var target := minf(current + boost, effective_base)
+			if target > current:
+				_spring.set_bone_strength(rig_name, target)
+
+
+func _apply_stagger_sway(_delta: float) -> void:
+	if _tuning.stagger_sway_strength <= 0.0:
+		return
+
+	var bodies := _rig_builder.get_bodies()
+	var hips: RigidBody3D = bodies.get("Hips")
+	if not hips:
+		return
+
+	# Oscillation: sin wave creates back-and-forth in hit direction
+	var osc := sin(_stagger_elapsed * _tuning.stagger_sway_frequency * TAU)
+
+	# Quadratic decay: strong at start, fades over stagger duration
+	var progress := clampf(_stagger_elapsed / _tuning.stagger_duration, 0.0, 1.0)
+	var decay := (1.0 - progress) * (1.0 - progress)
+
+	# Force vector: oscillates in hit direction
+	var force := _stagger_hit_dir * _tuning.stagger_sway_strength * osc * decay
+
+	# Apply to core bones (decreasing intensity up the chain)
+	hips.apply_central_force(force)
+	var spine: RigidBody3D = bodies.get("Spine")
+	if spine:
+		spine.apply_central_force(force * 0.7)
+	var chest: RigidBody3D = bodies.get("Chest")
+	if chest:
+		chest.apply_central_force(force * 0.5)

@@ -14,6 +14,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Hit stacking** — rapid consecutive hits escalate via streak multiplier. Hits during recovery can interrupt get-up and re-ragdoll the character.
 - **Reaction pulses** — sub-stagger hits produce a brief visible wobble that fades over 200ms. Even light hits are noticeable.
 - **Directional bracing** — during stagger, bones opposite the hit direction strengthen while hit-side bones weaken further. Characters visibly fight to stay upright.
+- **Active Resistance** — during stagger, per-bone spring strengths dynamically adjust every physics frame. Counter-side bones stiffen against imbalance, core engages progressively, load-bearing leg braces. Degrades with fatigue. Characters actively fight to stay upright instead of passively wobbling.
+- **Stagger sway force** — continuous oscillating force on core bones during stagger creates visible back-and-forth wobble as springs fight the force. Decays quadratically over stagger duration.
 - **Cumulative pain** — sustained fire deterministically escalates reactions (flinch → stagger → ragdoll) instead of relying on dice rolls. Pain decays between engagements.
 - **Movement-aware hits** — running characters are less stable and stagger more easily. Stagger direction blends with movement direction for natural stumbling.
 - **Threat anticipation** — `anticipate_threat(direction, urgency)` API for pre-hit flinch. Call when bullets fly nearby or an enemy winds up an attack.
@@ -143,7 +145,7 @@ Run any scene from `demo/` to see the plugin in action:
 | `ball_throw.tscn` | Throw physics balls, velocity-scaled impact |
 | `tuning_presets.tscn` | 5 characters: Tank/Standard/Loose/Fragile/Protected side-by-side |
 | `protected_bones.tscn` | Protected vs unprotected legs — same hit, different result |
-| `euphoria_showcase.tscn` | All v0.6+ features: pain escalation, momentum, injuries, threat anticipation |
+| `euphoria_showcase.tscn` | All v0.7 features: active resistance, stagger sway, pain, momentum, injuries |
 
 ## Collision Layers
 

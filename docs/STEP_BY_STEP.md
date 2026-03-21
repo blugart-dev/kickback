@@ -552,3 +552,47 @@ API: `get_injury()`, `get_all_injuries()`, `reset_injuries()`.
 
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
 `spring_resolver.gd`
+
+---
+
+## Active Resistance + Stagger Sway Force ✅ COMPLETE
+
+**Active Resistance**: During stagger, per-bone spring strengths dynamically adjust
+every physics frame based on the character's physical state. Three components:
+1. Counter-imbalance stiffening — bones opposite the CoM drift stiffen
+2. Core progressive engagement — Hips/Spine/Chest ramp toward effective base as balance worsens
+3. Load-bearing leg bracing — the leg on the fall side stiffens as a pillar
+
+All components scale with `balance_ratio` (near-zero when balanced, strong when
+tipping) and degrade with fatigue. Velocity spike multiplier adds reflexive tensing
+on sudden sway. Refactored `_compute_balance_ratio()` into `_compute_balance_state()`
+returning CoM, support center, balance ratio, and imbalance direction.
+
+New tuning: `resistance_counter_strength` (0.40), `resistance_core_ramp` (0.40),
+`resistance_leg_brace` (0.35), `resistance_velocity_spike` (1.0),
+`resistance_velocity_scale` (2.0).
+
+**Stagger sway force**: Continuous oscillating force applied to core bones
+(Hips 100%, Spine 70%, Chest 50%) during stagger via `apply_central_force()`.
+Springs fight this force, producing visible back-and-forth wobble. Sin-wave
+oscillation at configurable frequency with quadratic decay over stagger duration.
+Key insight: the initial hit impulse dissipates in 2-3 frames due to damping,
+leaving nothing for springs to fight against. Continuous force creates the
+sustained tug-of-war that makes stagger visible.
+
+New tuning: `stagger_sway_strength` (300N), `stagger_sway_frequency` (1.5Hz).
+
+**Stagger recovery rate**: Separate `stagger_recovery_rate` (0.03/s) suppresses
+natural spring recovery during stagger so Active Resistance is the sole driver
+of strength changes. Normal rate (0.3/s) restored on stagger exit.
+
+**Stagger defaults retuned**: `stagger_threshold` 0.55→0.70 (triggers more easily),
+`stagger_duration` 0.6→1.8s (longer wobble), `stagger_strength_floor` 0.35→0.10
+(deeper sway, more contrast with resistance boosts).
+
+**Demo updates**: Removed stale stagger overrides from 5 demos. Added 6 new sliders
+to `tuning_playground.gd` (sway, recovery rate, active resistance).
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
+`tuning_playground.gd`, `shooting_range.gd`, `signal_showcase.gd`,
+`stress_test.gd`, `animated_npc.gd`, `euphoria_showcase.gd`

@@ -93,7 +93,6 @@ func _setup_active(char_root: Node3D, ybot_name: String) -> KickbackCharacter:
 	ac.character_root_path = root_path
 
 	var tuning := RagdollTuning.create_default()
-	tuning.stagger_strength_floor = 0.20
 
 	var kc := KickbackCharacter.new()
 	kc.name = "KickbackCharacter"

@@ -12,11 +12,19 @@ extends Resource
 @export_group("Hit Reactions")
 ## Average strength ratio below which a non-ragdoll hit triggers stagger.
 ## Set to 0.0 to disable stagger entirely.
-@export_range(0.0, 1.0) var stagger_threshold: float = 0.55
+@export_range(0.0, 1.0) var stagger_threshold: float = 0.70
 ## Duration of stagger state before auto-recovery (seconds).
-@export_range(0.1, 3.0) var stagger_duration: float = 0.6
+@export_range(0.1, 3.0) var stagger_duration: float = 1.8
 ## Minimum strength ratio during stagger (fraction of base_strength per bone).
-@export_range(0.1, 0.8) var stagger_strength_floor: float = 0.35
+@export_range(0.05, 0.8) var stagger_strength_floor: float = 0.10
+## Spring recovery rate during stagger (per second). Low = bones stay weak,
+## active resistance becomes the sole driver. 0.0 = no natural recovery during stagger.
+@export_range(0.0, 0.5) var stagger_recovery_rate: float = 0.03
+## Force (Newtons) applied to core bones during stagger, creating visible wobble.
+## Springs fight this force, producing back-and-forth sway. 0.0 = disabled.
+@export_range(0.0, 1000.0) var stagger_sway_strength: float = 300.0
+## Oscillation frequency of the sway force (Hz). Higher = faster wobble.
+@export_range(0.5, 5.0) var stagger_sway_frequency: float = 1.5
 ## Multiplier on ragdoll_probability when hit during active stagger.
 @export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
 ## Extra strength ratio applied to brace-side bones during stagger.
@@ -36,7 +44,7 @@ extends Resource
 ## Balance ratio below this during stagger allows early recovery (character regained balance).
 @export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
 ## How long balance must stay below recovery threshold before stagger ends.
-@export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.3
+@export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.5
 ## Pain accumulated per hit, scaled by effective strength_reduction.
 ## Pain deterministically escalates reactions (supplements random ragdoll_probability).
 ## 0.0 = disabled (dice-roll only).
@@ -209,6 +217,21 @@ extends Resource
 ## Extra reduction multiplier applied to hit-side bones during stagger.
 ## Higher = hit-side bones weaken more relative to the stagger floor.
 @export_range(0.0, 1.0) var bracing_hit_side_multiplier: float = 0.3
+
+# ── Advanced: Active Resistance ───────────────────────────────────────────
+
+@export_group("Advanced: Active Resistance")
+## How strongly counter-side bones stiffen against the imbalance direction.
+## Higher = more aggressive counter-lean. 0.0 disables active resistance entirely.
+@export_range(0.0, 1.0) var resistance_counter_strength: float = 0.40
+## How much core bones (Hips/Spine/Chest) ramp toward effective base as balance worsens.
+@export_range(0.0, 1.0) var resistance_core_ramp: float = 0.40
+## Strength boost for the load-bearing leg on the fall side.
+@export_range(0.0, 1.0) var resistance_leg_brace: float = 0.35
+## Extra resistance multiplier when center-of-mass velocity is high (reflexive tensing).
+@export_range(0.0, 2.0) var resistance_velocity_spike: float = 1.0
+## CoM speed (m/s) at which velocity spike reaches full effect.
+@export_range(0.5, 5.0) var resistance_velocity_scale: float = 2.0
 
 # ── Advanced: Physics ───────────────────────────────────────────────────────
 

@@ -60,7 +60,7 @@ kickback/
 │   ├── ball_throw.tscn/gd           # Throw physics balls, velocity-scaled impact
 │   ├── tuning_presets.tscn/gd       # 5 characters: Tank/Standard/Loose/Fragile/Protected
 │   ├── protected_bones.tscn/gd      # Protected vs unprotected legs comparison
-│   └── euphoria_showcase.tscn/gd   # All v0.6+ features: pain, momentum, injuries, anticipation
+│   └── euphoria_showcase.tscn/gd   # All v0.7 features: active resistance, sway, pain, injuries
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)
@@ -81,7 +81,7 @@ kickback/
 - `PhysicsRigSync` writes physics transforms to skeleton as bone pose overrides
 - `SpringResolver` drives physics bodies toward animation poses via velocity lerp
 - `ActiveRagdollController` manages NORMAL → STAGGER/RAGDOLL → GETTING_UP → NORMAL state machine
-- `STAGGER` state: springs reduced to floor strength, character wobbles but stays on feet, auto-recovers
+- `STAGGER` state: springs reduced to floor strength, continuous sway force fights springs for visible wobble, Active Resistance dynamically adjusts per-bone strengths based on balance/CoM
 - `PERSISTENT` state: stays ragdolled until `set_persistent(false)` is called
 
 ### Partial Ragdoll (standalone alternative)

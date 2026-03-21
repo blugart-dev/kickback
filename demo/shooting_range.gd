@@ -72,10 +72,7 @@ func _setup_active(char_root: Node3D) -> void:
 	active_ctrl.rig_builder_path = builder_path
 	active_ctrl.character_root_path = root_path
 
-	# Juicier tuning for demo — more wobble, longer stagger
 	var tuning := RagdollTuning.create_default()
-	tuning.stagger_strength_floor = 0.18
-	tuning.stagger_duration = 1.0
 
 	var kc := KickbackCharacter.new()
 	kc.name = "KickbackCharacter"

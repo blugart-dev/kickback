@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0] - 2026-03-21
+
+### Added
+- **Active Resistance** — during stagger, per-bone spring strengths dynamically adjust every physics frame based on center-of-mass position and velocity. Counter-side bones stiffen to pull balance back, core engages progressively as balance worsens, load-bearing leg braces as a pillar. Characters visibly fight to stay upright. New tuning: `resistance_counter_strength`, `resistance_core_ramp`, `resistance_leg_brace`, `resistance_velocity_spike`, `resistance_velocity_scale`.
+- **Stagger sway force** — continuous oscillating force applied to core bones (Hips/Spine/Chest) during stagger. Springs fight this force, producing visible back-and-forth wobble. Quadratic decay over stagger duration. New tuning: `stagger_sway_strength` (300N default), `stagger_sway_frequency` (1.5Hz).
+- **Stagger recovery rate** — separate spring recovery rate during stagger, suppressing natural recovery so Active Resistance becomes the primary driver. New tuning: `stagger_recovery_rate` (0.03/s default, vs 0.3/s normal).
+- **Tuning playground sliders** — 6 new sliders: sway strength, sway frequency, stagger recovery, counter strength, core ramp, leg brace.
+
+### Changed
+- **Stagger defaults retuned** — `stagger_threshold` 0.55 → 0.70 (triggers more easily), `stagger_duration` 0.6 → 1.8s (longer wobble), `stagger_strength_floor` 0.35 → 0.10 (deeper sway, more contrast with resistance).
+- **`_compute_balance_ratio()` refactored** into `_compute_balance_state()` returning CoM position, support center, balance ratio, and imbalance direction. Public API unchanged.
+- **Demo scenes updated** — removed stale stagger overrides from 5 demos so new defaults take effect.
+- Plugin version bumped to 0.7.0.
+
 ## [0.5.0] - 2026-03-20
 
 ### Added
