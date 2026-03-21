@@ -5,8 +5,6 @@
 extends Node3D
 
 const WALK_SPEED := 1.8
-const WAYPOINT_A := Vector3(0, 0, -2.5)
-const WAYPOINT_B := Vector3(0, 0, 2.5)
 
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Arrow", "Shotgun", "Explosion"])
@@ -16,8 +14,11 @@ var _kickbacks: Array[KickbackCharacter] = []
 var _controllers: Array[ActiveRagdollController] = []
 var _char_roots: Array[Node3D] = []
 
-# Moving target
-var _walk_target := WAYPOINT_A
+# Moving target state
+var _walk_target_a := Vector3.ZERO
+var _walk_target_b := Vector3.ZERO
+var _walk_target := Vector3.ZERO
+var _can_walk: bool = true
 var _moving_anim: AnimationPlayer
 
 # Camera orbit
@@ -51,10 +52,24 @@ func _ready() -> void:
 	for i in range(3):
 		var char_root: Node3D = get_node(char_names[i])
 		_char_roots.append(char_root)
-		var kc := _setup_active(char_root, i)
+		var kc := _setup_active(char_root)
 		_kickbacks.append(kc)
 
-	# Find moving target's AnimationPlayer
+	# Setup moving target waypoints relative to its starting position
+	var mover_pos := _char_roots[1].global_position
+	_walk_target_a = Vector3(mover_pos.x, 0, mover_pos.z - 2.5)
+	_walk_target_b = Vector3(mover_pos.x, 0, mover_pos.z + 2.5)
+	_walk_target = _walk_target_a
+
+	# Connect moving target signals for walk state management
+	if _controllers.size() > 1:
+		var moving_ctrl := _controllers[1]
+		moving_ctrl.ragdoll_started.connect(_on_mover_ragdoll)
+		moving_ctrl.stagger_started.connect(_on_mover_stagger)
+		moving_ctrl.recovery_finished.connect(_on_mover_recovered)
+		moving_ctrl.stagger_finished.connect(_on_mover_stagger_finished)
+
+	# Start walk animation
 	_moving_anim = _find_child_of_type(_char_roots[1], "AnimationPlayer")
 	if _moving_anim:
 		_moving_anim.call_deferred("play", "walk")
@@ -67,7 +82,28 @@ func _ready() -> void:
 	add_child(debug_hud)
 
 
-func _setup_active(char_root: Node3D, idx: int) -> KickbackCharacter:
+# --- Moving target signal handlers ---
+
+func _on_mover_ragdoll() -> void:
+	_can_walk = false
+
+func _on_mover_stagger(_hit_dir: Vector3) -> void:
+	_can_walk = false
+
+func _on_mover_recovered() -> void:
+	_can_walk = true
+	if _moving_anim:
+		_moving_anim.play("walk")
+
+func _on_mover_stagger_finished() -> void:
+	_can_walk = true
+	if _moving_anim:
+		_moving_anim.play("walk")
+
+
+# --- Setup ---
+
+func _setup_active(char_root: Node3D) -> KickbackCharacter:
 	var ybot_name := ""
 	for child in char_root.get_children():
 		if _find_child_of_type(child, "Skeleton3D"):
@@ -129,14 +165,16 @@ func _find_child_of_type(node: Node, type_name: String) -> Node:
 
 
 func _physics_process(delta: float) -> void:
-	# Moving target patrol
-	if _char_roots.size() > 1:
+	# Moving target patrol (only when not ragdolled/staggered)
+	if _can_walk and _char_roots.size() > 1:
 		var mover := _char_roots[1]
 		var pos := mover.global_position
 		var dir := _walk_target - pos
 		dir.y = 0
 		if dir.length() < 0.3:
-			_walk_target = WAYPOINT_B if _walk_target == WAYPOINT_A else WAYPOINT_A
+			_walk_target = _walk_target_b if _walk_target == _walk_target_a else _walk_target_a
+			dir = _walk_target - pos
+			dir.y = 0
 		var move_dir := dir.normalized()
 		mover.global_position += move_dir * WALK_SPEED * delta
 		if move_dir.length_squared() > 0.01:
@@ -207,6 +245,9 @@ func _unhandled_input(event: InputEvent) -> void:
 						ctrl.reset_fatigue()
 						ctrl.reset_pain()
 						ctrl.reset_injuries()
+				_can_walk = true
+				if _moving_anim:
+					_moving_anim.play("walk")
 
 
 func _set_weapon(idx: int) -> void:
