@@ -463,8 +463,8 @@ func _start_recovery() -> void:
 		# Raycast down from hip to find ground height
 		var ground_y := 0.0
 		var space_state := _character_root.get_world_3d().direct_space_state
-		var ray_origin := Vector3(hip_pos.x, hip_pos.y + 1.0, hip_pos.z)
-		var ray_end := Vector3(hip_pos.x, hip_pos.y - 3.0, hip_pos.z)
+		var ray_origin := Vector3(hip_pos.x, hip_pos.y + _tuning.ground_raycast_up_offset, hip_pos.z)
+		var ray_end := Vector3(hip_pos.x, hip_pos.y - _tuning.ground_raycast_down_distance, hip_pos.z)
 		var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
 		query.collision_mask = _tuning.ground_raycast_mask
 		query.collide_with_bodies = true
@@ -486,7 +486,7 @@ func _start_recovery() -> void:
 
 		# Set character root orientation
 		if facing.length_squared() > 0.01:
-			if _tuning.align_to_slope and ground_normal.dot(Vector3.UP) > 0.5:
+			if _tuning.align_to_slope and ground_normal.dot(Vector3.UP) > _tuning.slope_alignment_threshold:
 				var slope_forward := facing.slide(ground_normal).normalized()
 				if slope_forward.length_squared() > 0.001:
 					_character_root.global_basis = Basis.looking_at(slope_forward, ground_normal)
@@ -618,13 +618,13 @@ func _compute_balance_ratio() -> float:
 
 	var support_center := (foot_l.global_position + foot_r.global_position) * 0.5
 	var foot_spread := foot_l.global_position.distance_to(foot_r.global_position)
-	var support_radius := maxf(foot_spread * 0.5, 0.1)
+	var support_radius := maxf(foot_spread * 0.5, _tuning.balance_support_radius_min)
 
 	var com_xz := Vector2(com.x, com.z)
 	var support_xz := Vector2(support_center.x, support_center.z)
 	var offset := com_xz.distance_to(support_xz)
 
-	return clampf(offset / support_radius, 0.0, 1.5)
+	return clampf(offset / support_radius, 0.0, _tuning.balance_max_ratio)
 
 
 func _apply_reaction_pulse(rig_name: String, intensity: float, spread: int) -> void:
@@ -671,7 +671,7 @@ func _apply_directional_bracing(hit_dir: Vector3) -> void:
 		var effective_base := _effective_base_strength(rig_name)
 
 		# Core bones get a resistance boost to resist torso rotation
-		if rig_name == "Hips" or rig_name == "Spine" or rig_name == "Chest":
+		if rig_name in _tuning.core_bracing_bones:
 			var boosted := effective_base * (floor_ratio + brace_bonus * 0.5)
 			_spring.set_bone_strength(rig_name, minf(boosted, effective_base))
 			continue
@@ -685,11 +685,12 @@ func _apply_directional_bracing(hit_dir: Vector3) -> void:
 			continue
 		var dot := bone_offset.normalized().dot(hit_xz)
 
-		if dot > 0.1:
+		var threshold: float = _tuning.bracing_direction_threshold
+		if dot > threshold:
 			# Hit side: reduce further below floor
-			var weakened := effective_base * floor_ratio * (1.0 - dot * 0.3)
+			var weakened := effective_base * floor_ratio * (1.0 - dot * _tuning.bracing_hit_side_multiplier)
 			_spring.set_bone_strength(rig_name, maxf(weakened, 0.0))
-		elif dot < -0.1:
+		elif dot < -threshold:
 			# Brace side: boost above floor
 			var braced := effective_base * (floor_ratio + brace_bonus * absf(dot))
 			_spring.set_bone_strength(rig_name, minf(braced, effective_base))

@@ -122,14 +122,14 @@ func _physics_process(delta: float) -> void:
 		var new_ang_damp: float
 		var new_lin_damp: float
 		if _active:
-			new_gravity = (1.0 - ratio) * 0.5
-			new_ang_damp = 1.0 + 2.0 * ratio
-			new_lin_damp = 0.5 + 1.5 * ratio
+			new_gravity = (1.0 - ratio) * _tuning.spring_gravity_multiplier
+			new_ang_damp = _tuning.spring_angular_damp_base + _tuning.spring_angular_damp_scale * ratio
+			new_lin_damp = _tuning.spring_linear_damp_base + _tuning.spring_linear_damp_scale * ratio
 		else:
 			# Passive tracking: high damping, no gravity — bodies follow animation tightly
 			new_gravity = 0.0
-			new_ang_damp = _tuning.spring_active_angular_damp + 5.0
-			new_lin_damp = _tuning.spring_active_linear_damp + 3.0
+			new_ang_damp = _tuning.spring_active_angular_damp + _tuning.spring_passive_angular_damp_offset
+			new_lin_damp = _tuning.spring_active_linear_damp + _tuning.spring_passive_linear_damp_offset
 		if absf(body.gravity_scale - new_gravity) > PROPERTY_THRESHOLD:
 			body.gravity_scale = new_gravity
 		if absf(body.angular_damp - new_ang_damp) > PROPERTY_THRESHOLD:

@@ -26,6 +26,23 @@ extends Resource
 ## Linear damping when springs are active.
 @export var spring_active_linear_damp: float = 2.0
 
+@export_group("Spring Dynamics")
+## Gravity multiplier when springs are active. Formula: (1 - ratio) * multiplier.
+## Higher = more gravity pull on weakened bones. 0.0 = no gravity during spring mode.
+@export var spring_gravity_multiplier: float = 0.5
+## Base angular damping when springs are active. Formula: base + scale * ratio.
+@export var spring_angular_damp_base: float = 1.0
+## Angular damping scale factor per strength ratio.
+@export var spring_angular_damp_scale: float = 2.0
+## Base linear damping when springs are active. Formula: base + scale * ratio.
+@export var spring_linear_damp_base: float = 0.5
+## Linear damping scale factor per strength ratio.
+@export var spring_linear_damp_scale: float = 1.5
+## Extra angular damping added in passive tracking mode (springs inactive).
+@export var spring_passive_angular_damp_offset: float = 5.0
+## Extra linear damping added in passive tracking mode (springs inactive).
+@export var spring_passive_linear_damp_offset: float = 3.0
+
 @export_group("Spring Strengths")
 ## Per-bone base spring strength. Keys are rig names (e.g. "Hips": 0.65).
 ## Bones not listed use default_spring_strength.
@@ -84,6 +101,13 @@ extends Resource
 ## Whether to align the character root to the ground slope during recovery.
 ## If false (default), the character stays upright regardless of slope angle.
 @export var align_to_slope: bool = false
+## Raycast origin offset above the hip position (meters).
+@export var ground_raycast_up_offset: float = 1.0
+## Raycast distance below the hip position (meters).
+@export var ground_raycast_down_distance: float = 3.0
+## Ground normal must have this dot product with UP to count as a slope.
+## Below this threshold, character stays upright even with align_to_slope enabled.
+@export_range(0.0, 1.0) var slope_alignment_threshold: float = 0.5
 
 @export_group("Root Motion")
 ## Strip horizontal (XZ) root motion from the root bone's animation pose.
@@ -107,6 +131,17 @@ extends Resource
 ## Creates asymmetric "fighting to stay up" posture. 0.0 = disabled (symmetric wobble).
 @export_range(0.0, 0.5) var brace_strength_bonus: float = 0.25
 
+@export_group("Directional Bracing")
+## Bones that receive a core resistance boost during directional bracing.
+## These resist torso rotation on stagger entry.
+@export var core_bracing_bones: PackedStringArray = PackedStringArray(["Hips", "Spine", "Chest"])
+## Dot product threshold for classifying bones as hit-side or brace-side.
+## Bones with dot > threshold are hit-side; dot < -threshold are brace-side.
+@export_range(0.0, 0.5) var bracing_direction_threshold: float = 0.1
+## Extra reduction multiplier applied to hit-side bones during stagger.
+## Higher = hit-side bones weaken more relative to the stagger floor.
+@export_range(0.0, 1.0) var bracing_hit_side_multiplier: float = 0.3
+
 @export_group("Reaction Pulse")
 ## How much of a sub-stagger hit's strength_reduction becomes a visible pulse.
 ## Higher = light hits produce more visible jolt. 0.0 = disabled.
@@ -125,6 +160,12 @@ extends Resource
 @export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
 ## How long balance must stay below recovery threshold before stagger ends.
 @export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.3
+## Minimum support radius for balance calculation (prevents division artifacts
+## when feet are very close together).
+@export var balance_support_radius_min: float = 0.1
+## Maximum balance ratio value (clamp). Values above 1.0 mean the CoM is
+## outside the support polygon.
+@export var balance_max_ratio: float = 1.5
 
 @export_group("Fatigue")
 ## How much fatigue each hit adds, scaled by the hit's strength_reduction.
@@ -222,5 +263,9 @@ func validate_against_profile(profile: RagdollProfile) -> PackedStringArray:
 	for bone_name: String in protected_bones:
 		if bone_name not in valid_names:
 			warnings.append("protected_bones entry '%s' not found in profile rig names" % bone_name)
+
+	for bone_name: String in core_bracing_bones:
+		if bone_name not in valid_names:
+			warnings.append("core_bracing_bones entry '%s' not found in profile rig names" % bone_name)
 
 	return warnings
