@@ -10,6 +10,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
 - **Balance tracking** — center of mass vs foot support polygon drives stagger behavior. Characters that lean too far ragdoll; balanced characters recover early. Physics-informed, not timer-based.
 - **Momentum transfer** — running characters carry their velocity into ragdoll, tumbling forward instead of dropping in place.
+- **Fatigue** — repeated hits degrade effective spring strength over time. Fatigued characters wobble more at baseline and recover to lower maxes. Decays slowly between engagements.
+- **Hit stacking** — rapid consecutive hits escalate via streak multiplier. Hits during recovery can interrupt get-up and re-ragdoll the character.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
@@ -17,7 +19,7 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. Controllers emit signals; animation is the user's responsibility.
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
-- **Debug gizmos** — F3 for color-coded bone dots on all characters (red=weak, yellow=recovering, green=full).
+- **Debug gizmos** — F3 cycles through 3 detail levels: bone dots → skeleton wireframe + state labels → full dashboard with status panels, center of mass, velocity vectors, and balance/fatigue bars.
 - **9 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets, protected bones.
 
 ## Requirements
@@ -81,6 +83,9 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Protected bones:** set `ragdoll_tuning.protected_bones` to keep legs (or any bones) animated during hits
 - **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
 - **Query balance:** `active_controller.get_balance_ratio()` — 0.0 = balanced, 1.0+ = off-balance
+- **Query fatigue:** `active_controller.get_fatigue()` — 0.0 = fresh, 1.0 = exhausted
+- **Reset fatigue:** `active_controller.reset_fatigue()` — on healing or respawn
+- **Query hit streak:** `active_controller.get_hit_streak()` — rapid consecutive hit count
 - **Different skeleton?** Auto-detects, or create a `RagdollProfile` manually
 - **Different physics feel?** Create a `RagdollTuning` resource
 - **Find all characters:** `KickbackCharacter.find_all(scene_root)`
@@ -104,6 +109,8 @@ Character (Node3D)
 - `recovery_finished()` — fully recovered
 - `hit_absorbed(rig_name, strength)` — light hit, no state change
 - `balance_changed(ratio)` — CoM balance ratio during stagger (0.0 = balanced, 1.0 = falling)
+- `fatigue_changed(level)` — fatigue from repeated hits (0.0 = fresh, 1.0 = exhausted)
+- `recovery_interrupted()` — hit during get-up knocked character back down
 
 **Important:** All root movement and rotation must happen in `_physics_process`, not `_process`, to stay in sync with the spring resolver.
 
@@ -135,7 +142,7 @@ Use `KickbackRaycast` which targets layers 4+5 automatically.
 
 ## Debug Tools
 
-- **F3** — Toggle bone gizmos (color-coded dots on all characters)
+- **F3** — Cycle debug gizmos: Off → Dots → Wireframe + state → Full dashboard (panels, CoM, velocity)
 - **Inspector** — Select KickbackCharacter to see setup status and validation
 - **Visible Collision Shapes** (Debug menu) — See ragdoll collision shapes
 

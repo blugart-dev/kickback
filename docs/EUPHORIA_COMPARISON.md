@@ -39,9 +39,9 @@ and systems with difficulty ratings and implementation notes for Godot 4.6+.
 | 12 | Environmental Grabbing | Hard-Very Hard | High | 400-500+ |
 | 13 | Procedural Pose Generation | Very Hard | Very High | 600-800+ |
 | 14 | Micro Hit Reactions | Medium | Medium-High | 150-200 |
-| 15 | Fatigue / Exhaustion | Easy | Medium | 60-80 |
+| 15 | ~~Fatigue / Exhaustion~~ | ~~Easy~~ | ~~Medium~~ | ~~60-80~~ |
 | 16 | Wall/Surface Bracing | Medium | Medium | 150-200 |
-| 17 | Multi-Hit Stacking | Easy | Medium-High | 60-100 |
+| 17 | ~~Multi-Hit Stacking~~ | ~~Easy~~ | ~~Medium-High~~ | ~~60-100~~ |
 | 18 | Threat Anticipation | Easy | Medium | 60-80 |
 
 ## Difficulty Scale
@@ -53,8 +53,8 @@ and systems with difficulty ratings and implementation notes for Godot 4.6+.
 ## Suggested Build Order
 1. ~~Momentum Transfer (#2)~~ — done
 2. ~~Center of Mass Balance (#1)~~ — done
-3. Fatigue (#15)
-4. Multi-Hit Stacking (#17)
+3. ~~Fatigue (#15)~~ — done
+4. ~~Multi-Hit Stacking (#17)~~ — done
 5. Proportional Reactions (#8)
 6. Active Resistance (#5)
 7. Cumulative Damage (#3)

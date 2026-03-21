@@ -116,6 +116,26 @@ extends Resource
 ## How long balance must stay below recovery threshold before stagger ends.
 @export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.3
 
+@export_group("Fatigue")
+## How much fatigue each hit adds, scaled by the hit's strength_reduction.
+## Higher = faster fatigue buildup from repeated hits.
+@export_range(0.0, 1.0) var fatigue_gain: float = 0.15
+## How fast fatigue decays per second when not being hit.
+## Lower = fatigue lingers longer between engagements.
+@export_range(0.0, 1.0) var fatigue_decay: float = 0.05
+## How much fatigue reduces effective base spring strength.
+## At fatigue_impact=0.5 and fatigue=1.0, springs recover to 50% of base.
+@export_range(0.0, 1.0) var fatigue_impact: float = 0.5
+
+@export_group("Hit Stacking")
+## Time window (seconds) within which consecutive hits count as rapid fire.
+@export_range(0.05, 1.0) var rapid_fire_window: float = 0.3
+## Extra strength reduction per streak hit (e.g., 0.3 = 30% more per consecutive hit).
+@export_range(0.0, 1.0) var hit_streak_multiplier: float = 0.3
+## Minimum effective strength_reduction to interrupt GETTING_UP and force re-ragdoll.
+## Set to 2.0 to effectively disable recovery interruption.
+@export_range(0.0, 2.0) var recovery_interrupt_threshold: float = 0.5
+
 @export_group("Protected Bones")
 ## Bones that stay animated during hits and stagger. Their spring strength
 ## is never reduced by impacts. Useful for keeping legs planted while the

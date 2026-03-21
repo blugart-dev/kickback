@@ -444,3 +444,38 @@ CoM vs foot support midpoint.
 - Timer-based stagger end preserved as safety fallback
 
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`
+
+---
+
+## Fatigue + Hit Stacking + Debug Gizmo Overhaul ✅ COMPLETE
+
+Three features implemented together:
+
+**Fatigue (#15)**: Repeated hits accumulate fatigue that degrades effective
+base spring strength. Fatigued characters recover to lower maxes and wobble
+more at baseline. Fatigue decays slowly between engagements.
+- `_fatigue` accumulates per hit, scaled by `strength_reduction * fatigue_gain`
+- Effective base = `base * (1.0 - fatigue * fatigue_impact)`
+- Recovery, stagger floor, stagger exit all use `_effective_base_strength()`
+- New signal: `fatigue_changed(level)`, API: `get_fatigue()`, `reset_fatigue()`
+- New tuning: `fatigue_gain` (0.15), `fatigue_decay` (0.05), `fatigue_impact` (0.5)
+
+**Hit stacking (#17)**: Rapid consecutive hits escalate via streak multiplier.
+Hits during recovery can interrupt get-up and force re-ragdoll.
+- `_hit_streak` tracks hits within `rapid_fire_window` (0.3s)
+- `strength_reduction *= 1.0 + (streak * hit_streak_multiplier)`
+- GETTING_UP hits above `recovery_interrupt_threshold` abort recovery
+- New signal: `recovery_interrupted()`
+- New tuning: `rapid_fire_window`, `hit_streak_multiplier`,
+  `recovery_interrupt_threshold`
+
+**Debug gizmo overhaul**: Complete rewrite of `StrengthDebugHUD` with 3 detail
+levels cycled by F3:
+- Level 1 (Dots): Outlined bone dots with shadowed labels, distance-based alpha
+- Level 2 (Wireframe): Skeleton wireframe colored by strength + state label
+- Level 3 (Full): Per-character status panel (state, balance bar, fatigue bar,
+  strength bar, hit streak dots), center of mass diamond, support polygon line,
+  velocity vectors, legend overlay
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
+`strength_debug_hud.gd`

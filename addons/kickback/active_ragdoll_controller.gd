@@ -35,6 +35,9 @@ var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery star
 var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _balance_stable_timer: float = 0.0
+var _fatigue: float = 0.0
+var _last_hit_time: float = 0.0
+var _hit_streak: int = 0
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -61,6 +64,11 @@ signal stagger_finished()
 ## Emitted each physics frame during stagger with the current balance ratio.
 ## 0.0 = perfectly balanced over feet, 1.0 = completely off-balance.
 signal balance_changed(ratio: float)
+## Emitted when fatigue level changes significantly. 0.0 = fresh, 1.0 = exhausted.
+## Fatigue accumulates from repeated hits and decays slowly over time.
+signal fatigue_changed(level: float)
+## Emitted when a hit during GETTING_UP interrupts recovery and forces re-ragdoll.
+signal recovery_interrupted()
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -97,6 +105,13 @@ func _build_adjacency() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Fatigue decays slowly over time in any non-ragdoll state
+	if _fatigue > 0.0 and _state != State.RAGDOLL and _state != State.PERSISTENT:
+		var old_fatigue := _fatigue
+		_fatigue = move_toward(_fatigue, 0.0, _tuning.fatigue_decay * delta)
+		if absf(old_fatigue - _fatigue) > 0.01:
+			fatigue_changed.emit(_fatigue)
+
 	match _state:
 		State.STAGGER:
 			_stagger_elapsed += delta
@@ -104,8 +119,8 @@ func _physics_process(delta: float) -> void:
 			for rig_name: String in _spring.get_all_bone_names():
 				if rig_name in _tuning.protected_bones:
 					continue
-				var base: float = _spring.get_base_strength(rig_name)
-				var floor_val: float = base * floor_ratio
+				var effective_base: float = _effective_base_strength(rig_name)
+				var floor_val: float = effective_base * floor_ratio
 				if _spring.get_bone_strength(rig_name) < floor_val:
 					_spring.set_bone_strength(rig_name, floor_val)
 
@@ -162,15 +177,15 @@ func _physics_process(delta: float) -> void:
 			else:
 				_spring.clear_target_overrides()
 
-			# Phase 2: Per-bone staggered strength ramp
+			# Phase 2: Per-bone staggered strength ramp (fatigue-aware)
 			for rig_name: String in _spring.get_all_bone_names():
 				var delay: float = _tuning.ramp_delay.get(rig_name, 0.0)
 				var effective_elapsed := maxf(0.0, _recovery_elapsed - delay)
 				var effective_duration := maxf(0.1, _tuning.recovery_duration - delay)
 				var t := clampf(effective_elapsed / effective_duration, 0.0, 1.0)
 				var eased_t := t * t * t  # Cubic ease-in per bone
-				var base: float = _spring.get_base_strength(rig_name)
-				_spring.set_bone_strength(rig_name, base * eased_t)
+				var target: float = _effective_base_strength(rig_name)
+				_spring.set_bone_strength(rig_name, target * eased_t)
 
 			# Recovery completion: physics-driven, independent of animation duration.
 			# recovery_finished fires when springs converge, not when animation ends.
@@ -186,8 +201,26 @@ func _physics_process(delta: float) -> void:
 func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
 	if not is_instance_valid(body):
 		return
+
+	# Hit streak: rapid consecutive hits escalate
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _last_hit_time < _tuning.rapid_fire_window:
+		_hit_streak += 1
+	else:
+		_hit_streak = 0
+	_last_hit_time = now
+	var streak_multiplier := 1.0 + (_hit_streak * _tuning.hit_streak_multiplier)
+
+	# Recovery interruption: hit during GETTING_UP can knock back down
 	if _state == State.GETTING_UP:
-		_full_ragdoll()
+		if profile.strength_reduction * streak_multiplier >= _tuning.recovery_interrupt_threshold:
+			recovery_interrupted.emit()
+			_full_ragdoll()
+		else:
+			# Light hit during recovery — just apply impulse, don't interrupt
+			var final_impulse := profile.base_impulse * profile.impulse_transfer_ratio
+			var direction := (hit_dir + Vector3.UP * profile.upward_bias).normalized()
+			body.apply_impulse(direction * final_impulse, body.to_local(hit_pos))
 		return
 
 	var final_impulse := profile.base_impulse * profile.impulse_transfer_ratio
@@ -199,8 +232,17 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		_spring.reset_settle_timer()
 		return
 
+	# Fatigue accumulation: each hit adds fatigue proportional to its strength
+	var old_fatigue := _fatigue
+	_fatigue = clampf(_fatigue + profile.strength_reduction * _tuning.fatigue_gain, 0.0, 1.0)
+	if absf(old_fatigue - _fatigue) > 0.01:
+		fatigue_changed.emit(_fatigue)
+
+	# Apply streak-scaled strength reduction
+	var effective_reduction := profile.strength_reduction * streak_multiplier
+
 	if _state == State.STAGGER:
-		_reduce_strength(body.name, profile.strength_reduction, profile.strength_spread)
+		_reduce_strength(body.name, effective_reduction, profile.strength_spread)
 		_spring.recovery_rate = profile.recovery_rate
 		var boosted_prob := profile.ragdoll_probability * _tuning.stagger_ragdoll_bonus
 		if randf() < boosted_prob:
@@ -212,7 +254,7 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		return
 
 	# NORMAL state
-	_reduce_strength(body.name, profile.strength_reduction, profile.strength_spread)
+	_reduce_strength(body.name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 
 	if randf() < profile.ragdoll_probability:
@@ -366,14 +408,14 @@ func _start_recovery() -> void:
 
 func _finish_recovery() -> void:
 	_state = State.NORMAL
+	_hit_streak = 0
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	_spring.clear_target_overrides()
 	_ragdoll_poses.clear()
 	state_changed.emit(_state)
 
 	for rig_name: String in _spring.get_all_bone_names():
-		var base: float = _spring.get_base_strength(rig_name)
-		_spring.set_bone_strength(rig_name, base)
+		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 
 	# Signal that recovery is complete — RagdollAnimator (or user code) handles animation
 	recovery_finished.emit()
@@ -387,6 +429,24 @@ func get_state() -> int:
 ## Returns the current center-of-mass balance ratio (0.0 = balanced, 1.0+ = off-balance).
 func get_balance_ratio() -> float:
 	return _compute_balance_ratio()
+
+
+## Returns the current fatigue level (0.0 = fresh, 1.0 = exhausted).
+## Fatigue reduces effective spring strength, making the character wobblier over time.
+func get_fatigue() -> float:
+	return _fatigue
+
+
+## Resets fatigue to zero (e.g., on healing or respawn).
+func reset_fatigue() -> void:
+	_fatigue = 0.0
+	_hit_streak = 0
+	fatigue_changed.emit(0.0)
+
+
+## Returns the current hit streak count (rapid consecutive hits).
+func get_hit_streak() -> int:
+	return _hit_streak
 
 
 ## Returns a human-readable name for the current state (for debug display).
@@ -434,13 +494,19 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 			current_level = next_level
 
 
+## Returns the effective base strength for a bone, reduced by fatigue.
+func _effective_base_strength(rig_name: String) -> float:
+	var base: float = _spring.get_base_strength(rig_name)
+	return base * (1.0 - _fatigue * _tuning.fatigue_impact)
+
+
 func _compute_average_strength_ratio() -> float:
 	var total := 0.0
 	var count := 0
 	for rig_name: String in _spring.get_all_bone_names():
-		var base: float = _spring.get_base_strength(rig_name)
-		if base > 0.001:
-			total += _spring.get_bone_strength(rig_name) / base
+		var effective_base: float = _effective_base_strength(rig_name)
+		if effective_base > 0.001:
+			total += _spring.get_bone_strength(rig_name) / effective_base
 			count += 1
 	return total / float(count) if count > 0 else 1.0
 
@@ -456,8 +522,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 
 func _finish_stagger() -> void:
 	for rig_name: String in _spring.get_all_bone_names():
-		var base: float = _spring.get_base_strength(rig_name)
-		_spring.set_bone_strength(rig_name, base)
+		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 	_state = State.NORMAL
 	_balance_stable_timer = 0.0
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
