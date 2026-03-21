@@ -37,6 +37,26 @@ extends Resource
 @export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
 ## How long balance must stay below recovery threshold before stagger ends.
 @export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.3
+## Pain accumulated per hit, scaled by effective strength_reduction.
+## Pain deterministically escalates reactions (supplements random ragdoll_probability).
+## 0.0 = disabled (dice-roll only).
+@export_range(0.0, 1.0) var pain_gain: float = 0.2
+## Pain decay per second when not being hit.
+@export_range(0.0, 1.0) var pain_decay: float = 0.15
+## Pain level above which a hit forces stagger (even if strength is high). 0.0 = disabled.
+@export_range(0.0, 1.0) var pain_stagger_threshold: float = 0.5
+## Pain level above which a hit forces ragdoll. 0.0 = disabled.
+@export_range(0.0, 1.0) var pain_ragdoll_threshold: float = 0.9
+## Pulse intensity for threat anticipation (pre-hit flinch). 0.0 = disabled.
+@export_range(0.0, 1.0) var threat_anticipation_strength: float = 0.4
+## Minimum speed (m/s) before movement instability bonus applies.
+@export var movement_instability_min_speed: float = 1.0
+## Speed (m/s) at which movement instability bonus is fully applied.
+@export var movement_instability_max_speed: float = 5.0
+## Extra strength reduction when moving at max speed (e.g., 0.3 = 30% more).
+@export_range(0.0, 1.0) var movement_instability_bonus: float = 0.3
+## How much movement direction blends into stagger direction (0.0 = pure hit dir, 1.0 = pure movement dir).
+@export_range(0.0, 1.0) var movement_stagger_blend: float = 0.3
 
 # ── Spring Strengths ────────────────────────────────────────────────────────
 

@@ -174,6 +174,13 @@ func trigger_stagger(hit_dir: Vector3 = Vector3.FORWARD) -> void:
 		push_warning("KickbackCharacter: no ActiveRagdollController available for trigger_stagger()")
 
 
+## Causes a brief defensive flinch toward the threat direction.
+## Call when the character detects incoming danger (nearby gunfire, melee wind-up).
+func anticipate_threat(threat_dir: Vector3, urgency: float = 0.5) -> void:
+	if _active_controller:
+		_active_controller.anticipate_threat(threat_dir, urgency)
+
+
 ## Returns the active ragdoll state name, or "N/A" if no active controller.
 func get_active_state_name() -> String:
 	if _active_controller:

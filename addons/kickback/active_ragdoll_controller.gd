@@ -48,6 +48,7 @@ var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _balance_stable_timer: float = 0.0
 var _fatigue: float = 0.0
+var _pain: float = 0.0
 var _last_hit_time: float = 0.0
 var _hit_streak: int = 0
 var _reaction_pulses: Dictionary = {}  # rig_name → {intensity: float, elapsed: float}
@@ -74,6 +75,10 @@ signal balance_changed(ratio: float)
 signal fatigue_changed(level: float)
 ## Emitted when a hit during GETTING_UP interrupts recovery and forces re-ragdoll.
 signal recovery_interrupted()
+## Emitted when pain level changes. 0.0 = no pain, 1.0 = maximum accumulated pain.
+signal pain_changed(level: float)
+## Emitted when anticipate_threat() is called. Connect for defensive animations.
+signal threat_anticipated(direction: Vector3, urgency: float)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -137,11 +142,15 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_fatigue_decay(delta: float) -> void:
-	if _fatigue > 0.0 and _state != State.RAGDOLL and _state != State.PERSISTENT:
+	if _state == State.RAGDOLL or _state == State.PERSISTENT:
+		return
+	if _fatigue > 0.0:
 		var old_fatigue := _fatigue
 		_fatigue = move_toward(_fatigue, 0.0, _tuning.fatigue_decay * delta)
 		if absf(old_fatigue - _fatigue) > 0.01:
 			fatigue_changed.emit(_fatigue)
+	if _pain > 0.0:
+		_pain = move_toward(_pain, 0.0, _tuning.pain_decay * delta)
 
 
 func _tick_reaction_pulses(delta: float) -> void:
@@ -289,13 +298,26 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		_spring.reset_settle_timer()
 		return
 
+	# Movement-aware scaling: moving characters are less stable
+	var movement_multiplier := 1.0
+	if _character_root and _tuning.movement_instability_bonus > 0.0:
+		var char_speed := _get_character_speed()
+		if char_speed > _tuning.movement_instability_min_speed:
+			var speed_range := _tuning.movement_instability_max_speed - _tuning.movement_instability_min_speed
+			var speed_ratio := clampf((char_speed - _tuning.movement_instability_min_speed) / maxf(speed_range, 0.01), 0.0, 1.0)
+			movement_multiplier = 1.0 + speed_ratio * _tuning.movement_instability_bonus
+
 	# Fatigue accumulation
 	var old_fatigue := _fatigue
 	_fatigue = clampf(_fatigue + profile.strength_reduction * _tuning.fatigue_gain, 0.0, 1.0)
 	if absf(old_fatigue - _fatigue) > 0.01:
 		fatigue_changed.emit(_fatigue)
 
-	var effective_reduction := profile.strength_reduction * streak_multiplier
+	var effective_reduction := profile.strength_reduction * streak_multiplier * movement_multiplier
+
+	# Pain accumulation: deterministic escalation from sustained fire
+	_pain = clampf(_pain + effective_reduction * _tuning.pain_gain, 0.0, 1.0)
+	pain_changed.emit(_pain)
 
 	if _state == State.STAGGER:
 		_handle_stagger_hit(body, hit_dir, effective_reduction, profile)
@@ -319,15 +341,22 @@ func _handle_normal_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction
 	_reduce_strength(body.name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 
-	if randf() < profile.ragdoll_probability:
+	# Ragdoll check: dice roll + pain-driven deterministic escalation
+	var should_ragdoll := randf() < profile.ragdoll_probability
+	if not should_ragdoll and _tuning.pain_ragdoll_threshold > 0.0:
+		should_ragdoll = _pain >= _tuning.pain_ragdoll_threshold
+	if should_ragdoll:
 		_full_ragdoll()
 		return
 
+	# Stagger check: strength ratio + balance + pain-driven escalation
 	var avg_ratio := _compute_average_strength_ratio()
 	var balance := _compute_balance_ratio()
 	var should_stagger := avg_ratio < _tuning.stagger_threshold
 	if not should_stagger and _tuning.balance_stagger_threshold > 0.0:
 		should_stagger = balance > _tuning.balance_stagger_threshold
+	if not should_stagger and _tuning.pain_stagger_threshold > 0.0:
+		should_stagger = _pain >= _tuning.pain_stagger_threshold
 
 	if should_stagger:
 		_start_stagger(hit_dir)
@@ -382,16 +411,63 @@ func get_fatigue() -> float:
 	return _fatigue
 
 
-## Resets fatigue to zero (e.g., on healing or respawn).
+## Resets fatigue and pain to zero (e.g., on healing or respawn).
 func reset_fatigue() -> void:
 	_fatigue = 0.0
+	_pain = 0.0
 	_hit_streak = 0
 	fatigue_changed.emit(0.0)
+	pain_changed.emit(0.0)
 
 
 ## Returns the current hit streak count (rapid consecutive hits).
 func get_hit_streak() -> int:
 	return _hit_streak
+
+
+## Returns the current pain level (0.0 = no pain, 1.0 = max accumulated pain).
+## Pain deterministically escalates reactions from sustained fire.
+func get_pain() -> float:
+	return _pain
+
+
+## Resets pain to zero (e.g., on healing or respawn).
+func reset_pain() -> void:
+	_pain = 0.0
+	pain_changed.emit(0.0)
+
+
+## Causes a brief defensive flinch toward the threat direction.
+## Call from game code when the character detects incoming danger
+## (e.g., bullets flying nearby, enemy winding up a melee attack).
+## [param urgency] scales the effect (0.0 = none, 1.0 = full flinch).
+func anticipate_threat(threat_dir: Vector3, urgency: float = 0.5) -> void:
+	if _state != State.NORMAL:
+		return
+	var pulse_intensity := urgency * _tuning.threat_anticipation_strength
+	if pulse_intensity > 0.01:
+		var bodies := _rig_builder.get_bodies()
+		var hips_body: RigidBody3D = bodies.get("Hips")
+		if not hips_body:
+			return
+		# Find the bone closest to the threat direction for targeted pulse
+		var best_bone := ""
+		var best_dot := -1.0
+		var center := hips_body.global_position
+		var threat_xz := Vector2(threat_dir.x, threat_dir.z).normalized()
+		for rig_name: String in bodies:
+			var body: RigidBody3D = bodies[rig_name]
+			var offset := Vector2(body.global_position.x - center.x,
+				body.global_position.z - center.z)
+			if offset.length_squared() < 0.001:
+				continue
+			var dot := offset.normalized().dot(threat_xz)
+			if dot > best_dot:
+				best_dot = dot
+				best_bone = rig_name
+		if best_bone != "":
+			_apply_reaction_pulse(best_bone, pulse_intensity, 2)
+	threat_anticipated.emit(threat_dir, urgency)
 
 
 ## Returns a human-readable name for the current state (for debug display).
@@ -412,16 +488,11 @@ func _full_ragdoll() -> void:
 		_spring.set_bone_strength(rig_name, 0.0)
 
 	# Transfer character movement velocity to physics bodies
-	if _character_root:
-		var char_velocity := Vector3.ZERO
-		if _character_root is CharacterBody3D:
-			char_velocity = (_character_root as CharacterBody3D).velocity
-		elif _character_root.has_method("get_velocity"):
-			char_velocity = _character_root.get_velocity()
-		if char_velocity.length_squared() > 0.01:
-			var bodies := _rig_builder.get_bodies()
-			for body: RigidBody3D in bodies.values():
-				body.linear_velocity += char_velocity
+	var char_velocity := _get_character_velocity()
+	if char_velocity.length_squared() > 0.01:
+		var bodies := _rig_builder.get_bodies()
+		for body: RigidBody3D in bodies.values():
+			body.linear_velocity += char_velocity
 
 	_state = State.RAGDOLL
 	_ragdoll_elapsed = 0.0
@@ -523,9 +594,16 @@ func _finish_recovery() -> void:
 func _start_stagger(hit_dir: Vector3) -> void:
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
-	_stagger_hit_dir = hit_dir
 	_balance_stable_timer = 0.0
 	_reaction_pulses.clear()
+
+	# Moving characters stagger in their movement direction, not just hit direction
+	if _character_root and _tuning.movement_stagger_blend > 0.0:
+		var char_vel := _get_character_velocity()
+		if char_vel.length_squared() > 0.25:
+			hit_dir = hit_dir.lerp(char_vel.normalized(), _tuning.movement_stagger_blend).normalized()
+
+	_stagger_hit_dir = hit_dir
 
 	if _tuning.brace_strength_bonus > 0.0:
 		_apply_directional_bracing(hit_dir)
@@ -650,6 +728,20 @@ func _apply_reaction_pulse(rig_name: String, intensity: float, spread: int) -> v
 						continue
 					_reaction_pulses[neighbor] = {"intensity": intensity * falloff, "elapsed": 0.0}
 			current_level = next_level
+
+
+func _get_character_velocity() -> Vector3:
+	if not _character_root:
+		return Vector3.ZERO
+	if _character_root is CharacterBody3D:
+		return (_character_root as CharacterBody3D).velocity
+	elif _character_root.has_method("get_velocity"):
+		return _character_root.get_velocity()
+	return Vector3.ZERO
+
+
+func _get_character_speed() -> float:
+	return _get_character_velocity().length()
 
 
 func _apply_directional_bracing(hit_dir: Vector3) -> void:

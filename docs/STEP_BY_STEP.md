@@ -505,3 +505,29 @@ on `configure()`. State machine diagram in class doc comment.
 
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
 `spring_resolver.gd`
+
+---
+
+## Cumulative Damage + Movement-Aware Hits + Threat Anticipation ✅ COMPLETE
+
+**Cumulative damage (#3)**: Pain accumulates per hit (`effective_reduction *
+pain_gain`), decays at `pain_decay/s`. Pain thresholds deterministically
+trigger stagger (`pain_stagger_threshold = 0.5`) and ragdoll
+(`pain_ragdoll_threshold = 0.9`), supplementing the dice roll. Sustained
+fire reliably escalates from flinch → stagger → ragdoll.
+New signal: `pain_changed`, API: `get_pain()`, `reset_pain()`.
+
+**Movement-state-aware hits (#9)**: Characters moving above
+`movement_instability_min_speed` receive amplified strength reduction
+(up to `movement_instability_bonus` at max speed). Stagger direction
+blends with character velocity via `movement_stagger_blend`. Refactored
+velocity queries into `_get_character_velocity()` / `_get_character_speed()`.
+
+**Threat anticipation (#18)**: `anticipate_threat(direction, urgency)` on
+both ActiveRagdollController and KickbackCharacter. Finds bone closest to
+threat direction and applies a reaction pulse for pre-hit flinch. Only
+works in NORMAL state. New signal: `threat_anticipated(direction, urgency)`.
+New tuning: `threat_anticipation_strength`.
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
+`kickback_character.gd`, `strength_debug_hud.gd`

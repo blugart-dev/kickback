@@ -246,7 +246,7 @@ func _draw_status_panel(bodies: Dictionary, spring: SpringResolver, ctrl: Active
 	var pad := 6.0
 	var bar_w := 70.0
 	var bar_h := 10.0
-	var rows := 4
+	var rows := 5
 	var panel_h := row_h * rows + pad * 2
 
 	var panel_rect := Rect2(anchor.x - panel_w * 0.5, anchor.y - panel_h, panel_w, panel_h)
@@ -281,14 +281,21 @@ func _draw_status_panel(bodies: Dictionary, spring: SpringResolver, ctrl: Active
 		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Color(0.8, 0.8, 0.8, alpha))
 	y0 += row_h
 
-	# Row 3: Fatigue bar
+	# Row 3: Pain bar
+	var pain := ctrl.get_pain()
+	_draw_bar(Vector2(x0, y0), bar_w, bar_h, pain, _threshold_color(pain, 0.3, 0.6), alpha)
+	draw_string(font, Vector2(x0 + bar_w + 6, y0 + 10), "PAIN %.2f" % pain,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Color(0.8, 0.8, 0.8, alpha))
+	y0 += row_h
+
+	# Row 4: Fatigue bar
 	var fatigue := ctrl.get_fatigue()
 	_draw_bar(Vector2(x0, y0), bar_w, bar_h, fatigue, _threshold_color(fatigue, 0.3, 0.6), alpha)
 	draw_string(font, Vector2(x0 + bar_w + 6, y0 + 10), "FTG %.2f" % fatigue,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Color(0.8, 0.8, 0.8, alpha))
 	y0 += row_h
 
-	# Row 4: Average strength bar
+	# Row 5: Average strength bar
 	var total := 0.0
 	var count := 0
 	for rig_name: String in spring.get_all_bone_names():
