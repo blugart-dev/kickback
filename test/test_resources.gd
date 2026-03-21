@@ -17,10 +17,10 @@ func _ready() -> void:
 		ImpactProfile.create_melee(),
 		ImpactProfile.create_arrow(),
 	]
-	var profile_names := ["bullet", "shotgun", "explosion", "melee", "arrow"]
+	var profile_names: Array[String] = ["bullet", "shotgun", "explosion", "melee", "arrow"]
 	for i in profiles.size():
-		var p := profiles[i]
-		var n := profile_names[i]
+		var p: ImpactProfile = profiles[i]
+		var n: String = profile_names[i]
 		if _assert(p != null, "ImpactProfile.create_%s() non-null" % n):
 			passed += 1
 		else:
@@ -103,7 +103,7 @@ func _ready() -> void:
 		passed += 1
 	else:
 		failed += 1
-	if _assert(profile.root_bone == "Hips", "Mixamo: root_bone = 'Hips'"):
+	if _assert(profile.root_bone == "mixamorig_Hips", "Mixamo: root_bone = 'mixamorig_Hips'"):
 		passed += 1
 	else:
 		failed += 1
@@ -121,7 +121,7 @@ func _ready() -> void:
 				passed += 1
 			else:
 				failed += 1
-			if _assert(bone_def.skeleton_bone_name != "", "Hips has skeleton_bone_name"):
+			if _assert(bone_def.skeleton_bone != "", "Hips has skeleton_bone"):
 				passed += 1
 			else:
 				failed += 1
@@ -146,7 +146,7 @@ func _ready() -> void:
 	# ── JointDefinition ───────────────────────────────────────────────────────
 	var joint_pairs := []
 	for joint_def: JointDefinition in profile.joints:
-		joint_pairs.append("%s→%s" % [joint_def.parent_rig_name, joint_def.child_rig_name])
+		joint_pairs.append("%s→%s" % [joint_def.parent_rig, joint_def.child_rig])
 	if _assert("Hips→Spine" in joint_pairs, "JointDefinition: Hips→Spine exists"):
 		passed += 1
 	else:
@@ -162,8 +162,8 @@ func _ready() -> void:
 
 	# Verify angular limits are non-zero
 	for joint_def: JointDefinition in profile.joints:
-		if joint_def.parent_rig_name == "Hips" and joint_def.child_rig_name == "Spine":
-			if _assert(joint_def.angular_limit_x > 0.0, "Hips→Spine: X limit > 0"):
+		if joint_def.parent_rig == "Hips" and joint_def.child_rig == "Spine":
+			if _assert(joint_def.limit_x.y > 0.0, "Hips→Spine: X upper limit > 0"):
 				passed += 1
 			else:
 				failed += 1
@@ -175,15 +175,15 @@ func _ready() -> void:
 		passed += 1
 	else:
 		failed += 1
-	if _assert(inter.skeleton_bone_name != "", "Intermediate has skeleton_bone_name"):
+	if _assert(inter.skeleton_bone != "", "Intermediate has skeleton_bone"):
 		passed += 1
 	else:
 		failed += 1
-	if _assert(inter.body_a != "", "Intermediate has body_a"):
+	if _assert(inter.rig_body_a != "", "Intermediate has rig_body_a"):
 		passed += 1
 	else:
 		failed += 1
-	if _assert(inter.body_b != "", "Intermediate has body_b"):
+	if _assert(inter.rig_body_b != "", "Intermediate has rig_body_b"):
 		passed += 1
 	else:
 		failed += 1
