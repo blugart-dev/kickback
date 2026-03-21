@@ -69,7 +69,7 @@ kickback/
 ## Architecture
 
 ### Design principles
-- **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `stagger_started`, `recovery_started`, `recovery_finished`, `hit_absorbed`, `balance_changed`, `fatigue_changed`, `recovery_interrupted`, `pain_changed`, `threat_anticipated` signals.
+- **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `stagger_started`, `recovery_started`, `recovery_finished`, `hit_absorbed`, `balance_changed`, `fatigue_changed`, `recovery_interrupted`, `pain_changed`, `threat_anticipated`, `region_injured` signals.
 - **Animation-agnostic.** The physics core reads `Skeleton3D.get_bone_pose()` — works with AnimationPlayer, AnimationTree, or custom animation systems.
 - **All configuration via Resources.** `RagdollProfile` (skeleton mapping) and `RagdollTuning` (physics feel) are assignable on `KickbackCharacter`. Null = auto-detected Mixamo defaults.
 - **Pick one mode per character.** Active Ragdoll or Partial Ragdoll — KickbackCharacter detects which controller is present and uses it. No runtime switching between modes.

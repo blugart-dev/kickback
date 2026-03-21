@@ -531,3 +531,24 @@ New tuning: `threat_anticipation_strength`.
 
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
 `kickback_character.gd`, `strength_debug_hud.gd`
+
+---
+
+## Micro Hit Reactions + Regional Impairment ✅ COMPLETE
+
+**Micro hit reactions (#14)**: At the moment of impact, applies torque impulses
+for immediate visual feedback: head whip in hit direction, torso bend away from
+hit, and spin twist on high-caliber hits (base_impulse > 10). New tuning:
+`micro_reaction_strength`, `micro_head_whip_strength`,
+`micro_torso_bend_strength`, `micro_spin_strength`.
+
+**Regional impairment (#4)**: Persistent per-bone injury system. Injuries
+accumulate from significant hits (above `injury_threshold`), decay very slowly
+(`injury_decay = 0.02/s`), and cause functional effects: reduced effective base
+strength (`injury_impact`) and reduced pin strength (`injury_pin_impact`).
+Injured legs visibly sag; injured arms dangle. SpringResolver gains
+`set_pin_injury()` / `clear_pin_injuries()` API. New signal: `region_injured`,
+API: `get_injury()`, `get_all_injuries()`, `reset_injuries()`.
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
+`spring_resolver.gd`

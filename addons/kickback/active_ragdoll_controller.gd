@@ -52,6 +52,7 @@ var _pain: float = 0.0
 var _last_hit_time: float = 0.0
 var _hit_streak: int = 0
 var _reaction_pulses: Dictionary = {}  # rig_name → {intensity: float, elapsed: float}
+var _injuries: Dictionary = {}  # rig_name → float (0.0-1.0, persistent damage)
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -79,6 +80,9 @@ signal recovery_interrupted()
 signal pain_changed(level: float)
 ## Emitted when anticipate_threat() is called. Connect for defensive animations.
 signal threat_anticipated(direction: Vector3, urgency: float)
+## Emitted when a bone region sustains injury from a significant hit.
+## Injuries persist longer than spring recovery and cause functional impairment.
+signal region_injured(rig_name: String, severity: float)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -131,6 +135,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
+	_sync_injuries_to_resolver()
 
 	match _state:
 		State.STAGGER:
@@ -151,6 +156,19 @@ func _update_fatigue_decay(delta: float) -> void:
 			fatigue_changed.emit(_fatigue)
 	if _pain > 0.0:
 		_pain = move_toward(_pain, 0.0, _tuning.pain_decay * delta)
+
+	# Injury decay (much slower than fatigue — injuries linger)
+	if not _injuries.is_empty():
+		var healed := PackedStringArray()
+		for rig_name: String in _injuries:
+			var injury: float = _injuries[rig_name]
+			injury = move_toward(injury, 0.0, _tuning.injury_decay * delta)
+			if injury <= 0.001:
+				healed.append(rig_name)
+			else:
+				_injuries[rig_name] = injury
+		for healed_name: String in healed:
+			_injuries.erase(healed_name)
 
 
 func _tick_reaction_pulses(delta: float) -> void:
@@ -292,6 +310,10 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 
 	# Apply impulse
 	body.apply_impulse(direction * final_impulse, body.to_local(hit_pos))
+
+	# Micro hit reactions: brief angular kicks for immediate impact feel
+	if _tuning.micro_reaction_strength > 0.0 and _state != State.RAGDOLL:
+		_apply_micro_reaction(hit_dir, profile)
 
 	# During ragdoll, just reset settle timer
 	if _state == State.RAGDOLL:
@@ -470,6 +492,22 @@ func anticipate_threat(threat_dir: Vector3, urgency: float = 0.5) -> void:
 	threat_anticipated.emit(threat_dir, urgency)
 
 
+## Returns the injury level for a specific bone (0.0 = healthy, 1.0 = fully injured).
+func get_injury(rig_name: String) -> float:
+	return _injuries.get(rig_name, 0.0)
+
+
+## Returns all current injuries as a Dictionary (rig_name → severity).
+func get_all_injuries() -> Dictionary:
+	return _injuries.duplicate()
+
+
+## Resets all injuries to zero (e.g., on healing or respawn).
+func reset_injuries() -> void:
+	_injuries.clear()
+	_spring.clear_pin_injuries()
+
+
 ## Returns a human-readable name for the current state (for debug display).
 func get_state_name() -> String:
 	match _state:
@@ -628,10 +666,13 @@ func _is_bone_protected(rig_name: String) -> bool:
 	return rig_name in _protected_set
 
 
-## Returns the effective base strength for a bone, reduced by fatigue.
+## Returns the effective base strength for a bone, reduced by fatigue and injury.
 func _effective_base_strength(rig_name: String) -> float:
 	var base: float = _spring.get_base_strength(rig_name)
-	return base * (1.0 - _fatigue * _tuning.fatigue_impact)
+	var fatigue_factor := 1.0 - _fatigue * _tuning.fatigue_impact
+	var injury: float = _injuries.get(rig_name, 0.0)
+	var injury_factor := 1.0 - injury * _tuning.injury_impact
+	return base * fatigue_factor * injury_factor
 
 
 func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
@@ -641,6 +682,13 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 	var current := _spring.get_bone_strength(rig_name)
 	var floor: float = _tuning.min_strength.get(rig_name, 0.0)
 	_spring.set_bone_strength(rig_name, maxf(current * (1.0 - reduction), floor))
+
+	# Regional impairment: significant hits cause persistent injury
+	if _tuning.injury_gain > 0.0 and reduction > _tuning.injury_threshold:
+		var current_injury: float = _injuries.get(rig_name, 0.0)
+		var new_injury := clampf(current_injury + reduction * _tuning.injury_gain, 0.0, 1.0)
+		_injuries[rig_name] = new_injury
+		region_injured.emit(rig_name, new_injury)
 
 	if spread > 0:
 		var visited := {rig_name: true}
@@ -728,6 +776,38 @@ func _apply_reaction_pulse(rig_name: String, intensity: float, spread: int) -> v
 						continue
 					_reaction_pulses[neighbor] = {"intensity": intensity * falloff, "elapsed": 0.0}
 			current_level = next_level
+
+
+func _apply_micro_reaction(hit_dir: Vector3, profile: ImpactProfile) -> void:
+	var bodies := _rig_builder.get_bodies()
+	var intensity: float = profile.strength_reduction * _tuning.micro_reaction_strength
+
+	# Head whip: torque pushes head in hit direction
+	var head: RigidBody3D = bodies.get("Head")
+	if head:
+		var whip_torque := hit_dir.cross(Vector3.UP) * intensity * _tuning.micro_head_whip_strength
+		head.apply_torque_impulse(whip_torque)
+
+	# Torso bend: spine/chest bend away from hit direction
+	for bone_name: String in ["Spine", "Chest"]:
+		var bone_body: RigidBody3D = bodies.get(bone_name)
+		if bone_body:
+			var bend_torque := (-hit_dir).cross(Vector3.UP) * intensity * _tuning.micro_torso_bend_strength
+			bone_body.apply_torque_impulse(bend_torque)
+
+	# Spin: high-caliber hits twist the torso around Y axis
+	if profile.base_impulse > 10.0:
+		var hips: RigidBody3D = bodies.get("Hips")
+		if hips:
+			var spin_strength := profile.base_impulse * _tuning.micro_spin_strength * 0.01
+			hips.apply_torque_impulse(Vector3.UP * spin_strength * signf(hit_dir.x))
+
+
+func _sync_injuries_to_resolver() -> void:
+	if _injuries.is_empty():
+		return
+	for rig_name: String in _injuries:
+		_spring.set_pin_injury(rig_name, _injuries[rig_name])
 
 
 func _get_character_velocity() -> Vector3:

@@ -57,6 +57,27 @@ extends Resource
 @export_range(0.0, 1.0) var movement_instability_bonus: float = 0.3
 ## How much movement direction blends into stagger direction (0.0 = pure hit dir, 1.0 = pure movement dir).
 @export_range(0.0, 1.0) var movement_stagger_blend: float = 0.3
+## Overall intensity of micro-reactions (torso bend, head whip, spin) at impact moment.
+## 0.0 = disabled. Higher = more visible immediate reaction.
+@export_range(0.0, 2.0) var micro_reaction_strength: float = 0.5
+## Head whip torque multiplier. Head gets pushed in hit direction.
+@export_range(0.0, 5.0) var micro_head_whip_strength: float = 2.0
+## Torso bend torque multiplier. Spine/Chest bend away from hit.
+@export_range(0.0, 5.0) var micro_torso_bend_strength: float = 1.5
+## Spin torque multiplier for high-caliber hits (base_impulse > 10). Twists the torso.
+@export_range(0.0, 5.0) var micro_spin_strength: float = 1.0
+## Injury accumulated per significant hit, scaled by reduction. Injuries persist
+## much longer than spring strength and cause functional impairment (limp, dangle).
+## 0.0 = disabled.
+@export_range(0.0, 1.0) var injury_gain: float = 0.15
+## Injury decay per second. Much slower than fatigue — injuries linger.
+@export_range(0.0, 0.2) var injury_decay: float = 0.02
+## Minimum strength_reduction to cause injury. Light hits don't injure.
+@export_range(0.0, 1.0) var injury_threshold: float = 0.3
+## How much injury reduces effective base spring strength (per bone).
+@export_range(0.0, 1.0) var injury_impact: float = 0.4
+## How much injury reduces pin strength (position tracking). Injured legs sag.
+@export_range(0.0, 1.0) var injury_pin_impact: float = 0.7
 
 # ── Spring Strengths ────────────────────────────────────────────────────────
 

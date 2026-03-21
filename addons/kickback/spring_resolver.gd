@@ -22,6 +22,7 @@ var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, stre
 var _settle_timer: float = 0.0
 var _default_recovery_rate: float = 0.3
 var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
+var _pin_injury_modifiers: Dictionary = {}  # rig_name → float (0.0-1.0, reduces pin strength)
 var _tuning: RagdollTuning
 var _max_angular_vel_sq: float = 400.0
 var _max_linear_vel_sq: float = 100.0
@@ -156,6 +157,10 @@ func _physics_process(delta: float) -> void:
 		_apply_angular_spring(body, target_xform, current_xform, strength, delta)
 
 		var pin := _get_pin_strength(rig_name) * ratio
+		# Injury reduces pin strength (creates visible sag/limp on injured bones)
+		var pin_injury: float = _pin_injury_modifiers.get(rig_name, 0.0)
+		if pin_injury > 0.0:
+			pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
 		var pos_error := target_xform.origin - current_xform.origin
 		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
 
@@ -275,6 +280,20 @@ func set_target_overrides(overrides: Dictionary) -> void:
 ## Clears all target pose overrides, reverting to animation-driven targets.
 func clear_target_overrides() -> void:
 	_target_overrides.clear()
+
+
+## Sets an injury modifier for a bone's pin strength (0.0-1.0).
+## Injured bones have weaker position tracking, causing visible sag.
+func set_pin_injury(rig_name: String, injury: float) -> void:
+	if injury <= 0.001:
+		_pin_injury_modifiers.erase(rig_name)
+	else:
+		_pin_injury_modifiers[rig_name] = injury
+
+
+## Clears all pin injury modifiers.
+func clear_pin_injuries() -> void:
+	_pin_injury_modifiers.clear()
 
 
 ## Returns the largest rotation error (in radians) across all bones between

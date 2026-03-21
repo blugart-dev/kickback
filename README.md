@@ -17,6 +17,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Cumulative pain** — sustained fire deterministically escalates reactions (flinch → stagger → ragdoll) instead of relying on dice rolls. Pain decays between engagements.
 - **Movement-aware hits** — running characters are less stable and stagger more easily. Stagger direction blends with movement direction for natural stumbling.
 - **Threat anticipation** — `anticipate_threat(direction, urgency)` API for pre-hit flinch. Call when bullets fly nearby or an enemy winds up an attack.
+- **Micro hit reactions** — torso bend, head whip, and spin torque at the moment of impact. Every hit has a visceral split-second reaction.
+- **Regional impairment** — persistent per-bone injury that outlasts spring recovery. Shot in the leg causes visible sag/limp. Shot in the arm makes it dangle. Injuries heal slowly.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
@@ -93,6 +95,8 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Query hit streak:** `active_controller.get_hit_streak()` — rapid consecutive hit count
 - **Query pain:** `active_controller.get_pain()` — cumulative damage level
 - **Pre-hit flinch:** `kickback_character.anticipate_threat(direction, urgency)` — defensive lean before impact
+- **Query injuries:** `active_controller.get_injury(rig_name)` — per-bone injury level
+- **Reset injuries:** `active_controller.reset_injuries()` — heal all injuries
 - **Different skeleton?** Auto-detects, or create a `RagdollProfile` manually
 - **Different physics feel?** Create a `RagdollTuning` resource
 - **Find all characters:** `KickbackCharacter.find_all(scene_root)`
@@ -120,6 +124,7 @@ Character (Node3D)
 - `recovery_interrupted()` — hit during get-up knocked character back down
 - `pain_changed(level)` — cumulative pain from sustained hits (0.0-1.0)
 - `threat_anticipated(direction, urgency)` — anticipate_threat() was called
+- `region_injured(rig_name, severity)` — bone sustained persistent injury
 
 **Important:** All root movement and rotation must happen in `_physics_process`, not `_process`, to stay in sync with the spring resolver.
 
