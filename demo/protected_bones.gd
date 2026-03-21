@@ -1,15 +1,16 @@
-## Demo: 4 identical characters with different RagdollTuning presets.
-## Click to shoot all simultaneously — see how tuning affects reactions.
+## Demo: Protected bones comparison. Two identical characters with the same
+## loose tuning — left has no protection, right has legs protected.
+## Same hit, dramatically different visual result.
 extends Node3D
 
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Light", "Medium", "Heavy", "Shotgun", "Explosion"])
-var _weapon_idx: int = 0
+var _weapon_idx: int = 1  # Start on Medium for visible difference
 var _kickbacks: Array[KickbackCharacter] = []
 
 # Camera
 var _cam: Camera3D
-var _cam_distance: float = 7.0
+var _cam_distance: float = 5.0
 var _cam_yaw: float = 0.0
 var _cam_pitch: float = -15.0
 var _dragging: bool = false
@@ -21,23 +22,31 @@ func _ready() -> void:
 	_cam = $Camera3D
 	_weapon_label = $HUD/WeaponLabel
 
-	# Moderate profiles — tuning differences should be the star, not weapon strength
 	_profiles = [
-		_make_profile(&"Light",     10.0, 0.35, 0.0,  0.02, 0.40, 1, 0.5),
-		_make_profile(&"Medium",    15.0, 0.45, 0.0,  0.05, 0.55, 2, 0.4),
-		_make_profile(&"Heavy",     20.0, 0.55, 0.05, 0.10, 0.70, 3, 0.3),
-		_make_profile(&"Shotgun",   25.0, 0.60, 0.08, 0.25, 0.80, 4, 0.25),
-		_make_profile(&"Explosion", 40.0, 0.90, 0.40, 0.80, 0.95, 99, 0.15),
+		_make_profile(&"Light",     12.0, 0.40, 0.0,  0.02, 0.50, 2, 0.4),
+		_make_profile(&"Medium",    18.0, 0.55, 0.0,  0.05, 0.65, 3, 0.3),
+		_make_profile(&"Heavy",     25.0, 0.65, 0.05, 0.10, 0.80, 4, 0.25),
+		_make_profile(&"Shotgun",   30.0, 0.70, 0.08, 0.25, 0.85, 5, 0.20),
+		_make_profile(&"Explosion", 45.0, 0.95, 0.45, 0.85, 0.95, 99, 0.15),
 	]
 
-	var presets := _build_presets()
-	var chars := $Characters
-	for i in chars.get_child_count():
-		var char_root: Node3D = chars.get_child(i)
-		var preset: Dictionary = presets[i] if i < presets.size() else presets[0]
-		var kc := _setup_active(char_root, preset.tuning)
-		if kc:
-			_kickbacks.append(kc)
+	# Shared loose tuning — both characters use the same base
+	var base_tuning := _make_loose_tuning()
+
+	# Left: NO protection — whole body wobbles
+	var tuning_unprotected := base_tuning.duplicate()
+	var kc1 := _setup_active($Characters/Unprotected, tuning_unprotected)
+	if kc1:
+		_kickbacks.append(kc1)
+
+	# Right: legs protected — upper body reacts, feet planted
+	var tuning_protected := base_tuning.duplicate()
+	tuning_protected.protected_bones = PackedStringArray([
+		"UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R", "Foot_L", "Foot_R"
+	])
+	var kc2 := _setup_active($Characters/Protected, tuning_protected)
+	if kc2:
+		_kickbacks.append(kc2)
 
 	# Debug gizmos
 	var debug_hud := StrengthDebugHUD.new()
@@ -49,78 +58,24 @@ func _ready() -> void:
 	_update_weapon_label()
 
 
-func _build_presets() -> Array[Dictionary]:
-	var presets: Array[Dictionary] = []
-
-	# 1. TANK — stiff springs, barely moves
-	var tank := RagdollTuning.create_default()
-	tank.strength_map = {
-		"Hips": 0.90, "Spine": 0.85, "Chest": 0.85, "Head": 0.70,
-		"UpperArm_L": 0.75, "LowerArm_L": 0.65, "Hand_L": 0.50,
-		"UpperArm_R": 0.75, "LowerArm_R": 0.65, "Hand_R": 0.50,
-		"UpperLeg_L": 0.80, "LowerLeg_L": 0.70, "Foot_L": 0.55,
-		"UpperLeg_R": 0.80, "LowerLeg_R": 0.70, "Foot_R": 0.55,
-	}
-	tank.pin_strength_overrides = {"Hips": 0.95, "Foot_L": 0.6, "Foot_R": 0.6}
-	tank.default_pin_strength = 0.3
-	tank.recovery_rate = 0.8
-	tank.stagger_threshold = 0.3  # Hard to stagger
-	tank.stagger_strength_floor = 0.50
-	tank.stagger_duration = 0.3
-	presets.append({"tuning": tank})
-
-	# 2. STANDARD — plugin defaults
-	var standard := RagdollTuning.create_default()
-	presets.append({"tuning": standard})
-
-	# 3. LOOSE — weak springs, exaggerated reactions
-	var loose := RagdollTuning.create_default()
-	loose.strength_map = {
-		"Hips": 0.25, "Spine": 0.20, "Chest": 0.20, "Head": 0.12,
-		"UpperArm_L": 0.15, "LowerArm_L": 0.10, "Hand_L": 0.06,
-		"UpperArm_R": 0.15, "LowerArm_R": 0.10, "Hand_R": 0.06,
-		"UpperLeg_L": 0.22, "LowerLeg_L": 0.15, "Foot_L": 0.08,
-		"UpperLeg_R": 0.22, "LowerLeg_R": 0.15, "Foot_R": 0.08,
-	}
-	loose.pin_strength_overrides = {"Hips": 0.20, "Foot_L": 0.06, "Foot_R": 0.06}
-	loose.default_pin_strength = 0.02
-	loose.recovery_rate = 0.12
-	loose.stagger_threshold = 0.75  # Staggers very easily
-	loose.stagger_strength_floor = 0.06
-	loose.stagger_duration = 1.5
-	loose.max_angular_velocity = 30.0
-	loose.max_linear_velocity = 15.0
-	presets.append({"tuning": loose})
-
-	# 4. RAGDOLL-PRONE — normal springs but falls over easily
-	var fragile := RagdollTuning.create_default()
-	fragile.stagger_threshold = 0.8
-	fragile.stagger_strength_floor = 0.10
-	fragile.stagger_duration = 0.8
-	fragile.stagger_ragdoll_bonus = 3.0  # Hits during stagger almost guarantee ragdoll
-	presets.append({"tuning": fragile})
-
-	# 5. PROTECTED LEGS — loose upper body, legs stay animated
-	var protected := RagdollTuning.create_default()
-	protected.strength_map = {
+func _make_loose_tuning() -> RagdollTuning:
+	var t := RagdollTuning.create_default()
+	t.strength_map = {
 		"Hips": 0.30, "Spine": 0.25, "Chest": 0.25, "Head": 0.15,
 		"UpperArm_L": 0.20, "LowerArm_L": 0.15, "Hand_L": 0.08,
 		"UpperArm_R": 0.20, "LowerArm_R": 0.15, "Hand_R": 0.08,
-		"UpperLeg_L": 0.55, "LowerLeg_L": 0.45, "Foot_L": 0.30,
-		"UpperLeg_R": 0.55, "LowerLeg_R": 0.45, "Foot_R": 0.30,
+		"UpperLeg_L": 0.30, "LowerLeg_L": 0.22, "Foot_L": 0.12,
+		"UpperLeg_R": 0.30, "LowerLeg_R": 0.22, "Foot_R": 0.12,
 	}
-	protected.pin_strength_overrides = {"Hips": 0.30, "Foot_L": 0.4, "Foot_R": 0.4}
-	protected.default_pin_strength = 0.03
-	protected.stagger_threshold = 0.7
-	protected.stagger_strength_floor = 0.10
-	protected.stagger_duration = 1.0
-	protected.recovery_rate = 0.15
-	protected.protected_bones = PackedStringArray([
-		"UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R", "Foot_L", "Foot_R"
-	])
-	presets.append({"tuning": protected})
-
-	return presets
+	t.pin_strength_overrides = {"Hips": 0.30, "Foot_L": 0.15, "Foot_R": 0.15}
+	t.default_pin_strength = 0.03
+	t.stagger_threshold = 0.7
+	t.stagger_strength_floor = 0.10
+	t.stagger_duration = 1.0
+	t.recovery_rate = 0.15
+	t.max_angular_velocity = 25.0
+	t.max_linear_velocity = 12.0
+	return t
 
 
 func _setup_active(char_root: Node3D, tuning: RagdollTuning) -> KickbackCharacter:
@@ -196,15 +151,13 @@ func _make_profile(pname: StringName, impulse: float, transfer: float, upward: f
 func _shoot_all() -> void:
 	var profile := _profiles[_weapon_idx]
 	for kc: KickbackCharacter in _kickbacks:
-		# Find any ragdoll body to hit (use the chest for consistent results)
 		var parent := kc.get_parent()
 		for sibling in parent.get_children():
 			if sibling is PhysicsRigBuilder:
 				var bodies: Dictionary = sibling.get_bodies()
 				var body: RigidBody3D = bodies.get("Chest", bodies.get("Hips"))
 				if body:
-					var hit_dir := -_cam.global_basis.z
-					kc.receive_hit(body, hit_dir, body.global_position, profile)
+					kc.receive_hit(body, -_cam.global_basis.z, body.global_position, profile)
 				break
 
 
@@ -220,10 +173,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_dragging = mb.pressed
 			MOUSE_BUTTON_WHEEL_UP:
 				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 0.5, 3.0)
+					_cam_distance = maxf(_cam_distance - 0.5, 2.0)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 0.5, 20.0)
+					_cam_distance = minf(_cam_distance + 0.5, 15.0)
 
 	elif event is InputEventMouseMotion and _dragging:
 		var mm := event as InputEventMouseMotion

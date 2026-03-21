@@ -58,7 +58,8 @@ kickback/
 │   ├── stress_test.tscn/gd          # 20 characters, budget system, mass ragdoll
 │   ├── animated_npc.tscn/gd         # Signal-driven NPC with full animation lifecycle
 │   ├── ball_throw.tscn/gd           # Throw physics balls, velocity-scaled impact
-│   └── tuning_presets.tscn/gd       # 4 characters: Tank/Standard/Loose/Fragile
+│   ├── tuning_presets.tscn/gd       # 5 characters: Tank/Standard/Loose/Fragile/Protected
+│   └── protected_bones.tscn/gd      # Protected vs unprotected legs comparison
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)

@@ -104,6 +104,10 @@ func _setup_npc(char_root: Node3D, idx: int) -> void:
 	}
 	tuning.pin_strength_overrides = {"Hips": 0.25, "Foot_L": 0.08, "Foot_R": 0.08}
 	tuning.default_pin_strength = 0.02
+	# Legs stay animated — upper body reacts, feet stay planted
+	tuning.protected_bones = PackedStringArray([
+		"UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R", "Foot_L", "Foot_R"
+	])
 
 	var kc := KickbackCharacter.new()
 	kc.name = "KickbackCharacter"

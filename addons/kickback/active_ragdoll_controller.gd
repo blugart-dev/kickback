@@ -98,6 +98,8 @@ func _physics_process(delta: float) -> void:
 			_stagger_elapsed += delta
 			var floor_ratio: float = _tuning.stagger_strength_floor
 			for rig_name: String in _spring.get_all_bone_names():
+				if rig_name in _tuning.protected_bones:
+					continue
 				var base: float = _spring.get_base_strength(rig_name)
 				var floor_val: float = base * floor_ratio
 				if _spring.get_bone_strength(rig_name) < floor_val:
@@ -351,6 +353,10 @@ func get_state_name() -> String:
 
 
 func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
+	# Protected bones are never weakened by hits
+	if rig_name in _tuning.protected_bones:
+		return
+
 	var current := _spring.get_bone_strength(rig_name)
 	var floor: float = _tuning.min_strength.get(rig_name, 0.0)
 	_spring.set_bone_strength(rig_name, maxf(current * (1.0 - reduction), floor))
@@ -371,6 +377,8 @@ func _reduce_strength(rig_name: String, reduction: float, spread: int) -> void:
 						continue
 					visited[neighbor] = true
 					next_level.append(neighbor)
+					if neighbor in _tuning.protected_bones:
+						continue
 					var s := _spring.get_bone_strength(neighbor)
 					var nfloor: float = _tuning.min_strength.get(neighbor, 0.0)
 					_spring.set_bone_strength(neighbor, maxf(s * (1.0 - reduction * falloff), nfloor))

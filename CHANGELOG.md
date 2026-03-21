@@ -6,6 +6,7 @@
 - **Stagger state** — new state between hit absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable via `RagdollTuning`: `stagger_threshold`, `stagger_duration`, `stagger_strength_floor`, `stagger_ragdoll_bonus`. Signals: `stagger_started(hit_direction)`, `stagger_finished()`.
 - **`trigger_stagger(hit_dir)`** — force stagger from code via KickbackCharacter or ActiveRagdollController.
 - **`is_staggering()`** — query whether character is in stagger state.
+- **Protected bones** — `RagdollTuning.protected_bones` array marks bones that never weaken from hits. Legs stay animated while upper body reacts. During full ragdoll, all bones still go limp.
 - **Debug gizmos rewrite** — self-contained, auto-discovers all KickbackCharacter nodes. Color-coded bone dots for active ragdoll (red/yellow/green by strength), cyan/yellow for partial ragdoll. Scales with distance. No configuration needed.
 - **`StrengthDebugHUD.set_target()`** — optional API for dynamically switching which character the HUD displays.
 - **8 demo scenes** in `demo/`:
@@ -16,7 +17,8 @@
   - `stress_test.tscn` — 20 characters, mass ragdoll, budget slider
   - `animated_npc.tscn` — signal-driven NPC: walk → flinch → stagger → ragdoll → get-up → injured → walk
   - `ball_throw.tscn` — throw physics balls at NPCs, velocity-scaled impact, loose springs
-  - `tuning_presets.tscn` — 4 characters (Tank/Standard/Loose/Fragile) hit simultaneously
+  - `tuning_presets.tscn` — 5 characters (Tank/Standard/Loose/Fragile/Protected) hit simultaneously
+  - `protected_bones.tscn` — protected vs unprotected legs side-by-side comparison
 
 ### Changed
 - **No more LOD switching** — Active Ragdoll and Partial Ragdoll are independent modes. Pick one per character. `KickbackCharacter` uses `Mode` enum (ACTIVE/PARTIAL/NONE) set once at startup, replacing the `Tier` enum and runtime distance-based switching.

@@ -104,6 +104,12 @@ extends Resource
 ## Multiplier on ragdoll_probability when hit during active stagger.
 @export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
 
+@export_group("Protected Bones")
+## Bones that stay animated during hits and stagger. Their spring strength
+## is never reduced by impacts. Useful for keeping legs planted while the
+## upper body reacts. During full ragdoll, all bones still go limp.
+@export var protected_bones: PackedStringArray = []
+
 
 ## Creates a RagdollTuning with the default values matching the original
 ## hardcoded constants from the Kickback plugin.
@@ -170,5 +176,9 @@ func validate_against_profile(profile: RagdollProfile) -> PackedStringArray:
 		for key: String in dict:
 			if key not in valid_names:
 				warnings.append("%s key '%s' not found in profile rig names" % [dict_name, key])
+
+	for bone_name: String in protected_bones:
+		if bone_name not in valid_names:
+			warnings.append("protected_bones entry '%s' not found in profile rig names" % bone_name)
 
 	return warnings

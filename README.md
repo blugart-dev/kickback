@@ -8,6 +8,7 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 
 - **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.
 - **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
+- **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
 - **Skeleton auto-detection** — `SkeletonDetector` identifies humanoid bones in Mixamo, Rigify, Unreal Mannequin, and custom skeletons.
@@ -15,7 +16,7 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
 - **Debug gizmos** — F3 for color-coded bone dots on all characters (red=weak, yellow=recovering, green=full).
-- **8 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets.
+- **9 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets, protected bones.
 
 ## Requirements
 
@@ -75,6 +76,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Force stagger:** `kickback_character.trigger_stagger(hit_direction)`
 - **Force ragdoll:** `kickback_character.trigger_ragdoll()`
 - **Persistent ragdoll (death):** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
+- **Protected bones:** set `ragdoll_tuning.protected_bones` to keep legs (or any bones) animated during hits
 - **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
 - **Different skeleton?** Auto-detects, or create a `RagdollProfile` manually
 - **Different physics feel?** Create a `RagdollTuning` resource
@@ -114,7 +116,8 @@ Run any scene from `demo/` to see the plugin in action:
 | `stress_test.tscn` | 20 characters, mass ragdoll, budget system |
 | `animated_npc.tscn` | Signal-driven NPC with full animation integration |
 | `ball_throw.tscn` | Throw physics balls, velocity-scaled impact |
-| `tuning_presets.tscn` | 4 characters: Tank/Standard/Loose/Fragile side-by-side |
+| `tuning_presets.tscn` | 5 characters: Tank/Standard/Loose/Fragile/Protected side-by-side |
+| `protected_bones.tscn` | Protected vs unprotected legs — same hit, different result |
 
 ## Collision Layers
 
