@@ -292,6 +292,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				if mb.pressed:
 					_last_hit_dir = -_cam.global_basis.z
+					# Threat anticipation: NPC flinches before the hit lands
+					if _kickback:
+						_kickback.anticipate_threat(_last_hit_dir, 0.4)
 					KickbackRaycast.shoot_from_camera(
 						get_viewport(), mb.position, _profiles[_weapon_idx])
 			MOUSE_BUTTON_RIGHT:

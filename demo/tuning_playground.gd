@@ -113,6 +113,23 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "recovery_rate", 0.05, 2.0, _tuning.recovery_rate)
 	_add_slider(panel, "recovery_duration", 0.5, 5.0, _tuning.recovery_duration)
 
+	_add_section(panel, "PAIN & FATIGUE")
+	_add_slider(panel, "pain_gain", 0.0, 1.0, _tuning.pain_gain)
+	_add_slider(panel, "pain_decay", 0.0, 1.0, _tuning.pain_decay)
+	_add_slider(panel, "pain_stagger_thresh", 0.0, 1.0, _tuning.pain_stagger_threshold)
+	_add_slider(panel, "fatigue_gain", 0.0, 1.0, _tuning.fatigue_gain)
+	_add_slider(panel, "fatigue_impact", 0.0, 1.0, _tuning.fatigue_impact)
+
+	_add_section(panel, "MICRO REACTIONS")
+	_add_slider(panel, "micro_strength", 0.0, 2.0, _tuning.micro_reaction_strength)
+	_add_slider(panel, "head_whip", 0.0, 5.0, _tuning.micro_head_whip_strength)
+	_add_slider(panel, "torso_bend", 0.0, 5.0, _tuning.micro_torso_bend_strength)
+
+	_add_section(panel, "INJURY")
+	_add_slider(panel, "injury_gain", 0.0, 1.0, _tuning.injury_gain)
+	_add_slider(panel, "injury_decay", 0.0, 0.2, _tuning.injury_decay)
+	_add_slider(panel, "injury_impact", 0.0, 1.0, _tuning.injury_impact)
+
 
 func _add_section(parent: Control, title: String) -> void:
 	var spacer := Control.new()
@@ -168,6 +185,17 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 		"stagger_floor": _tuning.stagger_strength_floor = value
 		"recovery_rate": _tuning.recovery_rate = value
 		"recovery_duration": _tuning.recovery_duration = value
+		"pain_gain": _tuning.pain_gain = value
+		"pain_decay": _tuning.pain_decay = value
+		"pain_stagger_thresh": _tuning.pain_stagger_threshold = value
+		"fatigue_gain": _tuning.fatigue_gain = value
+		"fatigue_impact": _tuning.fatigue_impact = value
+		"micro_strength": _tuning.micro_reaction_strength = value
+		"head_whip": _tuning.micro_head_whip_strength = value
+		"torso_bend": _tuning.micro_torso_bend_strength = value
+		"injury_gain": _tuning.injury_gain = value
+		"injury_decay": _tuning.injury_decay = value
+		"injury_impact": _tuning.injury_impact = value
 
 
 func _unhandled_input(event: InputEvent) -> void:

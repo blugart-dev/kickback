@@ -56,6 +56,12 @@ func _ready() -> void:
 			active_ctrl.recovery_started.connect(_on_recovery_started)
 			active_ctrl.recovery_finished.connect(_on_recovery_finished)
 			active_ctrl.state_changed.connect(_on_state_changed)
+			active_ctrl.balance_changed.connect(_on_balance_changed)
+			active_ctrl.fatigue_changed.connect(_on_fatigue_changed)
+			active_ctrl.pain_changed.connect(_on_pain_changed)
+			active_ctrl.recovery_interrupted.connect(_on_recovery_interrupted)
+			active_ctrl.region_injured.connect(_on_region_injured)
+			active_ctrl.threat_anticipated.connect(_on_threat_anticipated)
 
 	# Debug gizmos
 	var debug_hud := StrengthDebugHUD.new()
@@ -157,6 +163,30 @@ func _on_state_changed(new_state: int) -> void:
 	var state_names := ["NORMAL", "STAGGER", "RAGDOLL", "GETTING_UP", "PERSISTENT"]
 	var state_label: String = state_names[new_state] if new_state < state_names.size() else "?"
 	_log("state_changed → %s" % state_label)
+
+func _on_balance_changed(ratio: float) -> void:
+	if ratio > 0.4:  # Only show when notably off-balance
+		_log("balance_changed(%.2f)" % ratio)
+
+func _on_fatigue_changed(level: float) -> void:
+	_spawn_popup("fatigue: %.0f%%" % (level * 100), Color(0.7, 0.4, 0.9))
+	_log("fatigue_changed(%.2f)" % level)
+
+func _on_pain_changed(level: float) -> void:
+	if level > 0.1:  # Skip tiny pain
+		_log("pain_changed(%.2f)" % level)
+
+func _on_recovery_interrupted() -> void:
+	_spawn_popup("RECOVERY INTERRUPTED!", Color(1.0, 0.2, 0.2))
+	_log("recovery_interrupted()")
+
+func _on_region_injured(rig_name: String, severity: float) -> void:
+	_spawn_popup("injured: %s (%.0f%%)" % [rig_name, severity * 100], Color(0.9, 0.4, 0.2))
+	_log("region_injured(%s, %.2f)" % [rig_name, severity])
+
+func _on_threat_anticipated(direction: Vector3, urgency: float) -> void:
+	_spawn_popup("threat! (%.1f)" % urgency, Color(1.0, 1.0, 0.3))
+	_log("threat_anticipated(urgency=%.1f)" % urgency)
 
 
 func _spawn_popup(text: String, color: Color) -> void:

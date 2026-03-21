@@ -27,7 +27,7 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
 - **Debug gizmos** — F3 cycles through 3 detail levels: bone dots → skeleton wireframe + state labels → full dashboard with status panels, center of mass, velocity vectors, and balance/fatigue bars.
-- **9 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets, protected bones.
+- **10 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets, protected bones, euphoria showcase.
 
 ## Requirements
 
@@ -143,6 +143,7 @@ Run any scene from `demo/` to see the plugin in action:
 | `ball_throw.tscn` | Throw physics balls, velocity-scaled impact |
 | `tuning_presets.tscn` | 5 characters: Tank/Standard/Loose/Fragile/Protected side-by-side |
 | `protected_bones.tscn` | Protected vs unprotected legs — same hit, different result |
+| `euphoria_showcase.tscn` | All v0.6+ features: pain escalation, momentum, injuries, threat anticipation |
 
 ## Collision Layers
 

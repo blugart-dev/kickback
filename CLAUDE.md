@@ -59,7 +59,8 @@ kickback/
 │   ├── animated_npc.tscn/gd         # Signal-driven NPC with full animation lifecycle
 │   ├── ball_throw.tscn/gd           # Throw physics balls, velocity-scaled impact
 │   ├── tuning_presets.tscn/gd       # 5 characters: Tank/Standard/Loose/Fragile/Protected
-│   └── protected_bones.tscn/gd      # Protected vs unprotected legs comparison
+│   ├── protected_bones.tscn/gd      # Protected vs unprotected legs comparison
+│   └── euphoria_showcase.tscn/gd   # All v0.6+ features: pain, momentum, injuries, anticipation
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)
