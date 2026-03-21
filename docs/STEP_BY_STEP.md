@@ -7,6 +7,9 @@
 > **v0.5.0 update**: Step 8 (LOD system) was removed. Active Ragdoll and Partial
 > Ragdoll are now independent modes — pick one per character, no runtime switching.
 > A new STAGGER state was added to the active ragdoll state machine.
+>
+> **v0.6.0 update**: Momentum transfer + center of mass balance tracking.
+> Stagger is now physics-informed, not just timer-based.
 
 Do these in order. Each step builds on the previous. Each has a test scene and
 concrete pass/fail criteria. Do NOT proceed to the next step until the current
@@ -416,3 +419,28 @@ editor, collision shape visualization.
 ## Milestone 6 — Multiple character support
 Test with different Mixamo characters. Configurable bone name mapping for
 non-Mixamo rigs.
+
+---
+
+## v0.6.0 — Momentum transfer + Balance tracking ✅ COMPLETE
+
+Two Euphoria-inspired features bridging the gap between passive springs and
+active self-preservation.
+
+**Momentum transfer**: `_full_ragdoll()` now transfers CharacterBody3D velocity
+to all physics bodies. Running characters tumble forward; standing characters
+crumple in place.
+
+**Center of mass balance**: `_compute_balance_ratio()` computes mass-weighted
+CoM vs foot support midpoint.
+- Stagger exit is now physics-informed: regained balance → early recovery
+- Excessive imbalance during stagger → forced ragdoll (tipping over)
+- Balance can independently trigger stagger on hit (not just spring strength)
+- New signal: `balance_changed(ratio)` emitted each frame during stagger
+- New public API: `get_balance_ratio() -> float`
+- New RagdollTuning properties: `balance_stagger_threshold`,
+  `balance_ragdoll_threshold`, `balance_recovery_threshold`,
+  `balance_recovery_hold_time`
+- Timer-based stagger end preserved as safety fallback
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`

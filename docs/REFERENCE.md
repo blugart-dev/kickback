@@ -36,6 +36,37 @@ rigid_body.linear_velocity = rigid_body.linear_velocity.lerp(pos_error / delta, 
 `strength` is the key parameter: 0.0 = pure ragdoll, 1.0 = perfect tracking.
 `pin_strength` should be lower than rotational strength (0.2-0.3) to prevent floating.
 
+## Center of mass balance ratio
+
+Computes how off-balance the character is by comparing the mass-weighted center
+of mass to the support polygon (midpoint between feet):
+
+```gdscript
+# Center of mass: mass-weighted average of all body positions
+var com := Vector3.ZERO
+var total_mass := 0.0
+for body in bodies.values():
+    com += body.global_position * body.mass
+    total_mass += body.mass
+com /= total_mass
+
+# Support polygon: midpoint between feet on XZ plane
+var support_center := (foot_l.global_position + foot_r.global_position) * 0.5
+var foot_spread := foot_l.global_position.distance_to(foot_r.global_position)
+var support_radius := maxf(foot_spread * 0.5, 0.1)
+
+# Distance of CoM projection from support center on XZ plane
+var offset := Vector2(com.x, com.z).distance_to(Vector2(support_center.x, support_center.z))
+
+# 0.0 = perfectly balanced, 1.0 = edge of support, >1.0 = outside support
+var balance_ratio := clampf(offset / support_radius, 0.0, 1.5)
+```
+
+Used by `ActiveRagdollController` to drive stagger behavior:
+- `balance > balance_ragdoll_threshold (0.85)` → forced ragdoll (tipping over)
+- `balance < balance_recovery_threshold (0.3)` for `balance_recovery_hold_time (0.3s)` → early stagger recovery
+- `balance > balance_stagger_threshold (0.5)` on hit → triggers stagger independently of spring strength
+
 ## Per-bone strength values
 
 | Region        | Bones                                  | Strength | Pin | Notes                    |

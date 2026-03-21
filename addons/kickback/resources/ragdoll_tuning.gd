@@ -104,6 +104,18 @@ extends Resource
 ## Multiplier on ragdoll_probability when hit during active stagger.
 @export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
 
+@export_group("Balance")
+## Center-of-mass balance ratio above which a hit triggers stagger (even if
+## average spring strength is still above stagger_threshold).
+## 0.0 = disabled. Higher = harder to trigger stagger from balance alone.
+@export_range(0.0, 1.0) var balance_stagger_threshold: float = 0.5
+## Balance ratio above this during stagger forces ragdoll (character is tipping over).
+@export_range(0.0, 1.0) var balance_ragdoll_threshold: float = 0.85
+## Balance ratio below this during stagger allows early recovery (character regained balance).
+@export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
+## How long balance must stay below recovery threshold before stagger ends.
+@export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.3
+
 @export_group("Protected Bones")
 ## Bones that stay animated during hits and stagger. Their spring strength
 ## is never reduced by impacts. Useful for keeping legs planted while the

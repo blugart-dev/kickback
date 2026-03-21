@@ -8,6 +8,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 
 - **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.
 - **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
+- **Balance tracking** — center of mass vs foot support polygon drives stagger behavior. Characters that lean too far ragdoll; balanced characters recover early. Physics-informed, not timer-based.
+- **Momentum transfer** — running characters carry their velocity into ragdoll, tumbling forward instead of dropping in place.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
@@ -78,6 +80,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Persistent ragdoll (death):** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
 - **Protected bones:** set `ragdoll_tuning.protected_bones` to keep legs (or any bones) animated during hits
 - **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
+- **Query balance:** `active_controller.get_balance_ratio()` — 0.0 = balanced, 1.0+ = off-balance
 - **Different skeleton?** Auto-detects, or create a `RagdollProfile` manually
 - **Different physics feel?** Create a `RagdollTuning` resource
 - **Find all characters:** `KickbackCharacter.find_all(scene_root)`
@@ -100,6 +103,7 @@ Character (Node3D)
 - `recovery_started(face_up)` — getting up from ragdoll
 - `recovery_finished()` — fully recovered
 - `hit_absorbed(rig_name, strength)` — light hit, no state change
+- `balance_changed(ratio)` — CoM balance ratio during stagger (0.0 = balanced, 1.0 = falling)
 
 **Important:** All root movement and rotation must happen in `_physics_process`, not `_process`, to stay in sync with the spring resolver.
 

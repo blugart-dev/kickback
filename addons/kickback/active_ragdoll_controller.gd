@@ -34,6 +34,7 @@ var _ragdoll_elapsed: float = 0.0
 var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
 var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
+var _balance_stable_timer: float = 0.0
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -57,6 +58,9 @@ signal hit_absorbed(rig_name: String, new_strength: float)
 signal stagger_started(hit_direction: Vector3)
 ## Emitted when the character recovers from stagger and returns to NORMAL.
 signal stagger_finished()
+## Emitted each physics frame during stagger with the current balance ratio.
+## 0.0 = perfectly balanced over feet, 1.0 = completely off-balance.
+signal balance_changed(ratio: float)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -104,6 +108,26 @@ func _physics_process(delta: float) -> void:
 				var floor_val: float = base * floor_ratio
 				if _spring.get_bone_strength(rig_name) < floor_val:
 					_spring.set_bone_strength(rig_name, floor_val)
+
+			# Balance-informed stagger: use center of mass vs foot support
+			var balance := _compute_balance_ratio()
+			balance_changed.emit(balance)
+
+			# Too far off-balance → ragdoll (tipping over)
+			if balance > _tuning.balance_ragdoll_threshold:
+				_full_ragdoll()
+				return
+
+			# Regained balance → early recovery
+			if balance < _tuning.balance_recovery_threshold:
+				_balance_stable_timer += delta
+				if _balance_stable_timer >= _tuning.balance_recovery_hold_time:
+					_finish_stagger()
+					return
+			else:
+				_balance_stable_timer = 0.0
+
+			# Fallback: timer-based stagger end (safety net)
 			if _stagger_elapsed >= _tuning.stagger_duration:
 				_finish_stagger()
 		State.RAGDOLL:
@@ -195,7 +219,12 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		_full_ragdoll()
 	else:
 		var avg_ratio := _compute_average_strength_ratio()
-		if avg_ratio < _tuning.stagger_threshold:
+		var balance := _compute_balance_ratio()
+		var should_stagger := avg_ratio < _tuning.stagger_threshold
+		# Balance can also trigger stagger independently
+		if not should_stagger and _tuning.balance_stagger_threshold > 0.0:
+			should_stagger = balance > _tuning.balance_stagger_threshold
+		if should_stagger:
 			_start_stagger(hit_dir)
 		else:
 			hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
@@ -234,6 +263,20 @@ func set_persistent(enabled: bool) -> void:
 func _full_ragdoll() -> void:
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, 0.0)
+
+	# Transfer character movement velocity to physics bodies so running
+	# characters tumble forward instead of dropping straight down.
+	if _character_root:
+		var char_velocity := Vector3.ZERO
+		if _character_root is CharacterBody3D:
+			char_velocity = (_character_root as CharacterBody3D).velocity
+		elif _character_root.has_method("get_velocity"):
+			char_velocity = _character_root.get_velocity()
+		if char_velocity.length_squared() > 0.01:
+			var bodies := _rig_builder.get_bodies()
+			for body: RigidBody3D in bodies.values():
+				body.linear_velocity += char_velocity
+
 	_state = State.RAGDOLL
 	_ragdoll_elapsed = 0.0
 	_spring.recovery_rate = 0.0
@@ -341,6 +384,11 @@ func get_state() -> int:
 	return _state
 
 
+## Returns the current center-of-mass balance ratio (0.0 = balanced, 1.0+ = off-balance).
+func get_balance_ratio() -> float:
+	return _compute_balance_ratio()
+
+
 ## Returns a human-readable name for the current state (for debug display).
 func get_state_name() -> String:
 	match _state:
@@ -401,6 +449,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
 	_stagger_hit_dir = hit_dir
+	_balance_stable_timer = 0.0
 	state_changed.emit(_state)
 	stagger_started.emit(hit_dir)
 
@@ -410,6 +459,40 @@ func _finish_stagger() -> void:
 		var base: float = _spring.get_base_strength(rig_name)
 		_spring.set_bone_strength(rig_name, base)
 	_state = State.NORMAL
+	_balance_stable_timer = 0.0
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	state_changed.emit(_state)
 	stagger_finished.emit()
+
+
+## Computes how off-balance the character is by comparing the center of mass
+## to the support polygon (midpoint between feet). Returns 0.0 (perfectly
+## balanced) to 1.0+ (completely off-balance, about to fall).
+func _compute_balance_ratio() -> float:
+	var bodies := _rig_builder.get_bodies()
+	var foot_l: RigidBody3D = bodies.get("Foot_L")
+	var foot_r: RigidBody3D = bodies.get("Foot_R")
+	if not foot_l or not foot_r:
+		return 0.0
+
+	# Center of mass: mass-weighted average of all body positions
+	var com := Vector3.ZERO
+	var total_mass := 0.0
+	for body: RigidBody3D in bodies.values():
+		com += body.global_position * body.mass
+		total_mass += body.mass
+	if total_mass < 0.001:
+		return 0.0
+	com /= total_mass
+
+	# Support polygon: midpoint between feet on XZ plane
+	var support_center := (foot_l.global_position + foot_r.global_position) * 0.5
+	var foot_spread := foot_l.global_position.distance_to(foot_r.global_position)
+	var support_radius := maxf(foot_spread * 0.5, 0.1)
+
+	# Distance of CoM projection from support center on XZ plane
+	var com_xz := Vector2(com.x, com.z)
+	var support_xz := Vector2(support_center.x, support_center.z)
+	var offset := com_xz.distance_to(support_xz)
+
+	return clampf(offset / support_radius, 0.0, 1.5)
