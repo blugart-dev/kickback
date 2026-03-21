@@ -33,6 +33,9 @@ const PROPERTY_THRESHOLD := 0.01
 
 func configure(tuning: RagdollTuning) -> void:
 	_tuning = tuning
+	if _tuning:
+		_max_angular_vel_sq = _tuning.max_angular_velocity * _tuning.max_angular_velocity
+		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
 
 
 func _ready() -> void:

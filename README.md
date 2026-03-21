@@ -12,6 +12,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 - **Momentum transfer** — running characters carry their velocity into ragdoll, tumbling forward instead of dropping in place.
 - **Fatigue** — repeated hits degrade effective spring strength over time. Fatigued characters wobble more at baseline and recover to lower maxes. Decays slowly between engagements.
 - **Hit stacking** — rapid consecutive hits escalate via streak multiplier. Hits during recovery can interrupt get-up and re-ragdoll the character.
+- **Reaction pulses** — sub-stagger hits produce a brief visible wobble that fades over 200ms. Even light hits are noticeable.
+- **Directional bracing** — during stagger, bones opposite the hit direction strengthen while hit-side bones weaken further. Characters visibly fight to stay upright.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.

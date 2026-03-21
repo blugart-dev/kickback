@@ -103,6 +103,16 @@ extends Resource
 @export_range(0.1, 0.8) var stagger_strength_floor: float = 0.35
 ## Multiplier on ragdoll_probability when hit during active stagger.
 @export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
+## Extra strength ratio applied to brace-side bones during stagger.
+## Creates asymmetric "fighting to stay up" posture. 0.0 = disabled (symmetric wobble).
+@export_range(0.0, 0.5) var brace_strength_bonus: float = 0.25
+
+@export_group("Reaction Pulse")
+## How much of a sub-stagger hit's strength_reduction becomes a visible pulse.
+## Higher = light hits produce more visible jolt. 0.0 = disabled.
+@export_range(0.0, 1.0) var reaction_pulse_strength: float = 0.6
+## Duration of the reaction pulse in seconds.
+@export_range(0.05, 0.5) var reaction_pulse_duration: float = 0.2
 
 @export_group("Balance")
 ## Center-of-mass balance ratio above which a hit triggers stagger (even if

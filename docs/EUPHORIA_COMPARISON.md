@@ -29,10 +29,10 @@ and systems with difficulty ratings and implementation notes for Godot 4.6+.
 | 2 | ~~Momentum Transfer~~ | ~~Easy~~ | ~~High~~ | ~~10-20~~ |
 | 3 | Cumulative Damage/Pain | Easy-Medium | High | 100-150 |
 | 4 | Regional Impairment | Medium | High | ~200 |
-| 5 | Active Resistance (Bracing) | Easy-Medium | High | 80-120 |
+| 5 | ~~Active Resistance (Bracing)~~ | ~~Easy-Medium~~ | ~~High~~ | ~~80-120~~ |
 | 6 | Procedural Stumble Steps | Medium | High | 150-200 |
 | 7 | Arm Bracing / Wind-milling | Medium-Hard | Very High | 200-300 |
-| 8 | Proportional Reactions | Easy | Medium | 50-80 |
+| 8 | ~~Proportional Reactions~~ | ~~Easy~~ | ~~Medium~~ | ~~50-80~~ |
 | 9 | Movement-State-Aware Hits | Easy-Medium | Medium-High | 80-120 |
 | 10 | Ground Crawling | Medium-Hard | Medium | 250-350 |
 | 11 | Compensatory Stepping + IK | Hard | Very High | 400-600 |
@@ -55,8 +55,8 @@ and systems with difficulty ratings and implementation notes for Godot 4.6+.
 2. ~~Center of Mass Balance (#1)~~ — done
 3. ~~Fatigue (#15)~~ — done
 4. ~~Multi-Hit Stacking (#17)~~ — done
-5. Proportional Reactions (#8)
-6. Active Resistance (#5)
+5. ~~Proportional Reactions (#8)~~ — done
+6. ~~Active Resistance (#5)~~ — done
 7. Cumulative Damage (#3)
 8. Movement-State-Aware Hits (#9)
 9. Threat Anticipation (#18)

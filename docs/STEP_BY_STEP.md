@@ -479,3 +479,29 @@ levels cycled by F3:
 
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
 `strength_debug_hud.gd`
+
+---
+
+## Proportional Reactions + Directional Bracing + Code Refactor ✅ COMPLETE
+
+**Proportional reactions (#8)**: Reaction pulse system makes sub-stagger hits
+visible. After a hit that doesn't trigger stagger, a brief strength pulse
+(quadratic fade-out over `reaction_pulse_duration`) jolts the hit bone and
+neighbors. New tuning: `reaction_pulse_strength`, `reaction_pulse_duration`.
+
+**Directional bracing (#5)**: During stagger entry, bones are classified by
+their XZ position relative to Hips vs hit direction. Hit-side bones weaken
+further below the stagger floor; brace-side bones get boosted above it. Core
+bones (Hips/Spine/Chest) get a resistance boost. Creates visible asymmetric
+"fighting to stay up" posture. New tuning: `brace_strength_bonus`.
+
+**Code refactor**: Extracted `_physics_process` into `_update_stagger()`,
+`_update_ragdoll()`, `_update_recovery()`, `_update_fatigue_decay()`,
+`_tick_reaction_pulses()`. Extracted `apply_hit()` into `_handle_stagger_hit()`
+and `_handle_normal_hit()`. Added `_is_bone_protected()` with cached O(1)
+Dictionary lookup. Added null guards. Type-annotated Dictionary access. Readable
+recovery completion check with named booleans. SpringResolver cache invalidation
+on `configure()`. State machine diagram in class doc comment.
+
+Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
+`spring_resolver.gd`
