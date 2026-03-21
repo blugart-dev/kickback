@@ -9,5 +9,8 @@ Thumbs.db
 
 # IDE
 .vscode/
+
+# Claude Code local settings (shared config like hooks/skills stays tracked)
+.claude/settings.local.json
 *.swp
 *.swo
