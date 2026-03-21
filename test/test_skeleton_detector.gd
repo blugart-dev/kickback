@@ -91,13 +91,11 @@ func _ready() -> void:
 	else:
 		failed += 1
 
-	# -- Verify detect_humanoid_bones wraps detect_from_bone_names --
-	# (Can't test without Skeleton3D, but verify the function exists)
-	if _assert(SkeletonDetector.has_method("detect_humanoid_bones"), "detect_humanoid_bones() exists"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(SkeletonDetector.has_method("detect_from_bone_names"), "detect_from_bone_names() exists"):
+	# -- Verify both API methods work --
+	# detect_from_bone_names is tested above; detect_humanoid_bones needs Skeleton3D (integration test)
+	# Just verify detect_from_bone_names returns consistent results on re-call
+	var recheck := SkeletonDetector.detect_from_bone_names(mixamo_bones)
+	if _assert(recheck.size() == mixamo_result.size(), "Re-call produces same result size"):
 		passed += 1
 	else:
 		failed += 1

@@ -10,21 +10,30 @@ func _ready() -> void:
 	var failed := 0
 
 	# ── ImpactProfile factory methods ─────────────────────────────────────────
-	for method in ["create_bullet", "create_shotgun", "create_explosion", "create_melee", "create_arrow"]:
-		var profile: ImpactProfile = ImpactProfile.call(method)
-		if _assert(profile != null, "ImpactProfile.%s() non-null" % method):
+	var profiles: Array[ImpactProfile] = [
+		ImpactProfile.create_bullet(),
+		ImpactProfile.create_shotgun(),
+		ImpactProfile.create_explosion(),
+		ImpactProfile.create_melee(),
+		ImpactProfile.create_arrow(),
+	]
+	var profile_names := ["bullet", "shotgun", "explosion", "melee", "arrow"]
+	for i in profiles.size():
+		var p := profiles[i]
+		var n := profile_names[i]
+		if _assert(p != null, "ImpactProfile.create_%s() non-null" % n):
 			passed += 1
 		else:
 			failed += 1
-		if _assert(profile.base_impulse > 0.0, "ImpactProfile.%s() positive impulse" % method):
+		if _assert(p.base_impulse > 0.0, "ImpactProfile.create_%s() positive impulse" % n):
 			passed += 1
 		else:
 			failed += 1
-		if _assert(profile.strength_reduction > 0.0, "ImpactProfile.%s() positive reduction" % method):
+		if _assert(p.strength_reduction > 0.0, "ImpactProfile.create_%s() positive reduction" % n):
 			passed += 1
 		else:
 			failed += 1
-		if _assert(profile.recovery_rate > 0.0, "ImpactProfile.%s() positive recovery" % method):
+		if _assert(p.recovery_rate > 0.0, "ImpactProfile.create_%s() positive recovery" % n):
 			passed += 1
 		else:
 			failed += 1
