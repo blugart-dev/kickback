@@ -56,6 +56,7 @@ var _injuries: Dictionary = {}  # rig_name → float (0.0-1.0, persistent damage
 var _prev_com: Vector3 = Vector3.ZERO
 var _com_velocity: Vector3 = Vector3.ZERO
 var _com_initialized: bool = false
+var _sway_phase: float = 0.0
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -652,6 +653,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 
 	_stagger_hit_dir = hit_dir
 	_com_initialized = false
+	_sway_phase = randf() * TAU
 	_spring.recovery_rate = _tuning.stagger_recovery_rate
 
 	if _tuning.brace_strength_bonus > 0.0:
@@ -1004,21 +1006,34 @@ func _apply_stagger_sway(_delta: float) -> void:
 	if not hips:
 		return
 
-	# Oscillation: sin wave creates back-and-forth in hit direction
-	var osc := sin(_stagger_elapsed * _tuning.stagger_sway_frequency * TAU)
+	var freq := _tuning.stagger_sway_frequency
+	var t := _stagger_elapsed + _sway_phase
+
+	# Layered oscillation: two sin waves at irrational frequency ratio (never sync)
+	var osc_primary := sin(t * freq * TAU)
+	var osc_secondary := sin(t * freq * _tuning.stagger_sway_secondary_ratio * TAU) * _tuning.stagger_sway_drift
 
 	# Quadratic decay: strong at start, fades over stagger duration
 	var progress := clampf(_stagger_elapsed / _tuning.stagger_duration, 0.0, 1.0)
 	var decay := (1.0 - progress) * (1.0 - progress)
 
-	# Force vector: oscillates in hit direction
-	var force := _stagger_hit_dir * _tuning.stagger_sway_strength * osc * decay
+	# Perpendicular drift: figure-8-like sway instead of straight back-and-forth
+	var perp := _stagger_hit_dir.cross(Vector3.UP).normalized()
+	var force := (_stagger_hit_dir * osc_primary + perp * osc_secondary) * _tuning.stagger_sway_strength * decay
 
-	# Apply to core bones (decreasing intensity up the chain)
+	# Apply force to core bones (decreasing intensity up the chain)
 	hips.apply_central_force(force)
 	var spine: RigidBody3D = bodies.get("Spine")
 	if spine:
-		spine.apply_central_force(force * 0.7)
+		spine.apply_central_force(force * _tuning.stagger_sway_spine_falloff)
 	var chest: RigidBody3D = bodies.get("Chest")
 	if chest:
-		chest.apply_central_force(force * 0.5)
+		chest.apply_central_force(force * _tuning.stagger_sway_chest_falloff)
+
+	# Upper body twist: independent torso rotation at a third frequency
+	var twist_osc := sin(t * freq * _tuning.stagger_sway_twist_ratio * TAU)
+	var torque := Vector3.UP * _tuning.stagger_sway_strength * twist_osc * decay * _tuning.stagger_sway_twist
+	if spine:
+		spine.apply_torque(torque)
+	if chest:
+		chest.apply_torque(torque * _tuning.stagger_sway_chest_falloff)

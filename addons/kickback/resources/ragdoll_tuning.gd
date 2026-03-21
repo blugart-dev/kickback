@@ -25,6 +25,21 @@ extends Resource
 @export_range(0.0, 1000.0) var stagger_sway_strength: float = 300.0
 ## Oscillation frequency of the sway force (Hz). Higher = faster wobble.
 @export_range(0.5, 5.0) var stagger_sway_frequency: float = 1.5
+## Perpendicular drift amount relative to primary sway. 0.0 = straight back-and-forth,
+## 1.0 = equal perpendicular wobble (figure-8 pattern).
+@export_range(0.0, 1.0) var stagger_sway_drift: float = 0.4
+## Upper body twist intensity relative to sway force.
+## 0.0 = no independent twist. Higher = more visible torso rotation.
+@export_range(0.0, 0.5) var stagger_sway_twist: float = 0.15
+## Frequency ratio for secondary oscillation (perpendicular drift).
+## Irrational values (1.73, 2.37) prevent repeating patterns. Integer values create synchronized wobble.
+@export_range(0.5, 5.0) var stagger_sway_secondary_ratio: float = 1.73
+## Frequency ratio for upper body twist oscillation.
+@export_range(0.5, 5.0) var stagger_sway_twist_ratio: float = 2.17
+## Spine force/torque as fraction of Hips force. Lower = less spine involvement.
+@export_range(0.0, 1.0) var stagger_sway_spine_falloff: float = 0.7
+## Chest force/torque as fraction of Hips force. Lower = less chest involvement.
+@export_range(0.0, 1.0) var stagger_sway_chest_falloff: float = 0.5
 ## Multiplier on ragdoll_probability when hit during active stagger.
 @export_range(1.0, 5.0) var stagger_ragdoll_bonus: float = 1.5
 ## Extra strength ratio applied to brace-side bones during stagger.

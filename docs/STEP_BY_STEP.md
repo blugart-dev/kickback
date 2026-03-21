@@ -582,6 +582,14 @@ sustained tug-of-war that makes stagger visible.
 
 New tuning: `stagger_sway_strength` (300N), `stagger_sway_frequency` (1.5Hz).
 
+**Organic sway**: Replaced mechanical sin-wave with layered oscillation —
+primary + secondary at irrational frequency ratios (never repeats), perpendicular
+drift for figure-8 wobble pattern, independent upper body twist torque on
+Spine/Chest, per-stagger random phase offset. All parameters fully configurable:
+`stagger_sway_drift` (0.4), `stagger_sway_twist` (0.15),
+`stagger_sway_secondary_ratio` (1.73), `stagger_sway_twist_ratio` (2.17),
+`stagger_sway_spine_falloff` (0.7), `stagger_sway_chest_falloff` (0.5).
+
 **Stagger recovery rate**: Separate `stagger_recovery_rate` (0.03/s) suppresses
 natural spring recovery during stagger so Active Resistance is the sole driver
 of strength changes. Normal rate (0.3/s) restored on stagger exit.

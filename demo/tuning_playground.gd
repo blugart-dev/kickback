@@ -110,6 +110,12 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "stagger_floor", 0.05, 0.5, _tuning.stagger_strength_floor)
 	_add_slider(panel, "sway_strength", 0.0, 1000.0, _tuning.stagger_sway_strength)
 	_add_slider(panel, "sway_frequency", 0.5, 5.0, _tuning.stagger_sway_frequency)
+	_add_slider(panel, "sway_drift", 0.0, 1.0, _tuning.stagger_sway_drift)
+	_add_slider(panel, "sway_twist", 0.0, 0.5, _tuning.stagger_sway_twist)
+	_add_slider(panel, "sway_secondary", 0.5, 5.0, _tuning.stagger_sway_secondary_ratio)
+	_add_slider(panel, "sway_twist_ratio", 0.5, 5.0, _tuning.stagger_sway_twist_ratio)
+	_add_slider(panel, "sway_spine", 0.0, 1.0, _tuning.stagger_sway_spine_falloff)
+	_add_slider(panel, "sway_chest", 0.0, 1.0, _tuning.stagger_sway_chest_falloff)
 	_add_slider(panel, "stagger_recovery", 0.0, 0.5, _tuning.stagger_recovery_rate)
 
 	_add_section(panel, "ACTIVE RESISTANCE")
@@ -193,6 +199,12 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 		"stagger_floor": _tuning.stagger_strength_floor = value
 		"sway_strength": _tuning.stagger_sway_strength = value
 		"sway_frequency": _tuning.stagger_sway_frequency = value
+		"sway_drift": _tuning.stagger_sway_drift = value
+		"sway_twist": _tuning.stagger_sway_twist = value
+		"sway_secondary": _tuning.stagger_sway_secondary_ratio = value
+		"sway_twist_ratio": _tuning.stagger_sway_twist_ratio = value
+		"sway_spine": _tuning.stagger_sway_spine_falloff = value
+		"sway_chest": _tuning.stagger_sway_chest_falloff = value
 		"stagger_recovery": _tuning.stagger_recovery_rate = value
 		"counter_strength": _tuning.resistance_counter_strength = value
 		"core_ramp": _tuning.resistance_core_ramp = value

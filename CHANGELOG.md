@@ -5,8 +5,9 @@
 ### Added
 - **Active Resistance** — during stagger, per-bone spring strengths dynamically adjust every physics frame based on center-of-mass position and velocity. Counter-side bones stiffen to pull balance back, core engages progressively as balance worsens, load-bearing leg braces as a pillar. Characters visibly fight to stay upright. New tuning: `resistance_counter_strength`, `resistance_core_ramp`, `resistance_leg_brace`, `resistance_velocity_spike`, `resistance_velocity_scale`.
 - **Stagger sway force** — continuous oscillating force applied to core bones (Hips/Spine/Chest) during stagger. Springs fight this force, producing visible back-and-forth wobble. Quadratic decay over stagger duration. New tuning: `stagger_sway_strength` (300N default), `stagger_sway_frequency` (1.5Hz).
+- **Organic sway** — layered oscillation at irrational frequency ratios (never repeats), perpendicular drift for figure-8 wobble, independent upper body twist torque, per-stagger random phase. Fully configurable: `stagger_sway_drift`, `stagger_sway_twist`, `stagger_sway_secondary_ratio`, `stagger_sway_twist_ratio`, `stagger_sway_spine_falloff`, `stagger_sway_chest_falloff`.
 - **Stagger recovery rate** — separate spring recovery rate during stagger, suppressing natural recovery so Active Resistance becomes the primary driver. New tuning: `stagger_recovery_rate` (0.03/s default, vs 0.3/s normal).
-- **Tuning playground sliders** — 6 new sliders: sway strength, sway frequency, stagger recovery, counter strength, core ramp, leg brace.
+- **Tuning playground sliders** — 14 new sliders covering sway (8), stagger recovery, and active resistance (3+2).
 
 ### Changed
 - **Stagger defaults retuned** — `stagger_threshold` 0.55 → 0.70 (triggers more easily), `stagger_duration` 0.6 → 1.8s (longer wobble), `stagger_strength_floor` 0.35 → 0.10 (deeper sway, more contrast with resistance).
