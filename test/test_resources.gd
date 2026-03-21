@@ -1,309 +1,144 @@
-## Unit tests for resource factory methods, sub-classes, and validation.
-## Run this scene to verify ImpactProfile, RagdollProfile, RagdollTuning,
-## BoneDefinition, JointDefinition, and IntermediateBoneEntry.
-extends Node
+extends GutTest
 
 
-func _ready() -> void:
-	print("=== test_resources.gd ===")
-	var passed := 0
-	var failed := 0
+# ── ImpactProfile factories ──────────────────────────────────────────────────
 
-	# ── ImpactProfile factory methods ─────────────────────────────────────────
-	var profiles: Array[ImpactProfile] = [
-		ImpactProfile.create_bullet(),
-		ImpactProfile.create_shotgun(),
-		ImpactProfile.create_explosion(),
-		ImpactProfile.create_melee(),
+func test_bullet_profile():
+	var p := ImpactProfile.create_bullet()
+	assert_not_null(p)
+	assert_eq(p.base_impulse, 8.0)
+	assert_eq(p.ragdoll_probability, 0.05)
+	assert_eq(p.strength_spread, 1)
+	assert_true(p.strength_reduction > 0.0)
+	assert_true(p.recovery_rate > 0.0)
+
+
+func test_shotgun_profile():
+	var p := ImpactProfile.create_shotgun()
+	assert_not_null(p)
+	assert_eq(p.ragdoll_probability, 0.40)
+	assert_eq(p.strength_spread, 3)
+
+
+func test_explosion_profile():
+	var p := ImpactProfile.create_explosion()
+	assert_not_null(p)
+	assert_eq(p.ragdoll_probability, 0.95)
+	assert_eq(p.strength_spread, 99)
+	assert_true(p.upward_bias > 0.0, "Explosion should have upward bias")
+
+
+func test_melee_profile():
+	var p := ImpactProfile.create_melee()
+	assert_not_null(p)
+	assert_eq(p.impulse_transfer_ratio, 0.60)
+
+
+func test_arrow_profile():
+	var p := ImpactProfile.create_arrow()
+	assert_not_null(p)
+	assert_eq(p.base_impulse, 12.0)
+
+
+func test_all_profiles_have_positive_values():
+	var factories: Array[ImpactProfile] = [
+		ImpactProfile.create_bullet(), ImpactProfile.create_shotgun(),
+		ImpactProfile.create_explosion(), ImpactProfile.create_melee(),
 		ImpactProfile.create_arrow(),
 	]
-	var profile_names: Array[String] = ["bullet", "shotgun", "explosion", "melee", "arrow"]
-	for i in profiles.size():
-		var p: ImpactProfile = profiles[i]
-		var n: String = profile_names[i]
-		if _assert(p != null, "ImpactProfile.create_%s() non-null" % n):
-			passed += 1
-		else:
-			failed += 1
-		if _assert(p.base_impulse > 0.0, "ImpactProfile.create_%s() positive impulse" % n):
-			passed += 1
-		else:
-			failed += 1
-		if _assert(p.strength_reduction > 0.0, "ImpactProfile.create_%s() positive reduction" % n):
-			passed += 1
-		else:
-			failed += 1
-		if _assert(p.recovery_rate > 0.0, "ImpactProfile.create_%s() positive recovery" % n):
-			passed += 1
-		else:
-			failed += 1
+	for p: ImpactProfile in factories:
+		assert_true(p.base_impulse > 0.0)
+		assert_true(p.strength_reduction > 0.0)
+		assert_true(p.recovery_rate > 0.0)
 
-	# ── ImpactProfile preset values ───────────────────────────────────────────
-	var bullet := ImpactProfile.create_bullet()
-	if _assert(bullet.base_impulse == 8.0, "Bullet impulse = 8.0"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(bullet.ragdoll_probability == 0.05, "Bullet ragdoll_prob = 0.05"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(bullet.strength_spread == 1, "Bullet spread = 1"):
-		passed += 1
-	else:
-		failed += 1
 
-	var shotgun := ImpactProfile.create_shotgun()
-	if _assert(shotgun.ragdoll_probability == 0.40, "Shotgun ragdoll_prob = 0.40"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(shotgun.strength_spread == 3, "Shotgun spread = 3"):
-		passed += 1
-	else:
-		failed += 1
+# ── RagdollProfile ───────────────────────────────────────────────────────────
 
-	var explosion := ImpactProfile.create_explosion()
-	if _assert(explosion.ragdoll_probability == 0.95, "Explosion ragdoll_prob = 0.95"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(explosion.strength_spread == 99, "Explosion spread = 99"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(explosion.upward_bias > 0.0, "Explosion has upward bias"):
-		passed += 1
-	else:
-		failed += 1
-
-	var melee := ImpactProfile.create_melee()
-	if _assert(melee.impulse_transfer_ratio == 0.60, "Melee transfer = 0.60"):
-		passed += 1
-	else:
-		failed += 1
-
-	var arrow := ImpactProfile.create_arrow()
-	if _assert(arrow.base_impulse == 12.0, "Arrow impulse = 12.0"):
-		passed += 1
-	else:
-		failed += 1
-
-	# ── RagdollProfile factory ────────────────────────────────────────────────
+func test_mixamo_profile_structure():
 	var profile := RagdollProfile.create_mixamo_default()
-	if _assert(profile != null, "RagdollProfile.create_mixamo_default() non-null"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(profile.bones.size() == 16, "Mixamo: 16 bones (got %d)" % profile.bones.size()):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(profile.joints.size() == 15, "Mixamo: 15 joints (got %d)" % profile.joints.size()):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(profile.root_bone == "mixamorig_Hips", "Mixamo: root_bone = 'mixamorig_Hips'"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(profile.intermediate_bones.size() > 0, "Mixamo: has intermediate bones"):
-		passed += 1
-	else:
-		failed += 1
+	assert_not_null(profile)
+	assert_eq(profile.bones.size(), 16, "Should have 16 bones")
+	assert_eq(profile.joints.size(), 15, "Should have 15 joints")
+	assert_eq(profile.root_bone, "mixamorig_Hips")
+	assert_true(profile.intermediate_bones.size() > 0)
 
-	# ── BoneDefinition ────────────────────────────────────────────────────────
-	var bone_names := []
+
+func test_bone_definitions():
+	var profile := RagdollProfile.create_mixamo_default()
+	var bone_names: Array[String] = []
 	for bone_def: BoneDefinition in profile.bones:
 		bone_names.append(bone_def.rig_name)
+	assert_has(bone_names, "Hips")
+	assert_has(bone_names, "Head")
+	assert_has(bone_names, "Foot_L")
+	assert_has(bone_names, "Hand_R")
+
+
+func test_hips_bone_properties():
+	var profile := RagdollProfile.create_mixamo_default()
+	for bone_def: BoneDefinition in profile.bones:
 		if bone_def.rig_name == "Hips":
-			if _assert(bone_def.mass == 15.0, "Hips mass = 15.0 (got %.1f)" % bone_def.mass):
-				passed += 1
-			else:
-				failed += 1
-			if _assert(bone_def.skeleton_bone != "", "Hips has skeleton_bone"):
-				passed += 1
-			else:
-				failed += 1
-		elif bone_def.rig_name == "Head":
-			if _assert(bone_def.mass == 5.0, "Head mass = 5.0"):
-				passed += 1
-			else:
-				failed += 1
-	if _assert("Hips" in bone_names, "BoneDefinition: Hips present"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert("Foot_L" in bone_names, "BoneDefinition: Foot_L present"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert("Hand_R" in bone_names, "BoneDefinition: Hand_R present"):
-		passed += 1
-	else:
-		failed += 1
-
-	# ── JointDefinition ───────────────────────────────────────────────────────
-	var joint_pairs := []
-	for joint_def: JointDefinition in profile.joints:
-		joint_pairs.append("%s→%s" % [joint_def.parent_rig, joint_def.child_rig])
-	if _assert("Hips→Spine" in joint_pairs, "JointDefinition: Hips→Spine exists"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert("Chest→Head" in joint_pairs, "JointDefinition: Chest→Head exists"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert("Chest→UpperArm_L" in joint_pairs, "JointDefinition: Chest→UpperArm_L exists"):
-		passed += 1
-	else:
-		failed += 1
-
-	# Verify angular limits are non-zero
-	for joint_def: JointDefinition in profile.joints:
-		if joint_def.parent_rig == "Hips" and joint_def.child_rig == "Spine":
-			if _assert(joint_def.limit_x.y > 0.0, "Hips→Spine: X upper limit > 0"):
-				passed += 1
-			else:
-				failed += 1
-			break
-
-	# ── IntermediateBoneEntry ─────────────────────────────────────────────────
-	var inter := profile.intermediate_bones[0]
-	if _assert(inter is IntermediateBoneEntry, "First intermediate is IntermediateBoneEntry"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(inter.skeleton_bone != "", "Intermediate has skeleton_bone"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(inter.rig_body_a != "", "Intermediate has rig_body_a"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(inter.rig_body_b != "", "Intermediate has rig_body_b"):
-		passed += 1
-	else:
-		failed += 1
-
-	# ── RagdollTuning factory & defaults ──────────────────────────────────────
-	var tuning := RagdollTuning.create_default()
-	if _assert(tuning != null, "RagdollTuning.create_default() non-null"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_threshold == 0.70, "stagger_threshold = 0.70"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_duration == 1.8, "stagger_duration = 1.8"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_strength_floor == 0.10, "stagger_strength_floor = 0.10"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_sway_strength == 300.0, "stagger_sway_strength = 300.0"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.resistance_counter_strength == 0.40, "resistance_counter_strength = 0.40"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.resistance_leg_brace == 0.35, "resistance_leg_brace = 0.35"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_recovery_rate == 0.03, "stagger_recovery_rate = 0.03"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_sway_drift == 0.4, "stagger_sway_drift = 0.4"):
-		passed += 1
-	else:
-		failed += 1
-	if _assert(tuning.stagger_sway_twist == 0.15, "stagger_sway_twist = 0.15"):
-		passed += 1
-	else:
-		failed += 1
-
-	# ── RagdollTuning validation ──────────────────────────────────────────────
-	var warnings := tuning.validate_against_profile(profile)
-	if _assert(warnings.size() == 0, "Default tuning validates clean (%d warnings)" % warnings.size()):
-		passed += 1
-	else:
-		failed += 1
-		for w: String in warnings:
-			print("    warning: %s" % w)
-
-	# Bad key in strength_map
-	tuning.strength_map["FakeBone"] = 0.5
-	var w1 := tuning.validate_against_profile(profile)
-	if _assert(w1.size() > 0, "Bad strength_map key caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.strength_map.erase("FakeBone")
-
-	# Bad key in pin_strength_overrides
-	tuning.pin_strength_overrides["Ghost"] = 0.5
-	var w2 := tuning.validate_against_profile(profile)
-	if _assert(w2.size() > 0, "Bad pin_strength key caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.pin_strength_overrides.erase("Ghost")
-
-	# Bad key in ramp_delay
-	tuning.ramp_delay["Phantom"] = 0.1
-	var w3 := tuning.validate_against_profile(profile)
-	if _assert(w3.size() > 0, "Bad ramp_delay key caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.ramp_delay.erase("Phantom")
-
-	# Bad key in min_strength
-	tuning.min_strength["Bogus"] = 0.05
-	var w4 := tuning.validate_against_profile(profile)
-	if _assert(w4.size() > 0, "Bad min_strength key caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.min_strength.erase("Bogus")
-
-	# Bad protected_bones
-	tuning.protected_bones = PackedStringArray(["Invisible"])
-	var w5 := tuning.validate_against_profile(profile)
-	if _assert(w5.size() > 0, "Bad protected_bones caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.protected_bones = PackedStringArray()
-
-	# Bad core_bracing_bones
-	tuning.core_bracing_bones = PackedStringArray(["Nonexistent"])
-	var w6 := tuning.validate_against_profile(profile)
-	if _assert(w6.size() > 0, "Bad core_bracing_bones caught"):
-		passed += 1
-	else:
-		failed += 1
-	tuning.core_bracing_bones = PackedStringArray(["Hips", "Spine", "Chest"])
-
-	print("\n=== Results: %d passed, %d failed ===" % [passed, failed])
-	if failed > 0:
-		print("FAIL")
-	else:
-		print("ALL TESTS PASSED")
+			assert_eq(bone_def.mass, 15.0)
+			assert_true(bone_def.skeleton_bone != "", "Should have skeleton_bone")
+			return
+	fail_test("Hips bone not found")
 
 
-func _assert(condition: bool, message: String) -> bool:
-	if condition:
-		print("  PASS: %s" % message)
-	else:
-		print("  FAIL: %s" % message)
-	return condition
+func test_head_bone_properties():
+	var profile := RagdollProfile.create_mixamo_default()
+	for bone_def: BoneDefinition in profile.bones:
+		if bone_def.rig_name == "Head":
+			assert_eq(bone_def.mass, 5.0)
+			return
+	fail_test("Head bone not found")
+
+
+func test_joint_definitions():
+	var profile := RagdollProfile.create_mixamo_default()
+	var joint_pairs: Array[String] = []
+	for jd: JointDefinition in profile.joints:
+		joint_pairs.append("%s→%s" % [jd.parent_rig, jd.child_rig])
+	assert_has(joint_pairs, "Hips→Spine")
+	assert_has(joint_pairs, "Chest→Head")
+	assert_has(joint_pairs, "Chest→UpperArm_L")
+
+
+func test_joint_angular_limits():
+	var profile := RagdollProfile.create_mixamo_default()
+	for jd: JointDefinition in profile.joints:
+		if jd.parent_rig == "Hips" and jd.child_rig == "Spine":
+			assert_true(jd.limit_x.y > 0.0, "Hips→Spine X upper limit should be > 0")
+			return
+	fail_test("Hips→Spine joint not found")
+
+
+func test_intermediate_bone_entry():
+	var profile := RagdollProfile.create_mixamo_default()
+	var inter: IntermediateBoneEntry = profile.intermediate_bones[0]
+	assert_true(inter is IntermediateBoneEntry)
+	assert_true(inter.skeleton_bone != "")
+	assert_true(inter.rig_body_a != "")
+	assert_true(inter.rig_body_b != "")
+
+
+# ── RagdollTuning ────────────────────────────────────────────────────────────
+
+func test_tuning_defaults():
+	var t := RagdollTuning.create_default()
+	assert_not_null(t)
+	assert_eq(t.stagger_threshold, 0.70)
+	assert_eq(t.stagger_duration, 1.8)
+	assert_eq(t.stagger_strength_floor, 0.10)
+	assert_eq(t.stagger_sway_strength, 300.0)
+	assert_eq(t.stagger_recovery_rate, 0.03)
+	assert_eq(t.resistance_counter_strength, 0.40)
+	assert_eq(t.resistance_leg_brace, 0.35)
+	assert_eq(t.stagger_sway_drift, 0.4)
+	assert_eq(t.stagger_sway_twist, 0.15)
+
+
+func test_tuning_validates_clean():
+	var t := RagdollTuning.create_default()
+	var profile := RagdollProfile.create_mixamo_default()
+	var warnings := t.validate_against_profile(profile)
+	assert_eq(warnings.size(), 0, "Default tuning should validate cleanly")

@@ -12,11 +12,17 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ## Running Tests
 
+Tests use the [GUT](https://github.com/bitwes/Gut) framework (included in `addons/gut/`).
+
+**From command line (headless):**
 ```bash
-godot --headless --path . --script test/run_all_tests.gd
+godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit
 ```
 
-All 167 assertions should pass. Tests run without rendering (headless mode).
+**From the Godot editor:**
+Enable the GUT plugin in Project Settings > Plugins, then use the GUT panel at the bottom of the editor.
+
+All tests should pass. Tests run without rendering (headless mode) and are executed automatically by CI on every push and PR.
 
 ## Code Conventions
 
