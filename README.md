@@ -1,5 +1,9 @@
 # Kickback
 
+[![Tests](https://github.com/blugart-dev/kickback/actions/workflows/tests.yml/badge.svg)](https://github.com/blugart-dev/kickback/actions/workflows/tests.yml)
+[![Godot 4.6+](https://img.shields.io/badge/Godot-4.6%2B-blue?logo=godot-engine)](https://godotengine.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 **Physics-based reactive characters for Godot 4.6+**
 
 Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Characters react dynamically to gunshots, explosions, melee hits, and arrows using active ragdoll physics — every hit produces a unique, physically-driven reaction.

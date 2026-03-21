@@ -1,0 +1,97 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix the issue.
+
+  - type: input
+    id: godot-version
+    attributes:
+      label: Godot Version
+      description: e.g. 4.6.1
+      placeholder: "4.6.1"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g. Windows 11, macOS 15, Ubuntu 24.04
+      placeholder: "Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: physics-engine
+    attributes:
+      label: Physics Engine
+      options:
+        - Jolt Physics
+        - GodotPhysics (not supported)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Kickback Mode
+      options:
+        - Active Ragdoll
+        - Partial Ragdoll
+        - Both / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this bug?
+      placeholder: |
+        1. Open demo scene X
+        2. Click on character
+        3. See unexpected behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: demo-scene
+    attributes:
+      label: Demo Scene (if applicable)
+      options:
+        - N/A (custom scene)
+        - demo.tscn
+        - shooting_range.tscn
+        - signal_showcase.tscn
+        - tuning_playground.tscn
+        - stress_test.tscn
+        - animated_npc.tscn
+        - ball_throw.tscn
+        - tuning_presets.tscn
+        - protected_bones.tscn
+        - euphoria_showcase.tscn
+
+  - type: textarea
+    id: tuning
+    attributes:
+      label: Custom Tuning (if any)
+      description: List any RagdollTuning properties you changed from defaults
+      placeholder: "stagger_sway_strength = 500, resistance_counter_strength = 0.6"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Paste relevant console output or attach screenshots

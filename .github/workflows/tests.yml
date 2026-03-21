@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.6.1
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.6.1-stable_linux.x86_64.zip
+          chmod +x Godot_v4.6.1-stable_linux.x86_64
+          mv Godot_v4.6.1-stable_linux.x86_64 godot
+
+      - name: Import project
+        run: |
+          ./godot --headless --import --path . 2>&1 || true
+          # Import may "fail" on first run but generates .godot/ cache
+
+      - name: Run tests
+        run: |
+          OUTPUT=$(./godot --headless --path . --script test/run_all_tests.gd 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "FAIL"; then
+            echo "::error::Tests failed!"
+            exit 1
+          fi
+          echo "All tests passed."

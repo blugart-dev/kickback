@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for Kickback? We'd love to hear it.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What feature would you like to see?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Why do you need this? What problem does it solve?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Stagger / Hit Reactions
+        - Ragdoll / Recovery
+        - Active Resistance / Balance
+        - Partial Ragdoll
+        - Editor Tooling
+        - Demo Scenes
+        - Documentation
+        - Performance
+        - Other
+
+  - type: textarea
+    id: euphoria-reference
+    attributes:
+      label: Euphoria Reference (optional)
+      description: If this relates to a NaturalMotion Euphoria behavior, describe or link a reference
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Proposed Implementation (optional)
+      description: If you have ideas on how this could work technically
