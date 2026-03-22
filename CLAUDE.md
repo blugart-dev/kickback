@@ -105,6 +105,29 @@ kickback/
 - Collision: layer 4 (active ragdoll), layer 5 (partial ragdoll)
 - Setup tool offers presets: "Active Ragdoll" or "Partial Ragdoll"
 
+## character_root_path architecture
+- `character_root_path` on KickbackCharacter and ActiveRagdollController must point to the gameplay root (the node that represents the character's world position)
+- The setup tool defaults to `..` assuming Kickback nodes are direct children of the character root
+- If Kickback nodes are inside a model sub-scene, override the path to reach the actual gameplay root (e.g., `../../MyCharacter`)
+- Recovery teleports this node to the ragdoll landing position — pointing to the wrong node breaks character positioning
+
+## CharacterBody3D integration
+
+Kickback demos use Node3D roots. If your character uses CharacterBody3D:
+
+- **Stop calling `move_and_slide()`** during RAGDOLL/GETTING_UP/PERSISTENT states — the physics rig drives position
+- **Disable the CharacterBody3D collision shape** during reactions, re-enable after `recovery_finished`
+- **Set `transfer_character_velocity = false`** in RagdollTuning if enemies walk toward threats (prevents ragdoll launching forward)
+- **Use `get_active_state()`** to distinguish states for collision/movement logic:
+  ```gdscript
+  match kickback.get_active_state():
+      ActiveRagdollController.State.RAGDOLL, \
+      ActiveRagdollController.State.GETTING_UP, \
+      ActiveRagdollController.State.PERSISTENT:
+          return  # Ragdoll is driving — skip movement
+  ```
+- **Use `RagdollTuning.create_game_default()`** for amplified reactions suited to fast-paced games
+
 ## Locomotion with active ragdoll
 - **All root movement and rotation MUST happen in `_physics_process`**, not `_process`. The spring resolver runs in `_physics_process` — modifying the root in `_process` causes spring targets to jump.
 - Play animations once on state transitions, not every frame.

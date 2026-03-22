@@ -40,6 +40,17 @@ func is_active() -> bool:
 	return _active
 
 
+## Forces an immediate skeleton sync outside the normal _process() cycle.
+## Call after teleporting the character root and restoring body transforms
+## to prevent a 1-frame visual pop.
+func sync_now() -> void:
+	if not _active or not _rig_builder or not _skeleton:
+		return
+	if not _cache_built:
+		_build_cache()
+	_do_sync()
+
+
 func _build_cache() -> void:
 	if not _profile:
 		_profile = RagdollProfile.create_mixamo_default()
@@ -70,10 +81,12 @@ func _build_cache() -> void:
 func _process(_delta: float) -> void:
 	if not _active or not _rig_builder or not _skeleton:
 		return
-
 	if not _cache_built:
 		_build_cache()
+	_do_sync()
 
+
+func _do_sync() -> void:
 	var skel_global_inv := _skeleton.global_transform.affine_inverse()
 
 	# Direct sync: body transform IS the bone transform

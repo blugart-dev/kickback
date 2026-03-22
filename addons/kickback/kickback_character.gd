@@ -17,7 +17,10 @@ enum Mode {
 @export var skeleton_path: NodePath
 ## Path to the AnimationPlayer (optional — only needed if using RagdollAnimator).
 @export var animation_player_path: NodePath
-## Path to the character's root Node3D.
+## Path to the character's root Node3D (gameplay root, not model sub-node).
+## This node is teleported during ragdoll recovery. The setup tool defaults to
+## ".." assuming Kickback nodes are direct children of the character root. If
+## nodes are inside a model sub-scene, override to reach the actual gameplay root.
 @export var character_root_path: NodePath
 
 @export_group("Configuration")
@@ -186,6 +189,14 @@ func get_active_state_name() -> String:
 	if _active_controller:
 		return _active_controller.get_state_name()
 	return "N/A"
+
+
+## Returns the active ragdoll state as an [enum ActiveRagdollController.State] int.
+## Returns -1 if no active controller is present.
+func get_active_state() -> int:
+	if _active_controller:
+		return _active_controller.get_state()
+	return -1
 
 
 ## Returns true if the Kickback system has finished initializing.

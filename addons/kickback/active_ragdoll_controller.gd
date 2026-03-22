@@ -26,7 +26,12 @@ const _MOVEMENT_VELOCITY_THRESHOLD_SQ := 0.25  # (0.5 m/s)^2
 ## Path to the PhysicsRigBuilder that owns the ragdoll RigidBody3D nodes.
 @export var rig_builder_path: NodePath
 ## Path to the character root Node3D for repositioning during get-up recovery.
+## Must point to the gameplay root (e.g., CharacterBody3D or top-level Node3D),
+## NOT a model sub-node. The setup tool defaults to ".." assuming Kickback nodes
+## are direct children of the character root.
 @export var character_root_path: NodePath
+## Path to PhysicsRigSync for forcing skeleton updates after recovery teleport.
+@export var rig_sync_path: NodePath
 
 ## Character state for the active ragdoll lifecycle.
 enum State {
@@ -40,6 +45,7 @@ enum State {
 var _spring: SpringResolver
 var _rig_builder: PhysicsRigBuilder
 var _character_root: Node3D
+var _rig_sync: PhysicsRigSync
 var _adjacency: Dictionary = {}
 var _protected_set: Dictionary = {}  # Cached O(1) lookup for protected bones
 var _state: int = State.NORMAL
@@ -102,6 +108,8 @@ func _ready() -> void:
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
 	if not character_root_path.is_empty():
 		_character_root = get_node(character_root_path) as Node3D
+	if not rig_sync_path.is_empty():
+		_rig_sync = get_node(rig_sync_path) as PhysicsRigSync
 	_ensure_config()
 	_build_adjacency()
 	_rebuild_protected_set()
@@ -541,11 +549,12 @@ func _full_ragdoll() -> void:
 		_spring.set_bone_strength(rig_name, 0.0)
 
 	# Transfer character movement velocity to physics bodies
-	var char_velocity := _get_character_velocity()
-	if char_velocity.length_squared() > 0.01:
-		var bodies := _rig_builder.get_bodies()
-		for body: RigidBody3D in bodies.values():
-			body.linear_velocity += char_velocity
+	if _tuning.transfer_character_velocity:
+		var char_velocity := _get_character_velocity() * _tuning.velocity_transfer_scale
+		if char_velocity.length_squared() > 0.01:
+			var bodies := _rig_builder.get_bodies()
+			for body: RigidBody3D in bodies.values():
+				body.linear_velocity += char_velocity
 
 	_state = State.RAGDOLL
 	_ragdoll_elapsed = 0.0
@@ -631,6 +640,10 @@ func _start_recovery() -> void:
 
 	_ragdoll_poses = saved_transforms.duplicate()
 	recovery_started.emit(face_up)
+
+	# Force skeleton sync to prevent 1-frame visual pop after root teleport
+	if _rig_sync:
+		_rig_sync.sync_now()
 
 
 func _finish_recovery() -> void:
@@ -844,6 +857,10 @@ func _sync_injuries_to_resolver() -> void:
 		_spring.set_pin_injury(rig_name, _injuries[rig_name])
 
 
+## Returns the character root's movement velocity for ragdoll momentum transfer.
+## Reads CharacterBody3D.velocity automatically, or calls get_velocity() if present.
+## For CharacterBody3D enemies that walk toward the player, set
+## transfer_character_velocity = false in RagdollTuning to prevent forward-launching.
 func _get_character_velocity() -> Vector3:
 	if not _character_root:
 		return Vector3.ZERO

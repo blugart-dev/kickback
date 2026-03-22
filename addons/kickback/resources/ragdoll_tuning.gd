@@ -267,6 +267,11 @@ extends Resource
 @export var max_angular_velocity: float = 20.0
 ## Maximum linear velocity for spring-driven bodies.
 @export var max_linear_velocity: float = 10.0
+## Transfer the character's movement velocity to ragdoll bodies on ragdoll entry.
+## Disable for enemies walking toward the player to prevent forward-launching.
+@export var transfer_character_velocity: bool = true
+## Scale factor for velocity transfer (0.0–1.0). Only used when transfer is enabled.
+@export_range(0.0, 1.0) var velocity_transfer_scale: float = 1.0
 ## How long bodies must be below velocity thresholds to count as settled.
 @export var settle_duration: float = 0.6
 ## Linear velocity threshold for settle detection.
@@ -284,7 +289,8 @@ extends Resource
 
 @export_group("Advanced: Ground & Root Motion")
 ## Collision mask for ground raycasts during get-up recovery.
-@export_flags_3d_physics var ground_raycast_mask: int = 2
+## Defaults to layer 1 (world geometry in standard Godot projects).
+@export_flags_3d_physics var ground_raycast_mask: int = 1
 ## Whether to align the character root to the ground slope during recovery.
 @export var align_to_slope: bool = false
 ## Raycast origin offset above the hip position (meters).
@@ -304,6 +310,22 @@ extends Resource
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:
 	return RagdollTuning.new()
+
+
+## Creates a RagdollTuning for fast-paced action games with amplified reactions.
+## Increases micro-reaction intensity, sway force, and pain escalation
+## for more visible hit feedback compared to the realistic defaults.
+static func create_game_default() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.micro_reaction_strength = 1.2
+	t.micro_head_whip_strength = 3.5
+	t.micro_torso_bend_strength = 2.5
+	t.micro_spin_strength = 2.0
+	t.stagger_sway_strength = 600.0
+	t.reaction_pulse_strength = 0.9
+	t.stagger_duration = 1.2
+	t.pain_gain = 0.35
+	return t
 
 
 ## Validates that all dictionary keys in this tuning reference valid rig names

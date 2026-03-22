@@ -142,3 +142,17 @@ func test_tuning_validates_clean():
 	var profile := RagdollProfile.create_mixamo_default()
 	var warnings := t.validate_against_profile(profile)
 	assert_eq(warnings.size(), 0, "Default tuning should validate cleanly")
+
+
+func test_game_default_tuning():
+	var t := RagdollTuning.create_game_default()
+	assert_not_null(t)
+	assert_gt(t.micro_reaction_strength, 1.0, "Game preset should amplify micro reactions")
+	assert_gt(t.stagger_sway_strength, 500.0, "Game preset should amplify sway")
+	assert_lt(t.stagger_duration, 1.5, "Game preset should have shorter stagger")
+
+
+func test_tuning_velocity_transfer_defaults():
+	var t := RagdollTuning.create_default()
+	assert_true(t.transfer_character_velocity, "Velocity transfer should default to enabled")
+	assert_eq(t.velocity_transfer_scale, 1.0, "Velocity transfer scale should default to 1.0")
