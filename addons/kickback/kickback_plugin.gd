@@ -229,6 +229,7 @@ func _execute_preset(preset_name: String) -> void:
 		active.set("spring_resolver_path", NodePath("../SpringResolver"))
 		active.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
 		active.set("character_root_path", NodePath(".."))
+		active.set("rig_sync_path", NodePath("../PhysicsRigSync"))
 		nodes.append(active)
 
 	if include_partial:
