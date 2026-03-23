@@ -24,14 +24,14 @@ Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full
 <details>
 <summary><strong>Weapon variety</strong> — 5 impact profiles, each producing a distinct reaction</summary>
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="Shooting range with bullet, melee, arrow, shotgun, and explosion impacts" width="640">
+  <img src="https://github.com/user-attachments/assets/4dd92598-ca39-4bae-8eb5-1ef8d7facff0" alt="Shooting range with bullet, melee, arrow, shotgun, and explosion impacts" width="640">
 </p>
 </details>
 
 <details>
 <summary><strong>Game integration</strong> — NPCs walk, get hit, recover, and keep going</summary>
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/4dd92598-ca39-4bae-8eb5-1ef8d7facff0" alt="Ball throw demo — NPCs patrol, react to hits, recover with injuries" width="640">
+  <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="Ball throw demo — NPCs patrol, react to hits, recover with injuries" width="640">
 </p>
 </details>
 
