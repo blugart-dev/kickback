@@ -17,7 +17,23 @@ Run any scene from `demo/` in the Godot editor to see the plugin live:
 
 Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full dashboard).
 
-<!-- To add GIFs: record with OBS/ScreenToGif while running euphoria_showcase.tscn and shooting_range.tscn -->
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b00e73c2-b8a4-4913-b724-f1a1327e10de" alt="Kickback euphoria showcase — stagger, active resistance, pain escalation, injuries" width="960">
+</p>
+
+<details>
+<summary><strong>Weapon variety</strong> — 5 impact profiles, each producing a distinct reaction</summary>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="Shooting range with bullet, melee, arrow, shotgun, and explosion impacts" width="640">
+</p>
+</details>
+
+<details>
+<summary><strong>Game integration</strong> — NPCs walk, get hit, recover, and keep going</summary>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4dd92598-ca39-4bae-8eb5-1ef8d7facff0" alt="Ball throw demo — NPCs patrol, react to hits, recover with injuries" width="640">
+</p>
+</details>
 
 ## Features
 
@@ -37,6 +53,8 @@ Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full
 - **Micro hit reactions** — torso bend, head whip, and spin torque at the moment of impact. Every hit has a visceral split-second reaction.
 - **Regional impairment** — persistent per-bone injury that outlasts spring recovery. Shot in the leg causes visible sag/limp. Shot in the arm makes it dangle. Injuries heal slowly.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
+
+  <img src="https://github.com/user-attachments/assets/55dddf2f-7df1-4c52-8e48-ef6077061cec" alt="Protected vs unprotected bones — same hit, different result" width="640">
 - **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
 - **Skeleton auto-detection** — `SkeletonDetector` identifies humanoid bones in Mixamo, Rigify, Unreal Mannequin, and custom skeletons.
@@ -175,6 +193,9 @@ Use `KickbackRaycast` which targets layers 4+5 automatically.
 ## Debug Tools
 
 - **F3** — Cycle debug gizmos: Off → Dots → Wireframe + state → Full dashboard (panels, CoM, velocity)
+
+  <img src="https://github.com/user-attachments/assets/0626bdec-faa5-47ea-8cb9-d2c3bf39cf7e" alt="Debug gizmos — bone dots, wireframe, full dashboard with CoM and velocity vectors" width="640">
+
 - **Inspector** — Select KickbackCharacter to see setup status and validation
 - **Visible Collision Shapes** (Debug menu) — See ragdoll collision shapes
 
