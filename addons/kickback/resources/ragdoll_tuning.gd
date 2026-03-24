@@ -306,6 +306,42 @@ extends Resource
 @export var root_motion_bone: String = "Hips"
 
 
+# ── Foot IK ─────────────────────────────────────────────────────────────────
+
+@export_group("Foot IK")
+## Enable foot IK to plant feet on uneven terrain during NORMAL state.
+## When enabled, a foot IK solver adjusts leg targets based on ground raycasts.
+@export var foot_ik_enabled: bool = true
+## Distance from ankle joint center to the bottom of the foot sole (meters).
+## Offsets the IK target upward so feet don't sink into the ground.
+@export_range(0.0, 0.2) var foot_ik_ankle_height: float = 0.065
+## Maximum distance the pelvis can drop to accommodate the lowest foot (meters).
+## Prevents unrealistic leg stretching when one foot is much lower than the other.
+@export_range(0.0, 1.0) var foot_ik_max_pelvis_drop: float = 0.35
+## Maximum vertical foot correction per foot (meters).
+## Limits how far a foot can be adjusted from its animation position.
+@export_range(0.0, 1.0) var foot_ik_max_adjustment: float = 0.5
+## Foot height above character root beyond which the foot is in swing phase.
+## During swing, IK weight ramps to 0 to allow free animation movement.
+@export_range(0.1, 0.5) var foot_ik_swing_threshold: float = 0.25
+## Foot height above character root below which the foot is fully planted.
+## Between this and swing_threshold, IK weight blends gradually.
+@export_range(0.05, 0.3) var foot_ik_plant_threshold: float = 0.17
+## Smoothing speed for pelvis height adjustment (higher = faster response).
+## Uses exponential damping: lerp(current, target, 1 - exp(-speed * delta)).
+@export_range(1.0, 30.0) var foot_ik_pelvis_blend_speed: float = 8.0
+## Smoothing speed for per-foot IK weight transitions (higher = faster blend).
+@export_range(1.0, 30.0) var foot_ik_foot_blend_speed: float = 10.0
+## Extra height above the hip joint to start ground raycasts (meters).
+## Ensures rays start above the character to detect ground reliably.
+@export_range(0.0, 1.0) var foot_ik_ray_above_hip: float = 0.3
+## Distance below ray origin to cast for ground detection (meters).
+@export_range(1.0, 5.0) var foot_ik_ray_below_hip: float = 2.5
+## Physics collision layers used for foot IK ground raycasts.
+## Must include layers that your terrain/ground uses.
+@export_flags_3d_physics var foot_ik_collision_mask: int = 1
+
+
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:
@@ -357,5 +393,10 @@ func validate_against_profile(profile: RagdollProfile) -> PackedStringArray:
 	for bone_name: String in core_bracing_bones:
 		if bone_name not in valid_names:
 			warnings.append("core_bracing_bones entry '%s' not found in profile rig names" % bone_name)
+
+	if foot_ik_enabled:
+		for foot_name in ["Foot_L", "Foot_R", "UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R"]:
+			if foot_name not in valid_names:
+				warnings.append("foot_ik requires '%s' in profile but not found" % foot_name)
 
 	return warnings

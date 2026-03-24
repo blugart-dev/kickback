@@ -250,6 +250,10 @@ func _execute_preset(preset_name: String) -> void:
 
 	undo.commit_action()
 
+	# Set skeleton modifier callback to Physics for IK + spring sync
+	# Done outside undo/redo because the skeleton may belong to an instantiated sub-scene
+	skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
+
 	_show_setup_report(root.name, anim_player, bone_mapping, nodes.size(), preset_name)
 
 
