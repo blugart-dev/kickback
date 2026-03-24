@@ -1,0 +1,152 @@
+[gd_scene format=3 uid="uid://cphghink4ouup"]
+
+[ext_resource type="Script" uid="uid://dmpprern5kq0a" path="res://demo/ik_research.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+
+[sub_resource type="BoxMesh" id="Mesh_Ground"]
+size = Vector3(20, 0.2, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Ground"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Ground"]
+size = Vector3(20, 0.2, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Ramp"]
+size = Vector3(5, 0.2, 6)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Ramp"]
+albedo_color = Color(0.45, 0.35, 0.3, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Ramp"]
+size = Vector3(5, 0.2, 6)
+
+[sub_resource type="BoxMesh" id="Mesh_Step"]
+size = Vector3(1.2, 0.25, 4)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Stair"]
+albedo_color = Color(0.3, 0.35, 0.45, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Step1"]
+size = Vector3(1.2, 0.25, 4)
+
+[sub_resource type="BoxShape3D" id="Shape_Step2"]
+size = Vector3(1.2, 0.25, 4)
+
+[sub_resource type="BoxShape3D" id="Shape_Step3"]
+size = Vector3(1.2, 0.25, 4)
+
+[node name="IKResearch" type="Node3D" unique_id=1024450969]
+script = ExtResource("1_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1098867751]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=369185539]
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 2, 5)
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1136778038]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.132754)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=1563685435]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+mesh = SubResource("Mesh_Ground")
+surface_material_override/0 = SubResource("Mat_Ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=1040814623]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+shape = SubResource("Shape_Ground")
+
+[node name="Ramp" type="StaticBody3D" parent="." unique_id=851960809]
+transform = Transform3D(-0.86601907, -0.500011, -1.509958e-07, -0.500011, 0.86601907, 3.552792e-15, 1.3076524e-07, 7.5499564e-08, -1, 3.5, 0.9, 1.132754)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ramp" unique_id=1821677371]
+transform = Transform3D(1, 0, 0, 0, 1.0000002, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("Mesh_Ramp")
+surface_material_override/0 = SubResource("Mat_Ramp")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ramp" unique_id=1840348131]
+shape = SubResource("Shape_Ramp")
+
+[node name="Step1" type="StaticBody3D" parent="." unique_id=1278102730]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.125, 1.132754)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step1" unique_id=1049460514]
+mesh = SubResource("Mesh_Step")
+surface_material_override/0 = SubResource("Mat_Stair")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step1" unique_id=440243372]
+shape = SubResource("Shape_Step1")
+
+[node name="Step2" type="StaticBody3D" parent="." unique_id=672312090]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0.375, 1.132754)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step2" unique_id=1180012255]
+mesh = SubResource("Mesh_Step")
+surface_material_override/0 = SubResource("Mat_Stair")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step2" unique_id=2141839987]
+shape = SubResource("Shape_Step2")
+
+[node name="Step3" type="StaticBody3D" parent="." unique_id=2078173589]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0.625, 1.132754)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step3" unique_id=538033207]
+mesh = SubResource("Mesh_Step")
+surface_material_override/0 = SubResource("Mat_Stair")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step3" unique_id=867467422]
+shape = SubResource("Shape_Step3")
+
+[node name="NPC" type="Node3D" parent="." unique_id=1114038436]
+
+[node name="ybot" parent="NPC" unique_id=461436357 instance=ExtResource("2_ybot")]
+
+[node name="Label_DirectMath" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+billboard = 1
+text = "DIRECT MATH IK (Recommended)
+Zero latency — solves in _physics_process
+Pelvis-aware — accounts for hip drop
+Ground normal foot rotation
+Full control over solve"
+font_size = 18
+outline_size = 8
+
+[node name="NPC_TwoBone" type="Node3D" parent="." unique_id=87947964]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)
+
+[node name="ybot" parent="NPC_TwoBone" unique_id=1421355659 instance=ExtResource("2_ybot")]
+
+[node name="Label_TwoBone" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 2.5)
+billboard = 1
+text = "GODOT TwoBoneIK3D (Reference)
+1-frame latency — skeleton_updated signal
+No pelvis awareness — solves from unshifted hip
+No ground normal correction
+Works but limited with active ragdoll"
+font_size = 18
+outline_size = 8
+
+[node name="Label_Research" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 1.25)
+billboard = 1
+text = "FOOT IK RESEARCH SPIKE — Issue #6
+Conclusion: Direct math is the better approach for Kickback.
+TwoBoneIK3D's modifier pipeline runs after _physics_process,
+causing latency and inability to account for pelvis adjustments.
+Tab: Toggle IK | LMB: Shoot | RMB: Orbit"
+font_size = 22
+outline_size = 10

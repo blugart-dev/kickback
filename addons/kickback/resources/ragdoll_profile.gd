@@ -42,10 +42,10 @@ static func create_mixamo_default() -> RagdollProfile:
 		["Hand_R",     "mixamorig_RightHand",    "",                        1.0, "box",     Vector3(0.10, 0.04, 0.12)],
 		["UpperLeg_L", "mixamorig_LeftUpLeg",    "mixamorig_LeftLeg",       8.0, "capsule", Vector3(0.08, 0.40, 0.0)],
 		["LowerLeg_L", "mixamorig_LeftLeg",      "mixamorig_LeftFoot",      4.0, "capsule", Vector3(0.065, 0.38, 0.0)],
-		["Foot_L",     "mixamorig_LeftFoot",     "",                        2.0, "box",     Vector3(0.12, 0.07, 0.25)],
+		["Foot_L",     "mixamorig_LeftFoot",     "mixamorig_LeftToeBase",   2.0, "box",     Vector3(0.12, 0.07, 0.25)],
 		["UpperLeg_R", "mixamorig_RightUpLeg",   "mixamorig_RightLeg",      8.0, "capsule", Vector3(0.08, 0.40, 0.0)],
 		["LowerLeg_R", "mixamorig_RightLeg",     "mixamorig_RightFoot",     4.0, "capsule", Vector3(0.065, 0.38, 0.0)],
-		["Foot_R",     "mixamorig_RightFoot",    "",                        2.0, "box",     Vector3(0.12, 0.07, 0.25)],
+		["Foot_R",     "mixamorig_RightFoot",    "mixamorig_RightToeBase",  2.0, "box",     Vector3(0.12, 0.07, 0.25)],
 	]
 
 	for entry: Array in bone_data:
