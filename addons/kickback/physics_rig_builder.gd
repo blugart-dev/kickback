@@ -81,7 +81,14 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	if bone_def.child_bone != "":
 		var child_global := _get_bone_global(bone_def.child_bone)
 		var bone_to_child_local := bone_global.affine_inverse() * child_global
-		col_shape.position = bone_to_child_local.origin * 0.5
+		# Foot boxes need more forward offset (mesh extends past midpoint toward toes)
+		var offset_ratio := 0.65 if bone_def.shape_type == "box" else 0.5
+		col_shape.position = bone_to_child_local.origin * offset_ratio
+	# Box shapes on bones need rotation: bone Y points along bone direction,
+	# but box Y should be height (thin). Rotate 90° on X so box Z (length)
+	# aligns with bone Y (forward) and box Y (height) aligns with bone Z (up).
+	if bone_def.shape_type == "box":
+		col_shape.rotation.x = PI / 2.0
 	body.add_child(col_shape)
 
 	return body
