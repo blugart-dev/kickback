@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.6.1
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.6.1-stable_linux.x86_64.zip
+          chmod +x Godot_v4.6.1-stable_linux.x86_64
+          mv Godot_v4.6.1-stable_linux.x86_64 godot
+
+      - name: Import project
+        run: |
+          ./godot --headless --import --path . 2>&1 || true
+
+      - name: Run GUT tests
+        run: |
+          ./godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit 2>&1
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches plugin.cfg version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PLUGIN_VERSION=$(grep '^version=' addons/kickback/plugin.cfg | cut -d'"' -f2)
+          echo "Tag version: $TAG_VERSION"
+          echo "Plugin version: $PLUGIN_VERSION"
+          if [ "$TAG_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "::error::Version mismatch! Tag is v$TAG_VERSION but plugin.cfg has version=\"$PLUGIN_VERSION\""
+            exit 1
+          fi
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CHANGELOG=$(awk -v ver="$TAG_VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" ver "]")) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba;}')
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "::warning::No changelog entry found for version $TAG_VERSION"
+            CHANGELOG="No changelog entry found for version $TAG_VERSION."
+          fi
+
+          echo "$CHANGELOG" > /tmp/release_notes.md
+
+      - name: Create plugin zip
+        run: |
+          ZIP_NAME="kickback-v${GITHUB_REF_NAME#v}.zip"
+          zip -r "$ZIP_NAME" addons/kickback/ -x "*.import"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$ZIP_NAME" \
+            --title "Kickback $GITHUB_REF_NAME" \
+            --notes-file /tmp/release_notes.md \
+            --verify-tag
