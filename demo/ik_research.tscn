@@ -113,7 +113,7 @@ shape = SubResource("Shape_Step3")
 
 [node name="ybot" parent="NPC" unique_id=461436357 instance=ExtResource("2_ybot")]
 
-[node name="Label_DirectMath" type="Label3D" parent="."]
+[node name="Label_DirectMath" type="Label3D" parent="." unique_id=171888898]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
 billboard = 1
 text = "DIRECT MATH IK (Recommended)
@@ -129,7 +129,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)
 
 [node name="ybot" parent="NPC_TwoBone" unique_id=1421355659 instance=ExtResource("2_ybot")]
 
-[node name="Label_TwoBone" type="Label3D" parent="."]
+[node name="Label_TwoBone" type="Label3D" parent="." unique_id=1216612546]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 2.5)
 billboard = 1
 text = "GODOT TwoBoneIK3D (Reference)
@@ -140,7 +140,7 @@ Works but limited with active ragdoll"
 font_size = 18
 outline_size = 8
 
-[node name="Label_Research" type="Label3D" parent="."]
+[node name="Label_Research" type="Label3D" parent="." unique_id=1851851911]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 1.25)
 billboard = 1
 text = "FOOT IK RESEARCH SPIKE — Issue #6
