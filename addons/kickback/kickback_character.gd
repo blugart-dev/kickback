@@ -55,6 +55,9 @@ func _ready() -> void:
 		push_error("KickbackCharacter: skeleton_path is invalid or missing — cannot initialize.")
 		return
 
+	# Set skeleton modifier callback to Physics so IK and spring resolver stay in sync
+	_skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
+
 	if not animation_player_path.is_empty():
 		_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
 

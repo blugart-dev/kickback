@@ -36,6 +36,7 @@ func _build_ui() -> void:
 	_add_check("Skeleton3D", _check_node_path(_kc, "skeleton_path", "Skeleton3D"))
 	_add_check("Character Root", _check_node_path(_kc, "character_root_path", "Node3D"))
 	_add_check("Jolt Physics", JoltCheck.is_jolt_active())
+	_add_check("Skeleton Physics Callback", _check_skeleton_callback_mode())
 
 	# Controller siblings — show only what's relevant
 	_add_section("Controllers")
@@ -118,6 +119,16 @@ func _check_simulator() -> bool:
 	if not skeleton:
 		return false
 	return skeleton.get_node_or_null("PhysicalBoneSimulator3D") != null
+
+
+func _check_skeleton_callback_mode() -> bool:
+	var skel_path: NodePath = _kc.get("skeleton_path")
+	if skel_path.is_empty():
+		return false
+	var skeleton := _kc.get_node_or_null(skel_path) as Skeleton3D
+	if not skeleton:
+		return false
+	return skeleton.modifier_callback_mode_process == Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 
 
 func _has_sibling_of_type(parent: Node, type_name: String) -> bool:
