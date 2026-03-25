@@ -114,3 +114,34 @@ static func create_mixamo_default() -> RagdollProfile:
 	profile.intermediate_bones.append(neck)
 
 	return profile
+
+
+## Validates this profile against a Skeleton3D, returning warnings for mismatches.
+func validate_against_skeleton(skeleton: Skeleton3D) -> PackedStringArray:
+	var warnings := PackedStringArray()
+	var rig_names := PackedStringArray()
+
+	for bone_def: BoneDefinition in bones:
+		rig_names.append(bone_def.rig_name)
+		if skeleton.find_bone(bone_def.skeleton_bone) < 0:
+			warnings.append("Bone '%s' maps to '%s' which is not in the skeleton" % [bone_def.rig_name, bone_def.skeleton_bone])
+		if bone_def.child_bone != "" and skeleton.find_bone(bone_def.child_bone) < 0:
+			warnings.append("Bone '%s' child '%s' is not in the skeleton" % [bone_def.rig_name, bone_def.child_bone])
+
+	for joint_def: JointDefinition in joints:
+		if joint_def.parent_rig not in rig_names:
+			warnings.append("Joint parent '%s' is not a defined rig bone" % joint_def.parent_rig)
+		if joint_def.child_rig not in rig_names:
+			warnings.append("Joint child '%s' is not a defined rig bone" % joint_def.child_rig)
+
+	# Foot IK requires specific bones
+	var ik_bones := ["Foot_L", "Foot_R", "UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R"]
+	for ik_bone: String in ik_bones:
+		if ik_bone not in rig_names:
+			warnings.append("Foot IK requires '%s' but it is not defined" % ik_bone)
+
+	for entry: IntermediateBoneEntry in intermediate_bones:
+		if skeleton.find_bone(entry.skeleton_bone) < 0:
+			warnings.append("Intermediate bone '%s' is not in the skeleton" % entry.skeleton_bone)
+
+	return warnings

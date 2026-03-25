@@ -74,6 +74,29 @@ func _build_ui() -> void:
 				bake_btn.pressed.connect(_on_bake.bind(rig_builder))
 			add_child(bake_btn)
 
+	# Validation (#23 + #24)
+	_add_section("Validation")
+	var all_warnings := PackedStringArray()
+
+	var profile: RagdollProfile = _kc.ragdoll_profile if _kc.ragdoll_profile else RagdollProfile.create_mixamo_default()
+	var tuning: RagdollTuning = _kc.ragdoll_tuning if _kc.ragdoll_tuning else RagdollTuning.create_default()
+
+	# Profile vs skeleton (#23)
+	var skeleton := _kc.get_node_or_null(_kc.skeleton_path) as Skeleton3D
+	if skeleton:
+		var profile_warnings := profile.validate_against_skeleton(skeleton)
+		all_warnings.append_array(profile_warnings)
+
+	# Tuning vs profile (#24)
+	var tuning_warnings := tuning.validate_against_profile(profile)
+	all_warnings.append_array(tuning_warnings)
+
+	if all_warnings.is_empty():
+		_add_check("No issues", true)
+	else:
+		for w: String in all_warnings:
+			_add_check(w, false)
+
 	# Tips
 	add_child(HSeparator.new())
 	var tips := Label.new()
