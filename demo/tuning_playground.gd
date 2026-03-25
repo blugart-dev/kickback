@@ -144,6 +144,16 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "injury_decay", 0.0, 0.2, _tuning.injury_decay)
 	_add_slider(panel, "injury_impact", 0.0, 1.0, _tuning.injury_impact)
 
+	_add_section(panel, "FOOT IK")
+	_add_slider(panel, "ik_ankle_height", 0.0, 0.2, _tuning.foot_ik_ankle_height)
+	_add_slider(panel, "ik_max_pelvis_drop", 0.0, 1.0, _tuning.foot_ik_max_pelvis_drop)
+	_add_slider(panel, "ik_max_adjustment", 0.0, 1.0, _tuning.foot_ik_max_adjustment)
+	_add_slider(panel, "ik_swing_threshold", 0.1, 0.5, _tuning.foot_ik_swing_threshold)
+	_add_slider(panel, "ik_plant_threshold", 0.05, 0.3, _tuning.foot_ik_plant_threshold)
+	_add_slider(panel, "ik_pelvis_blend", 1.0, 30.0, _tuning.foot_ik_pelvis_blend_speed)
+	_add_slider(panel, "ik_foot_blend", 1.0, 30.0, _tuning.foot_ik_foot_blend_speed)
+	_add_slider(panel, "ik_stagger_leg_str", 0.1, 1.0, _tuning.foot_ik_stagger_leg_strength)
+
 
 func _add_section(parent: Control, title: String) -> void:
 	var spacer := Control.new()
@@ -222,6 +232,14 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 		"injury_gain": _tuning.injury_gain = value
 		"injury_decay": _tuning.injury_decay = value
 		"injury_impact": _tuning.injury_impact = value
+		"ik_ankle_height": _tuning.foot_ik_ankle_height = value
+		"ik_max_pelvis_drop": _tuning.foot_ik_max_pelvis_drop = value
+		"ik_max_adjustment": _tuning.foot_ik_max_adjustment = value
+		"ik_swing_threshold": _tuning.foot_ik_swing_threshold = value
+		"ik_plant_threshold": _tuning.foot_ik_plant_threshold = value
+		"ik_pelvis_blend": _tuning.foot_ik_pelvis_blend_speed = value
+		"ik_foot_blend": _tuning.foot_ik_foot_blend_speed = value
+		"ik_stagger_leg_str": _tuning.foot_ik_stagger_leg_strength = value
 
 
 func _unhandled_input(event: InputEvent) -> void:
