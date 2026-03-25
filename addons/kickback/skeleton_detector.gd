@@ -24,15 +24,8 @@ const RIG_SLOTS := {
 		{"contains": ["spine_02"], "side": ""},
 		{"contains": ["upper_chest"], "side": ""},
 	],
-	"Neck": [
-		{"contains": ["neck"], "excludes": ["necklace"], "side": ""},
-	],
 	"Head": [
 		{"contains": ["head"], "excludes": ["headtop", "head_end", "head_nub"], "side": ""},
-	],
-	"Shoulder_L": [
-		{"contains": ["shoulder"], "side": "left"},
-		{"contains": ["clavicle"], "side": "left"},
 	],
 	"UpperArm_L": [
 		{"contains": ["arm"], "excludes": ["forearm", "fore_arm", "lower"], "side": "left"},
@@ -47,10 +40,6 @@ const RIG_SLOTS := {
 	],
 	"Hand_L": [
 		{"contains": ["hand"], "excludes": ["finger", "thumb", "index", "middle", "ring", "pinky", "little"], "side": "left"},
-	],
-	"Shoulder_R": [
-		{"contains": ["shoulder"], "side": "right"},
-		{"contains": ["clavicle"], "side": "right"},
 	],
 	"UpperArm_R": [
 		{"contains": ["arm"], "excludes": ["forearm", "fore_arm", "lower"], "side": "right"},
@@ -104,17 +93,17 @@ const LEFT_PATTERNS := ["left", "_l", ".l", "_l_", "left_", "_left"]
 const RIGHT_PATTERNS := ["right", "_r", ".r", "_r_", "right_", "_right"]
 
 const MASS_TABLE := {
-	"Hips": 15.0, "Spine": 10.0, "Chest": 12.0, "Neck": 3.0, "Head": 5.0,
-	"Shoulder_L": 2.0, "UpperArm_L": 3.0, "LowerArm_L": 2.0, "Hand_L": 1.0,
-	"Shoulder_R": 2.0, "UpperArm_R": 3.0, "LowerArm_R": 2.0, "Hand_R": 1.0,
+	"Hips": 15.0, "Spine": 10.0, "Chest": 12.0, "Head": 5.0,
+	"UpperArm_L": 3.0, "LowerArm_L": 2.0, "Hand_L": 1.0,
+	"UpperArm_R": 3.0, "LowerArm_R": 2.0, "Hand_R": 1.0,
 	"UpperLeg_L": 8.0, "LowerLeg_L": 4.0, "Foot_L": 2.0,
 	"UpperLeg_R": 8.0, "LowerLeg_R": 4.0, "Foot_R": 2.0,
 }
 
 const SHAPE_TABLE := {
-	"Hips": "box", "Spine": "box", "Chest": "box", "Neck": "capsule", "Head": "sphere",
-	"Shoulder_L": "capsule", "UpperArm_L": "capsule", "LowerArm_L": "capsule", "Hand_L": "box",
-	"Shoulder_R": "capsule", "UpperArm_R": "capsule", "LowerArm_R": "capsule", "Hand_R": "box",
+	"Hips": "box", "Spine": "box", "Chest": "box", "Head": "sphere",
+	"UpperArm_L": "capsule", "LowerArm_L": "capsule", "Hand_L": "box",
+	"UpperArm_R": "capsule", "LowerArm_R": "capsule", "Hand_R": "box",
 	"UpperLeg_L": "capsule", "LowerLeg_L": "capsule", "Foot_L": "box",
 	"UpperLeg_R": "capsule", "LowerLeg_R": "capsule", "Foot_R": "box",
 }
@@ -123,14 +112,11 @@ const SHAPE_TABLE := {
 const JOINT_TABLE: Array[Dictionary] = [
 	{p = "Hips", c = "Spine", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-10, 10)},
 	{p = "Spine", c = "Chest", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-10, 10)},
-	{p = "Chest", c = "Neck", lx = Vector2(-20, 20), ly = Vector2(-20, 20), lz = Vector2(-15, 15)},
-	{p = "Neck", c = "Head", lx = Vector2(-40, 40), ly = Vector2(-50, 50), lz = Vector2(-30, 30)},
-	{p = "Chest", c = "Shoulder_L", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-30, 30)},
-	{p = "Shoulder_L", c = "UpperArm_L", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
+	{p = "Chest", c = "Head", lx = Vector2(-40, 40), ly = Vector2(-50, 50), lz = Vector2(-30, 30)},
+	{p = "Chest", c = "UpperArm_L", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
 	{p = "UpperArm_L", c = "LowerArm_L", lx = Vector2(-65, 65), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
 	{p = "LowerArm_L", c = "Hand_L", lx = Vector2(-40, 40), ly = Vector2(-20, 20), lz = Vector2(-50, 50)},
-	{p = "Chest", c = "Shoulder_R", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-30, 30)},
-	{p = "Shoulder_R", c = "UpperArm_R", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
+	{p = "Chest", c = "UpperArm_R", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
 	{p = "UpperArm_R", c = "LowerArm_R", lx = Vector2(-65, 65), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
 	{p = "LowerArm_R", c = "Hand_R", lx = Vector2(-40, 40), ly = Vector2(-20, 20), lz = Vector2(-50, 50)},
 	{p = "Hips", c = "UpperLeg_L", lx = Vector2(-60, 60), ly = Vector2(-20, 20), lz = Vector2(-30, 30)},
@@ -143,9 +129,9 @@ const JOINT_TABLE: Array[Dictionary] = [
 
 # Chain order for finding child bones in the mapping
 const BONE_CHAINS := {
-	"Hips": "Spine", "Spine": "Chest", "Chest": "Neck", "Neck": "",
-	"Shoulder_L": "UpperArm_L", "UpperArm_L": "LowerArm_L", "LowerArm_L": "Hand_L", "Hand_L": "",
-	"Shoulder_R": "UpperArm_R", "UpperArm_R": "LowerArm_R", "LowerArm_R": "Hand_R", "Hand_R": "",
+	"Hips": "Spine", "Spine": "Chest", "Chest": "",
+	"UpperArm_L": "LowerArm_L", "LowerArm_L": "Hand_L", "Hand_L": "",
+	"UpperArm_R": "LowerArm_R", "LowerArm_R": "Hand_R", "Hand_R": "",
 	"UpperLeg_L": "LowerLeg_L", "LowerLeg_L": "Foot_L", "Foot_L": "",
 	"UpperLeg_R": "LowerLeg_R", "LowerLeg_R": "Foot_R", "Foot_R": "",
 	"Head": "",
@@ -159,17 +145,13 @@ const BONE_PROPORTIONS := {
 	"Hips":        {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.583, 0.333, 0.417)},
 	"Spine":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.500, 0.300, 0.300)},
 	"Chest":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.583, 0.367, 0.367)},
-	# Neck capsule
-	"Neck":        {"radius_ratio": 0.25, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.100},
 	# Hands: flat, longer than wide (palm + fingers extent)
 	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
 	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
 	# Feet: narrow, flat, very long (foot + toes extent)
 	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
 	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
-	# Shoulder + limb capsules
-	"Shoulder_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.033, "min_height_ratio": 0.100},
-	"Shoulder_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.033, "min_height_ratio": 0.100},
+	# Limb capsules
 	"UpperArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
 	"LowerArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
 	"UpperArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},

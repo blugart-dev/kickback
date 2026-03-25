@@ -33,13 +33,10 @@ static func create_mixamo_default() -> RagdollProfile:
 		["Hips",       "mixamorig_Hips",           "mixamorig_Spine",          15.0, "box",     Vector3(0.35, 0.20, 0.25),  0.5],
 		["Spine",      "mixamorig_Spine",          "mixamorig_Spine2",         10.0, "box",     Vector3(0.30, 0.18, 0.18),  0.5],
 		["Chest",      "mixamorig_Spine2",         "mixamorig_Neck",           12.0, "box",     Vector3(0.35, 0.22, 0.22),  0.5],
-		["Neck",       "mixamorig_Neck",           "mixamorig_Head",            3.0, "capsule", Vector3(0.04, 0.08, 0.0),   0.5],
 		["Head",       "mixamorig_Head",           "mixamorig_HeadTop_End",     5.0, "sphere",  Vector3(0.12, 0.0, 0.0),    0.5],
-		["Shoulder_L", "mixamorig_LeftShoulder",   "mixamorig_LeftArm",         2.0, "capsule", Vector3(0.035, 0.15, 0.0),  0.5],
 		["UpperArm_L", "mixamorig_LeftArm",        "mixamorig_LeftForeArm",     3.0, "capsule", Vector3(0.055, 0.28, 0.0),  0.5],
 		["LowerArm_L", "mixamorig_LeftForeArm",    "mixamorig_LeftHand",        2.0, "capsule", Vector3(0.05, 0.25, 0.0),   0.5],
 		["Hand_L",     "mixamorig_LeftHand",       "",                          1.0, "box",     Vector3(0.10, 0.04, 0.12),  0.5],
-		["Shoulder_R", "mixamorig_RightShoulder",  "mixamorig_RightArm",        2.0, "capsule", Vector3(0.035, 0.15, 0.0),  0.5],
 		["UpperArm_R", "mixamorig_RightArm",       "mixamorig_RightForeArm",    3.0, "capsule", Vector3(0.055, 0.28, 0.0),  0.5],
 		["LowerArm_R", "mixamorig_RightForeArm",   "mixamorig_RightHand",       2.0, "capsule", Vector3(0.05, 0.25, 0.0),   0.5],
 		["Hand_R",     "mixamorig_RightHand",      "",                          1.0, "box",     Vector3(0.10, 0.04, 0.12),  0.5],
@@ -75,14 +72,11 @@ static func create_mixamo_default() -> RagdollProfile:
 		# [parent, child, x_limits, y_limits, z_limits]
 		["Hips",       "Spine",      Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-10, 10)],
 		["Spine",      "Chest",      Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-10, 10)],
-		["Chest",      "Neck",       Vector2(-20, 20),  Vector2(-20, 20),  Vector2(-15, 15)],
-		["Neck",       "Head",       Vector2(-40, 40),  Vector2(-50, 50),  Vector2(-30, 30)],
-		["Chest",      "Shoulder_L", Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-30, 30)],
-		["Shoulder_L", "UpperArm_L", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
+		["Chest",      "Head",       Vector2(-40, 40),  Vector2(-50, 50),  Vector2(-30, 30)],
+		["Chest",      "UpperArm_L", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
 		["UpperArm_L", "LowerArm_L", Vector2(-65, 65),  Vector2(-5, 5),    Vector2(-5, 5)],
 		["LowerArm_L", "Hand_L",     Vector2(-40, 40),  Vector2(-20, 20),  Vector2(-50, 50)],
-		["Chest",      "Shoulder_R", Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-30, 30)],
-		["Shoulder_R", "UpperArm_R", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
+		["Chest",      "UpperArm_R", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
 		["UpperArm_R", "LowerArm_R", Vector2(-65, 65),  Vector2(-5, 5),    Vector2(-5, 5)],
 		["LowerArm_R", "Hand_R",     Vector2(-40, 40),  Vector2(-20, 20),  Vector2(-50, 50)],
 		["Hips",       "UpperLeg_L", Vector2(-60, 60),  Vector2(-20, 20),  Vector2(-30, 30)],
@@ -103,7 +97,6 @@ static func create_mixamo_default() -> RagdollProfile:
 		profile.joints.append(joint_def)
 
 	# --- Intermediate bones ---
-	# Neck is now a full rig bone, only Spine1 remains as intermediate
 	var spine1 := IntermediateBoneEntry.new()
 	spine1.skeleton_bone = "mixamorig_Spine1"
 	spine1.rig_body_a = "Spine"
@@ -111,5 +104,13 @@ static func create_mixamo_default() -> RagdollProfile:
 	spine1.blend_weight = 0.5
 	spine1.use_a_basis = true
 	profile.intermediate_bones.append(spine1)
+
+	var neck := IntermediateBoneEntry.new()
+	neck.skeleton_bone = "mixamorig_Neck"
+	neck.rig_body_a = "Chest"
+	neck.rig_body_b = "Head"
+	neck.blend_weight = 0.5
+	neck.use_a_basis = true
+	profile.intermediate_bones.append(neck)
 
 	return profile

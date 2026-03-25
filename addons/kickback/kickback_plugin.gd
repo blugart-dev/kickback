@@ -105,39 +105,6 @@ func _show_preset_dialog() -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	# Bone count option
-	var bone_label := Label.new()
-	bone_label.text = "Bone Count"
-	bone_label.add_theme_font_size_override("font_size", 12)
-	vbox.add_child(bone_label)
-
-	var bone_group := ButtonGroup.new()
-
-	var extended_radio := CheckBox.new()
-	extended_radio.text = "Extended (19 bones)"
-	extended_radio.button_group = bone_group
-	extended_radio.button_pressed = true
-	vbox.add_child(extended_radio)
-
-	var ext_desc := Label.new()
-	ext_desc.text = "Includes Neck + Shoulders for better upper body reactions."
-	ext_desc.add_theme_font_size_override("font_size", 10)
-	ext_desc.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-	vbox.add_child(ext_desc)
-
-	var standard_radio := CheckBox.new()
-	standard_radio.text = "Standard (16 bones)"
-	standard_radio.button_group = bone_group
-	vbox.add_child(standard_radio)
-
-	var std_desc := Label.new()
-	std_desc.text = "Classic set without Neck/Shoulders. Lighter on physics."
-	std_desc.add_theme_font_size_override("font_size", 10)
-	std_desc.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-	vbox.add_child(std_desc)
-
-	vbox.add_child(HSeparator.new())
-
 	var note := Label.new()
 	note.text = "Active and Partial are independent modes — pick one per character.\nKickbackCharacter detects which controller is present."
 	note.add_theme_font_size_override("font_size", 10)
@@ -149,10 +116,8 @@ func _show_preset_dialog() -> void:
 	dialog.confirmed.connect(func():
 		var pressed: BaseButton = btn_group.get_pressed_button()
 		var preset_label: String = pressed.text if pressed else "Active Ragdoll"
-		var bone_pressed: BaseButton = bone_group.get_pressed_button()
-		var use_extended: bool = bone_pressed == extended_radio if bone_pressed else true
 		dialog.queue_free()
-		_execute_preset(preset_label, use_extended)
+		_execute_preset(preset_label)
 	)
 	dialog.canceled.connect(dialog.queue_free)
 
@@ -160,10 +125,7 @@ func _show_preset_dialog() -> void:
 	dialog.popup_centered()
 
 
-## Bones to remove when using Standard (16) bone count instead of Extended (19).
-const _EXTENDED_ONLY_BONES := ["Neck", "Shoulder_L", "Shoulder_R"]
-
-func _execute_preset(preset_name: String, use_extended: bool = true) -> void:
+func _execute_preset(preset_name: String) -> void:
 	var root := _pending_root
 	var skeleton := _pending_skeleton
 	var anim_player := _pending_anim_player
@@ -183,10 +145,6 @@ func _execute_preset(preset_name: String, use_extended: bool = true) -> void:
 	else:
 		print("Kickback: Could not auto-detect humanoid bones — using Mixamo defaults")
 		auto_profile = RagdollProfile.create_mixamo_default()
-
-	# Filter to standard bone set if user chose Standard (16)
-	if not use_extended:
-		_filter_to_standard(auto_profile)
 
 	# Determine which controllers to create based on preset
 	var include_active := false
@@ -367,62 +325,6 @@ func _find_child_of_type(node: Node, type_name: String) -> Node:
 		if child.get_class() == type_name:
 			return child
 	return null
-
-
-## Removes Neck and Shoulder bones/joints from a profile, reverting to 16-bone standard.
-## Re-wires joints so Chest connects directly to Head and UpperArm_L/R.
-func _filter_to_standard(profile: RagdollProfile) -> void:
-	# Remove extended bones
-	var filtered_bones: Array[BoneDefinition] = []
-	for bone_def: BoneDefinition in profile.bones:
-		if bone_def.rig_name not in _EXTENDED_ONLY_BONES:
-			filtered_bones.append(bone_def)
-	profile.bones = filtered_bones
-
-	# Remove joints referencing extended bones and add direct connections
-	var filtered_joints: Array[JointDefinition] = []
-	for joint_def: JointDefinition in profile.joints:
-		if joint_def.parent_rig in _EXTENDED_ONLY_BONES or joint_def.child_rig in _EXTENDED_ONLY_BONES:
-			continue
-		filtered_joints.append(joint_def)
-
-	# Re-wire: Chest→Head (was Chest→Neck→Head)
-	var chest_head := JointDefinition.new()
-	chest_head.parent_rig = "Chest"
-	chest_head.child_rig = "Head"
-	chest_head.limit_x = Vector2(-40, 40)
-	chest_head.limit_y = Vector2(-50, 50)
-	chest_head.limit_z = Vector2(-30, 30)
-	filtered_joints.append(chest_head)
-
-	# Re-wire: Chest→UpperArm_L (was Chest→Shoulder_L→UpperArm_L)
-	var chest_arm_l := JointDefinition.new()
-	chest_arm_l.parent_rig = "Chest"
-	chest_arm_l.child_rig = "UpperArm_L"
-	chest_arm_l.limit_x = Vector2(-70, 70)
-	chest_arm_l.limit_y = Vector2(-70, 70)
-	chest_arm_l.limit_z = Vector2(-70, 70)
-	filtered_joints.append(chest_arm_l)
-
-	# Re-wire: Chest→UpperArm_R
-	var chest_arm_r := JointDefinition.new()
-	chest_arm_r.parent_rig = "Chest"
-	chest_arm_r.child_rig = "UpperArm_R"
-	chest_arm_r.limit_x = Vector2(-70, 70)
-	chest_arm_r.limit_y = Vector2(-70, 70)
-	chest_arm_r.limit_z = Vector2(-70, 70)
-	filtered_joints.append(chest_arm_r)
-
-	profile.joints = filtered_joints
-
-	# Add Neck back as intermediate bone
-	var neck_inter := IntermediateBoneEntry.new()
-	neck_inter.skeleton_bone = "mixamorig_Neck"
-	neck_inter.rig_body_a = "Chest"
-	neck_inter.rig_body_b = "Head"
-	neck_inter.blend_weight = 0.5
-	neck_inter.use_a_basis = true
-	profile.intermediate_bones.append(neck_inter)
 
 
 func _show_error(msg: String) -> void:
