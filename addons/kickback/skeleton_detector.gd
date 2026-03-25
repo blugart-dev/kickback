@@ -137,6 +137,35 @@ const BONE_CHAINS := {
 	"Head": "",
 }
 
+## Per-bone-type shape proportions for auto-detection.
+## "box" bones: "proportions" Vector3(width, height, depth) multiplied by half = bone_length * 0.5.
+##   If "depth_is_length" is true, depth = full bone length (not half), for extremities like feet/hands.
+## "capsule" bones: "radius_ratio" and "height_ratio" scale the bone length.
+## "offset": collision shape offset ratio along the bone direction.
+const BONE_PROPORTIONS := {
+	# Torso: wide, relatively thin front-to-back
+	"Hips":        {"proportions": Vector3(1.8, 1.0, 1.3), "offset": 0.5, "min_size": Vector3(0.30, 0.15, 0.20)},
+	"Spine":       {"proportions": Vector3(1.5, 0.9, 0.9), "offset": 0.5, "min_size": Vector3(0.25, 0.14, 0.14)},
+	"Chest":       {"proportions": Vector3(1.8, 1.1, 1.1), "offset": 0.5, "min_size": Vector3(0.30, 0.18, 0.18)},
+	# Hands: flat, longer than wide (palm + fingers extent)
+	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
+	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
+	# Feet: narrow, flat, very long (foot + toes extent)
+	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_size": Vector3(0.10, 0.05, 0.20)},
+	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_size": Vector3(0.10, 0.05, 0.20)},
+	# Limb capsules
+	"UpperArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"LowerArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"UpperArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"LowerArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"UpperLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"LowerLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"UpperLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"LowerLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	# Head sphere
+	"Head":        {"radius_ratio": 0.5, "offset": 0.5, "min_radius": 0.08},
+}
+
 
 ## Attempts to auto-detect humanoid bones in a Skeleton3D.
 ## Returns a Dictionary mapping rig slot names to skeleton bone names.
@@ -189,12 +218,16 @@ static func create_profile_from_skeleton(
 		var child_slot: String = BONE_CHAINS.get(slot, "")
 		var child_bone: String = bone_mapping.get(child_slot, "") if child_slot != "" else ""
 
-		# Find child bone from skeleton hierarchy if not in mapping
+		# Find child bone from skeleton hierarchy if not in mapping.
+		# For leaf bones (feet, hands, head), also compute the full descendant
+		# extent to capture the real body part size (e.g., foot→toeBase→toeEnd).
+		var leaf_extent := 0.0
 		if child_bone == "" and child_slot == "":
 			var bone_idx := skeleton.find_bone(skel_bone)
 			var children := skeleton.get_bone_children(bone_idx)
 			if not children.is_empty():
 				child_bone = skeleton.get_bone_name(children[0])
+				leaf_extent = _estimate_leaf_extent(skeleton, bone_idx)
 
 		var bone_def := BoneDefinition.new()
 		bone_def.rig_name = slot
@@ -204,7 +237,7 @@ static func create_profile_from_skeleton(
 		bone_def.shape_type = SHAPE_TABLE.get(slot, "box")
 
 		# Estimate shape dimensions from bone length
-		_estimate_shape(skeleton, bone_def, child_bone)
+		_estimate_shape(skeleton, bone_def, child_bone, leaf_extent)
 
 		profile.bones.append(bone_def)
 
@@ -309,7 +342,46 @@ static func _has_side(lower_name: String, side_patterns: Array) -> bool:
 	return false
 
 
-static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, child_bone: String) -> void:
+## Creates a CollisionShape3D from a BoneDefinition's shape parameters.
+## Single source of truth — used by PhysicsRigBuilder, RigBaker, and populate_physical_bones.
+static func create_collision_shape(bone_def: BoneDefinition) -> CollisionShape3D:
+	var col := CollisionShape3D.new()
+	match bone_def.shape_type:
+		"box":
+			var box := BoxShape3D.new()
+			box.size = bone_def.box_size
+			col.shape = box
+		"capsule":
+			var capsule := CapsuleShape3D.new()
+			capsule.radius = bone_def.capsule_radius
+			capsule.height = bone_def.capsule_height
+			col.shape = capsule
+		"sphere":
+			var sphere := SphereShape3D.new()
+			sphere.radius = bone_def.sphere_radius
+			col.shape = sphere
+	return col
+
+
+## Computes the furthest descendant distance from a bone, walking the full
+## skeleton hierarchy. For leaf rig bones (feet, hands, head), this captures
+## the real body part extent (e.g., foot → toe_base → toe_end).
+static func _estimate_leaf_extent(skeleton: Skeleton3D, bone_idx: int) -> float:
+	var origin := skeleton.get_bone_global_rest(bone_idx).origin
+	return _max_descendant_distance(skeleton, bone_idx, origin)
+
+
+static func _max_descendant_distance(skeleton: Skeleton3D, bone_idx: int, origin: Vector3) -> float:
+	var children := skeleton.get_bone_children(bone_idx)
+	if children.is_empty():
+		return skeleton.get_bone_global_rest(bone_idx).origin.distance_to(origin)
+	var max_dist := 0.0
+	for child_idx: int in children:
+		max_dist = maxf(max_dist, _max_descendant_distance(skeleton, child_idx, origin))
+	return max_dist
+
+
+static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, child_bone: String, leaf_extent: float = 0.0) -> void:
 	var bone_idx := skeleton.find_bone(bone_def.skeleton_bone)
 	if bone_idx < 0:
 		_set_default_shape(bone_def)
@@ -324,18 +396,50 @@ static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, chil
 			var child_rest := skeleton.get_bone_global_rest(child_idx)
 			length = bone_rest.origin.distance_to(child_rest.origin)
 
+	# Use leaf extent if available (captures full foot/hand/head extent)
+	if leaf_extent > 0.0:
+		length = leaf_extent
+
+	var props: Dictionary = BONE_PROPORTIONS.get(bone_def.rig_name, {})
+
 	match bone_def.shape_type:
 		"capsule":
-			bone_def.capsule_radius = maxf(length * 0.15, 0.03)
-			bone_def.capsule_height = maxf(length, 0.1)
+			var radius_ratio: float = props.get("radius_ratio", 0.15)
+			var height_ratio: float = props.get("height_ratio", 1.0)
+			var min_r: float = props.get("min_radius", 0.03)
+			var min_h: float = props.get("min_height", 0.1)
+			bone_def.capsule_radius = maxf(length * radius_ratio, min_r)
+			bone_def.capsule_height = maxf(length * height_ratio, min_h)
 		"box":
-			var half := maxf(length * 0.5, 0.08)
-			bone_def.box_size = Vector3(half * 1.4, half * 0.8, half)
+			if props.get("depth_is_length", false):
+				# Extremities (feet, hands): Z = full length, X/Y = fractions
+				var w_ratio: float = props.get("width_ratio", 0.48)
+				var h_ratio: float = props.get("height_ratio", 0.28)
+				var min_s: Vector3 = props.get("min_size", Vector3(0.08, 0.03, 0.10))
+				bone_def.box_size = Vector3(
+					maxf(length * w_ratio, min_s.x),
+					maxf(length * h_ratio, min_s.y),
+					maxf(length, min_s.z))
+			else:
+				# Torso bones: half-based with per-bone proportions
+				var proportions: Vector3 = props.get("proportions", Vector3(1.4, 0.8, 1.0))
+				var min_s: Vector3 = props.get("min_size", Vector3(0.08, 0.05, 0.08))
+				var half := length * 0.5
+				bone_def.box_size = Vector3(
+					maxf(half * proportions.x, min_s.x),
+					maxf(half * proportions.y, min_s.y),
+					maxf(half * proportions.z, min_s.z))
 		"sphere":
-			bone_def.sphere_radius = maxf(length * 0.5, 0.08)
+			var radius_ratio: float = props.get("radius_ratio", 0.5)
+			var min_r: float = props.get("min_radius", 0.08)
+			bone_def.sphere_radius = maxf(length * radius_ratio, min_r)
+
+	bone_def.shape_offset = props.get("offset", 0.5)
 
 
 static func _set_default_shape(bone_def: BoneDefinition) -> void:
+	var props: Dictionary = BONE_PROPORTIONS.get(bone_def.rig_name, {})
+	bone_def.shape_offset = props.get("offset", 0.5)
 	match bone_def.shape_type:
 		"capsule":
 			bone_def.capsule_radius = 0.05

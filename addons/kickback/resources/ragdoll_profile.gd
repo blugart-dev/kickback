@@ -29,23 +29,23 @@ static func create_mixamo_default() -> RagdollProfile:
 
 	# --- Bone definitions ---
 	var bone_data: Array[Array] = [
-		# [rig_name, skeleton_bone, child_bone, mass, shape_type, size/radius/height]
-		["Hips",       "mixamorig_Hips",         "mixamorig_Spine",        15.0, "box",     Vector3(0.35, 0.20, 0.25)],
-		["Spine",      "mixamorig_Spine",        "mixamorig_Spine2",       10.0, "box",     Vector3(0.30, 0.18, 0.18)],
-		["Chest",      "mixamorig_Spine2",       "mixamorig_Neck",         12.0, "box",     Vector3(0.35, 0.22, 0.22)],
-		["Head",       "mixamorig_Head",         "",                        5.0, "sphere",  Vector3(0.12, 0.0, 0.0)],
-		["UpperArm_L", "mixamorig_LeftArm",      "mixamorig_LeftForeArm",   3.0, "capsule", Vector3(0.055, 0.28, 0.0)],
-		["LowerArm_L", "mixamorig_LeftForeArm",  "mixamorig_LeftHand",      2.0, "capsule", Vector3(0.05, 0.25, 0.0)],
-		["Hand_L",     "mixamorig_LeftHand",     "",                        1.0, "box",     Vector3(0.10, 0.04, 0.12)],
-		["UpperArm_R", "mixamorig_RightArm",     "mixamorig_RightForeArm",  3.0, "capsule", Vector3(0.055, 0.28, 0.0)],
-		["LowerArm_R", "mixamorig_RightForeArm", "mixamorig_RightHand",     2.0, "capsule", Vector3(0.05, 0.25, 0.0)],
-		["Hand_R",     "mixamorig_RightHand",    "",                        1.0, "box",     Vector3(0.10, 0.04, 0.12)],
-		["UpperLeg_L", "mixamorig_LeftUpLeg",    "mixamorig_LeftLeg",       8.0, "capsule", Vector3(0.08, 0.40, 0.0)],
-		["LowerLeg_L", "mixamorig_LeftLeg",      "mixamorig_LeftFoot",      4.0, "capsule", Vector3(0.065, 0.38, 0.0)],
-		["Foot_L",     "mixamorig_LeftFoot",     "mixamorig_LeftToeBase",   2.0, "box",     Vector3(0.12, 0.07, 0.25)],
-		["UpperLeg_R", "mixamorig_RightUpLeg",   "mixamorig_RightLeg",      8.0, "capsule", Vector3(0.08, 0.40, 0.0)],
-		["LowerLeg_R", "mixamorig_RightLeg",     "mixamorig_RightFoot",     4.0, "capsule", Vector3(0.065, 0.38, 0.0)],
-		["Foot_R",     "mixamorig_RightFoot",    "mixamorig_RightToeBase",  2.0, "box",     Vector3(0.12, 0.07, 0.25)],
+		# [rig_name, skeleton_bone, child_bone, mass, shape_type, size/radius/height, shape_offset]
+		["Hips",       "mixamorig_Hips",         "mixamorig_Spine",        15.0, "box",     Vector3(0.35, 0.20, 0.25), 0.5],
+		["Spine",      "mixamorig_Spine",        "mixamorig_Spine2",       10.0, "box",     Vector3(0.30, 0.18, 0.18), 0.5],
+		["Chest",      "mixamorig_Spine2",       "mixamorig_Neck",         12.0, "box",     Vector3(0.35, 0.22, 0.22), 0.5],
+		["Head",       "mixamorig_Head",         "",                        5.0, "sphere",  Vector3(0.12, 0.0, 0.0),   0.5],
+		["UpperArm_L", "mixamorig_LeftArm",      "mixamorig_LeftForeArm",   3.0, "capsule", Vector3(0.055, 0.28, 0.0), 0.5],
+		["LowerArm_L", "mixamorig_LeftForeArm",  "mixamorig_LeftHand",      2.0, "capsule", Vector3(0.05, 0.25, 0.0),  0.5],
+		["Hand_L",     "mixamorig_LeftHand",     "",                        1.0, "box",     Vector3(0.10, 0.04, 0.12), 0.5],
+		["UpperArm_R", "mixamorig_RightArm",     "mixamorig_RightForeArm",  3.0, "capsule", Vector3(0.055, 0.28, 0.0), 0.5],
+		["LowerArm_R", "mixamorig_RightForeArm", "mixamorig_RightHand",     2.0, "capsule", Vector3(0.05, 0.25, 0.0),  0.5],
+		["Hand_R",     "mixamorig_RightHand",    "",                        1.0, "box",     Vector3(0.10, 0.04, 0.12), 0.5],
+		["UpperLeg_L", "mixamorig_LeftUpLeg",    "mixamorig_LeftLeg",       8.0, "capsule", Vector3(0.08, 0.40, 0.0),  0.5],
+		["LowerLeg_L", "mixamorig_LeftLeg",      "mixamorig_LeftFoot",      4.0, "capsule", Vector3(0.065, 0.38, 0.0), 0.5],
+		["Foot_L",     "mixamorig_LeftFoot",     "mixamorig_LeftToeBase",   2.0, "box",     Vector3(0.12, 0.07, 0.25), 0.65],
+		["UpperLeg_R", "mixamorig_RightUpLeg",   "mixamorig_RightLeg",      8.0, "capsule", Vector3(0.08, 0.40, 0.0),  0.5],
+		["LowerLeg_R", "mixamorig_RightLeg",     "mixamorig_RightFoot",     4.0, "capsule", Vector3(0.065, 0.38, 0.0), 0.5],
+		["Foot_R",     "mixamorig_RightFoot",    "mixamorig_RightToeBase",  2.0, "box",     Vector3(0.12, 0.07, 0.25), 0.65],
 	]
 
 	for entry: Array in bone_data:
@@ -64,6 +64,7 @@ static func create_mixamo_default() -> RagdollProfile:
 				bone_def.capsule_height = dims.y
 			"sphere":
 				bone_def.sphere_radius = dims.x
+		bone_def.shape_offset = entry[6]
 		profile.bones.append(bone_def)
 
 	# --- Joint definitions ---

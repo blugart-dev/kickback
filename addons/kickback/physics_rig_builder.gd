@@ -115,13 +115,11 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	body.linear_damp = _tuning.linear_damp
 
 	# Shape is offset locally along the bone direction (toward child bone)
-	var col_shape := _create_collision_shape(bone_def)
+	var col_shape := SkeletonDetector.create_collision_shape(bone_def)
 	if bone_def.child_bone != "":
 		var child_global := _get_bone_global(bone_def.child_bone)
 		var bone_to_child_local := bone_global.affine_inverse() * child_global
-		# Foot boxes need more forward offset (mesh extends past midpoint toward toes)
-		var offset_ratio := 0.65 if bone_def.shape_type == "box" else 0.5
-		col_shape.position = bone_to_child_local.origin * offset_ratio
+		col_shape.position = bone_to_child_local.origin * bone_def.shape_offset
 	# Box shapes on bones need rotation: bone Y points along bone direction,
 	# but box Y should be height (thin). Rotate 90° on X so box Z (length)
 	# aligns with bone Y (forward) and box Y (height) aligns with bone Z (up).
@@ -130,25 +128,6 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	body.add_child(col_shape)
 
 	return body
-
-
-func _create_collision_shape(bone_def: BoneDefinition) -> CollisionShape3D:
-	var col := CollisionShape3D.new()
-	match bone_def.shape_type:
-		"box":
-			var box := BoxShape3D.new()
-			box.size = bone_def.box_size
-			col.shape = box
-		"capsule":
-			var capsule := CapsuleShape3D.new()
-			capsule.radius = bone_def.capsule_radius
-			capsule.height = bone_def.capsule_height
-			col.shape = capsule
-		"sphere":
-			var sphere := SphereShape3D.new()
-			sphere.radius = bone_def.sphere_radius
-			col.shape = sphere
-	return col
 
 
 func _create_joint(joint_def: JointDefinition) -> void:
