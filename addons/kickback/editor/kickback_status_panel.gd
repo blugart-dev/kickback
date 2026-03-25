@@ -3,6 +3,12 @@ extends VBoxContainer
 
 var _kc: KickbackCharacter
 var _editor_plugin: EditorPlugin
+var _direction_option: OptionButton
+var _profile_option: OptionButton
+var _intensity_slider: HSlider
+
+const _DIRECTIONS := ["Front", "Back", "Left", "Right", "Up", "Random"]
+const _PROFILES := ["Bullet", "Melee", "Shotgun", "Explosion", "Arrow"]
 
 
 func setup(kc: KickbackCharacter, editor_plugin: EditorPlugin = null) -> void:
@@ -74,13 +80,60 @@ func _build_ui() -> void:
 				bake_btn.pressed.connect(_on_bake.bind(rig_builder))
 			add_child(bake_btn)
 
+	# Test Hit (Active Ragdoll only)
+	if has_active:
+		_add_section("Test Hit")
+
+		var dir_hbox := HBoxContainer.new()
+		var dir_label := Label.new()
+		dir_label.text = "Direction"
+		dir_label.add_theme_font_size_override("font_size", 11)
+		dir_label.custom_minimum_size.x = 60
+		dir_hbox.add_child(dir_label)
+		_direction_option = OptionButton.new()
+		for dir_name: String in _DIRECTIONS:
+			_direction_option.add_item(dir_name)
+		_direction_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		dir_hbox.add_child(_direction_option)
+		add_child(dir_hbox)
+
+		var prof_hbox := HBoxContainer.new()
+		var prof_label := Label.new()
+		prof_label.text = "Profile"
+		prof_label.add_theme_font_size_override("font_size", 11)
+		prof_label.custom_minimum_size.x = 60
+		prof_hbox.add_child(prof_label)
+		_profile_option = OptionButton.new()
+		for prof_name: String in _PROFILES:
+			_profile_option.add_item(prof_name)
+		_profile_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		prof_hbox.add_child(_profile_option)
+		add_child(prof_hbox)
+
+		var int_hbox := HBoxContainer.new()
+		var int_label := Label.new()
+		int_label.text = "Intensity"
+		int_label.add_theme_font_size_override("font_size", 11)
+		int_label.custom_minimum_size.x = 60
+		int_hbox.add_child(int_label)
+		_intensity_slider = HSlider.new()
+		_intensity_slider.min_value = 0.1
+		_intensity_slider.max_value = 3.0
+		_intensity_slider.step = 0.1
+		_intensity_slider.value = 1.0
+		_intensity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		int_hbox.add_child(_intensity_slider)
+		add_child(int_hbox)
+
+		var fire_btn := Button.new()
+		fire_btn.text = "Fire"
+		fire_btn.pressed.connect(_on_test_hit)
+		add_child(fire_btn)
+
 	# Tips
 	add_child(HSeparator.new())
 	var tips := Label.new()
-	if has_active:
-		tips.text = "F3: debug overlay\nKickbackRaycast.shoot_from_camera() for testing"
-	else:
-		tips.text = "KickbackRaycast.shoot_from_camera() for testing"
+	tips.text = "F3: debug overlay" if has_active else ""
 	tips.add_theme_font_size_override("font_size", 11)
 	tips.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 	add_child(tips)
@@ -112,6 +165,73 @@ func _on_unbake(rig_builder: PhysicsRigBuilder) -> void:
 		return
 	RigBaker.unbake(rig_builder, _editor_plugin.get_undo_redo())
 	_refresh()
+
+
+func _on_test_hit() -> void:
+	if not _kc or not _kc.is_inside_tree():
+		push_warning("KickbackStatusPanel: character not in tree — run the scene first")
+		return
+	var parent := _kc.get_parent()
+	if not parent:
+		return
+	var rig_builder := _find_sibling_rig_builder(parent)
+	if not rig_builder:
+		push_warning("KickbackStatusPanel: no PhysicsRigBuilder found")
+		return
+	var bodies: Dictionary = rig_builder.get_bodies()
+	if bodies.is_empty():
+		push_warning("KickbackStatusPanel: physics rig not built — is the scene running?")
+		return
+
+	var target_body: RigidBody3D = bodies.get("Hips", bodies.values()[0])
+	var hit_dir := _get_hit_direction()
+	var profile := _get_hit_profile()
+	_kc.receive_hit(target_body, hit_dir, target_body.global_position, profile)
+
+
+func _get_hit_direction() -> Vector3:
+	if not _direction_option:
+		return Vector3.FORWARD
+	var selected: String = _DIRECTIONS[_direction_option.selected]
+	match selected:
+		"Front":
+			return -_kc.global_transform.basis.z
+		"Back":
+			return _kc.global_transform.basis.z
+		"Left":
+			return -_kc.global_transform.basis.x
+		"Right":
+			return _kc.global_transform.basis.x
+		"Up":
+			return Vector3.UP
+		"Random":
+			var angle := randf() * TAU
+			return Vector3(cos(angle), 0.0, sin(angle))
+	return Vector3.FORWARD
+
+
+func _get_hit_profile() -> ImpactProfile:
+	var intensity: float = _intensity_slider.value if _intensity_slider else 1.0
+	var profile: ImpactProfile
+	if not _profile_option:
+		profile = ImpactProfile.create_bullet()
+	else:
+		var selected: String = _PROFILES[_profile_option.selected]
+		match selected:
+			"Bullet":
+				profile = ImpactProfile.create_bullet()
+			"Melee":
+				profile = ImpactProfile.create_melee()
+			"Shotgun":
+				profile = ImpactProfile.create_shotgun()
+			"Explosion":
+				profile = ImpactProfile.create_explosion()
+			"Arrow":
+				profile = ImpactProfile.create_arrow()
+			_:
+				profile = ImpactProfile.create_bullet()
+	profile.base_impulse *= intensity
+	return profile
 
 
 func _add_section(title: String) -> void:
