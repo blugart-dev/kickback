@@ -143,10 +143,11 @@ const BONE_CHAINS := {
 ## "capsule" bones: "radius_ratio" and "height_ratio" scale the bone length.
 ## "offset": collision shape offset ratio along the bone direction.
 const BONE_PROPORTIONS := {
-	# Torso: original formula (1.4, 0.8, 1.0) — these were already fine
-	"Hips":        {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.08, 0.05, 0.08)},
-	"Spine":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.08, 0.05, 0.08)},
-	"Chest":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.08, 0.05, 0.08)},
+	# Torso: proportions match original formula. Min sizes reflect realistic torso
+	# width — spine segments are short but torso collision shapes must be wide.
+	"Hips":        {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.30, 0.15, 0.20)},
+	"Spine":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.25, 0.14, 0.14)},
+	"Chest":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.30, 0.18, 0.18)},
 	# Hands: flat, longer than wide (palm + fingers extent)
 	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
 	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
