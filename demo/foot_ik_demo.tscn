@@ -1,0 +1,161 @@
+[gd_scene format=3 uid="uid://bprhjo0hhnk2o"]
+
+[ext_resource type="Script" uid="uid://bf80w5thulyhd" path="res://demo/foot_ik_demo.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+
+[sub_resource type="BoxMesh" id="Mesh_GroundL"]
+size = Vector3(4, 0.2, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Ground"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_GroundL"]
+size = Vector3(4, 0.2, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Step1"]
+size = Vector3(1.2, 0.15, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Step"]
+albedo_color = Color(0.3, 0.35, 0.5, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Step1"]
+size = Vector3(1.2, 0.15, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Step2"]
+size = Vector3(1.2, 0.3, 8)
+
+[sub_resource type="BoxShape3D" id="Shape_Step2"]
+size = Vector3(1.2, 0.3, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Step3"]
+size = Vector3(1.2, 0.45, 8)
+
+[sub_resource type="BoxShape3D" id="Shape_Step3"]
+size = Vector3(1.2, 0.45, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Ramp"]
+size = Vector3(3, 0.2, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Ramp"]
+albedo_color = Color(0.45, 0.35, 0.3, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Ramp"]
+size = Vector3(3, 0.2, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_Plateau"]
+size = Vector3(2.5, 0.8, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Plateau"]
+albedo_color = Color(0.3, 0.45, 0.35, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_Plateau"]
+size = Vector3(2.5, 0.8, 8)
+
+[sub_resource type="BoxMesh" id="Mesh_GroundR"]
+size = Vector3(4, 0.2, 8)
+
+[sub_resource type="BoxShape3D" id="Shape_GroundR"]
+size = Vector3(4, 0.2, 8)
+
+[node name="FootIKDemo" type="Node3D" unique_id=180806061]
+script = ExtResource("1_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=604533545]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=540547870]
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 3, 8)
+
+[node name="GroundLeft" type="StaticBody3D" parent="." unique_id=696640374]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, -0.1, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="GroundLeft" unique_id=89624005]
+mesh = SubResource("Mesh_GroundL")
+surface_material_override/0 = SubResource("Mat_Ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundLeft" unique_id=462457747]
+shape = SubResource("Shape_GroundL")
+
+[node name="Step1" type="StaticBody3D" parent="." unique_id=2016308712]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0.075, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step1" unique_id=922588195]
+mesh = SubResource("Mesh_Step1")
+surface_material_override/0 = SubResource("Mat_Step")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step1" unique_id=941064252]
+shape = SubResource("Shape_Step1")
+
+[node name="Step2" type="StaticBody3D" parent="." unique_id=1059188893]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.3, 0.15, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step2" unique_id=43794156]
+mesh = SubResource("Mesh_Step2")
+surface_material_override/0 = SubResource("Mat_Step")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step2" unique_id=820252667]
+shape = SubResource("Shape_Step2")
+
+[node name="Step3" type="StaticBody3D" parent="." unique_id=1477955755]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.1, 0.225, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Step3" unique_id=484387193]
+mesh = SubResource("Mesh_Step3")
+surface_material_override/0 = SubResource("Mat_Step")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Step3" unique_id=1904967074]
+shape = SubResource("Shape_Step3")
+
+[node name="Ramp" type="StaticBody3D" parent="." unique_id=780230453]
+transform = Transform3D(-0.9659, -0.2588, -8.742278e-08, -0.2588, 0.9659, 0, 8.444166e-08, 2.2625013e-08, -1, 0.5, 0.55, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ramp" unique_id=1175852030]
+mesh = SubResource("Mesh_Ramp")
+surface_material_override/0 = SubResource("Mat_Ramp")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ramp" unique_id=1662076295]
+shape = SubResource("Shape_Ramp")
+
+[node name="Plateau" type="StaticBody3D" parent="." unique_id=1287424013]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Plateau" unique_id=511985218]
+mesh = SubResource("Mesh_Plateau")
+surface_material_override/0 = SubResource("Mat_Plateau")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Plateau" unique_id=267001118]
+shape = SubResource("Shape_Plateau")
+
+[node name="GroundRight" type="StaticBody3D" parent="." unique_id=584297269]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, -0.1, 1.25)
+collision_layer = 3
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="GroundRight" unique_id=1117262187]
+mesh = SubResource("Mesh_GroundR")
+surface_material_override/0 = SubResource("Mat_Ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundRight" unique_id=2086639891]
+shape = SubResource("Shape_GroundR")
+
+[node name="NPC_IK" type="Node3D" parent="." unique_id=490748418]
+
+[node name="ybot" parent="NPC_IK" unique_id=959564369 instance=ExtResource("2_ybot")]
+
+[node name="NPC_NoIK" type="Node3D" parent="." unique_id=1154462163]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)
+
+[node name="ybot" parent="NPC_NoIK" unique_id=1478371551 instance=ExtResource("2_ybot")]
