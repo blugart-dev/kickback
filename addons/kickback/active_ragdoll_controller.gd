@@ -168,14 +168,13 @@ func _physics_process(delta: float) -> void:
 		State.GETTING_UP:
 			_update_recovery(delta)
 
-	# Foot IK: solve during NORMAL, blend out during STAGGER, reset otherwise
+	# Foot IK: solve during NORMAL, pin during STAGGER, reset otherwise
 	if _foot_ik:
 		match _state:
 			State.NORMAL:
 				_foot_ik.process(delta)
 			State.STAGGER:
-				if _foot_ik.is_active():
-					_foot_ik.blend_out(delta)
+				_foot_ik.process_stagger(delta)
 			_:
 				_foot_ik.reset()
 
@@ -700,11 +699,16 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	if _tuning.brace_strength_bonus > 0.0:
 		_apply_directional_bracing(hit_dir)
 
+	if _foot_ik:
+		_foot_ik.begin_stagger()
+
 	state_changed.emit(_state)
 	stagger_started.emit(hit_dir)
 
 
 func _finish_stagger() -> void:
+	if _foot_ik:
+		_foot_ik.end_stagger()
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 	_state = State.NORMAL

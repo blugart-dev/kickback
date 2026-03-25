@@ -4,7 +4,8 @@
 ## because PhysicsRigSync contaminates SkeletonModifier3D bone pose readings.
 ##
 ## Owned by ActiveRagdollController. Called during NORMAL state (full solve),
-## STAGGER (blend out), and RAGDOLL/GETTING_UP/PERSISTENT (silent reset).
+## STAGGER (pin feet to prevent sliding), and RAGDOLL/GETTING_UP/PERSISTENT
+## (silent reset).
 class_name FootIKSolver
 extends RefCounted
 
@@ -30,6 +31,11 @@ var _foot_body_r: RigidBody3D
 var _foot_mask_l: int = 0
 var _foot_mask_r: int = 0
 var _collision_disabled: bool = false
+
+# Stagger foot pinning
+var _stagger_pinning: bool = false
+var _pin_pos_l: Vector3 = Vector3.ZERO
+var _pin_pos_r: Vector3 = Vector3.ZERO
 
 
 func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: Node3D,
@@ -91,9 +97,62 @@ func is_active() -> bool:
 func process(delta: float) -> void:
 	if not _initialized or not _tuning.foot_ik_enabled:
 		return
-
 	_disable_foot_collision()
+	_solve_ik(delta, false)
 
+
+# ── STAGGER state: pin feet or blend out ───────────────────────────────────
+
+func begin_stagger() -> void:
+	if not _initialized or not _tuning.foot_ik_stagger_pin:
+		return
+	# Capture current foot body positions as pin targets
+	if _foot_body_l:
+		_pin_pos_l = _foot_body_l.global_position
+	if _foot_body_r:
+		_pin_pos_r = _foot_body_r.global_position
+	_stagger_pinning = true
+
+
+func process_stagger(delta: float) -> void:
+	if not _initialized or not _tuning.foot_ik_enabled:
+		return
+	if not _stagger_pinning:
+		_blend_out(delta)
+		return
+	_disable_foot_collision()
+	_boost_leg_strength()
+	_solve_ik(delta, true)
+
+
+func end_stagger() -> void:
+	_stagger_pinning = false
+
+
+func _blend_out(delta: float) -> void:
+	var blend := 1.0 - exp(-_tuning.foot_ik_foot_blend_speed * delta)
+	_ik_weight_l = lerpf(_ik_weight_l, 0.0, blend)
+	_ik_weight_r = lerpf(_ik_weight_r, 0.0, blend)
+	_pelvis_offset = lerpf(_pelvis_offset, 0.0,
+		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
+	if _ik_weight_l < 0.001 and _ik_weight_r < 0.001:
+		_spring.clear_target_overrides()
+		_restore_foot_collision()
+
+
+# ── RAGDOLL/GETTING_UP/PERSISTENT: silent reset ───────────────────────────
+
+func reset() -> void:
+	_ik_weight_l = 0.0
+	_ik_weight_r = 0.0
+	_pelvis_offset = 0.0
+	_stagger_pinning = false
+	_restore_foot_collision()
+
+
+# ── Shared IK computation ─────────────────────────────────────────────────
+
+func _solve_ik(delta: float, use_pins: bool) -> void:
 	var sg := _skeleton.global_transform
 	var root_y := _character_root.global_position.y
 
@@ -107,13 +166,20 @@ func process(delta: float) -> void:
 	var lower_r := sg * _spring.get_animation_bone_global(_bone_idx["LowerLeg_R"])
 	var foot_r := sg * _spring.get_animation_bone_global(_bone_idx["Foot_R"])
 
-	# Ground raycasts from hip height
+	# Foot XZ source: animation (NORMAL) or pinned positions (STAGGER)
+	var foot_xz_l := Vector2(foot_l.origin.x, foot_l.origin.z)
+	var foot_xz_r := Vector2(foot_r.origin.x, foot_r.origin.z)
+	if use_pins:
+		foot_xz_l = Vector2(_pin_pos_l.x, _pin_pos_l.z)
+		foot_xz_r = Vector2(_pin_pos_r.x, _pin_pos_r.z)
+
+	# Ground raycasts from hip height at foot XZ positions
 	var ray_above := _tuning.foot_ik_ray_above_hip
 	var ray_total := ray_above + _tuning.foot_ik_ray_below_hip
 	var gl := _raycast_ground(
-		Vector3(foot_l.origin.x, hip_y + ray_above, foot_l.origin.z), ray_total)
+		Vector3(foot_xz_l.x, hip_y + ray_above, foot_xz_l.y), ray_total)
 	var gr := _raycast_ground(
-		Vector3(foot_r.origin.x, hip_y + ray_above, foot_r.origin.z), ray_total)
+		Vector3(foot_xz_r.x, hip_y + ray_above, foot_xz_r.y), ray_total)
 
 	# Per-foot offsets and target weights
 	var offset_l := 0.0
@@ -130,7 +196,6 @@ func process(delta: float) -> void:
 		gnorm_l = gl.get("normal", Vector3.UP)
 		offset_l = (gpos_l.y + _tuning.foot_ik_ankle_height) - foot_l.origin.y
 		offset_l = clampf(offset_l, -_tuning.foot_ik_max_adjustment, _tuning.foot_ik_max_adjustment)
-		# Swing detection: foot height relative to character root
 		var far := foot_l.origin.y - root_y
 		if far < _tuning.foot_ik_swing_threshold:
 			tw_l = clampf(
@@ -148,12 +213,12 @@ func process(delta: float) -> void:
 				1.0 - (far - _tuning.foot_ik_plant_threshold) / (_tuning.foot_ik_swing_threshold - _tuning.foot_ik_plant_threshold),
 				0.0, 1.0)
 
-	# Smooth weights with exponential damping
+	# Smooth weights
 	var blend := 1.0 - exp(-_tuning.foot_ik_foot_blend_speed * delta)
 	_ik_weight_l = lerpf(_ik_weight_l, tw_l, blend)
 	_ik_weight_r = lerpf(_ik_weight_r, tw_r, blend)
 
-	# Pelvis adjustment: drop to accommodate lowest foot
+	# Pelvis adjustment
 	var target_pelvis := clampf(
 		minf(offset_l * _ik_weight_l, offset_r * _ik_weight_r),
 		-_tuning.foot_ik_max_pelvis_drop, 0.0)
@@ -161,7 +226,7 @@ func process(delta: float) -> void:
 		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
 	var ps := Vector3(0, _pelvis_offset, 0)
 
-	# Full-body shift: move ALL bone targets when pelvis drops
+	# Full-body shift
 	var overrides := {}
 	if absf(_pelvis_offset) > 0.001:
 		for rig_name: String in _spring.get_all_bone_names():
@@ -170,9 +235,9 @@ func process(delta: float) -> void:
 				var ba := sg * _spring.get_animation_bone_global(bi)
 				overrides[rig_name] = Transform3D(ba.basis, ba.origin + ps)
 
-	# Solve left leg
+	# Solve left leg (use pinned XZ for foot target)
 	if _ik_weight_l > 0.01:
-		var ft := Vector3(foot_l.origin.x, gpos_l.y + _tuning.foot_ik_ankle_height, foot_l.origin.z)
+		var ft := Vector3(foot_xz_l.x, gpos_l.y + _tuning.foot_ik_ankle_height, foot_xz_l.y)
 		var ik := _solve_two_bone_ik(upper_l.origin + ps, ft, lower_l.origin + ps, gnorm_l, foot_l)
 		if not ik.is_empty():
 			_blend_leg(overrides, "UpperLeg_L", "LowerLeg_L", "Foot_L",
@@ -180,37 +245,13 @@ func process(delta: float) -> void:
 
 	# Solve right leg
 	if _ik_weight_r > 0.01:
-		var ft := Vector3(foot_r.origin.x, gpos_r.y + _tuning.foot_ik_ankle_height, foot_r.origin.z)
+		var ft := Vector3(foot_xz_r.x, gpos_r.y + _tuning.foot_ik_ankle_height, foot_xz_r.y)
 		var ik := _solve_two_bone_ik(upper_r.origin + ps, ft, lower_r.origin + ps, gnorm_r, foot_r)
 		if not ik.is_empty():
 			_blend_leg(overrides, "UpperLeg_R", "LowerLeg_R", "Foot_R",
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
 
 	_spring.set_target_overrides(overrides)
-
-
-# ── STAGGER state: blend out ───────────────────────────────────────────────
-
-func blend_out(delta: float) -> void:
-	if not _initialized:
-		return
-	var blend := 1.0 - exp(-_tuning.foot_ik_foot_blend_speed * delta)
-	_ik_weight_l = lerpf(_ik_weight_l, 0.0, blend)
-	_ik_weight_r = lerpf(_ik_weight_r, 0.0, blend)
-	_pelvis_offset = lerpf(_pelvis_offset, 0.0,
-		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
-	if _ik_weight_l < 0.001 and _ik_weight_r < 0.001:
-		_spring.clear_target_overrides()
-		_restore_foot_collision()
-
-
-# ── RAGDOLL/GETTING_UP/PERSISTENT: silent reset ───────────────────────────
-
-func reset() -> void:
-	_ik_weight_l = 0.0
-	_ik_weight_r = 0.0
-	_pelvis_offset = 0.0
-	_restore_foot_collision()
 
 
 # ── Two-bone IK solver (law of cosines) ───────────────────────────────────
@@ -292,6 +333,17 @@ func _raycast_ground(origin: Vector3, distance: float) -> Dictionary:
 	q.collision_mask = _tuning.foot_ik_collision_mask
 	q.collide_with_bodies = true
 	return ss.intersect_ray(q)
+
+
+# ── Stagger leg strength boost ─────────────────────────────────────────────
+
+func _boost_leg_strength() -> void:
+	var target_str := _tuning.foot_ik_stagger_leg_strength
+	for leg_name: String in ["UpperLeg_L", "LowerLeg_L", "Foot_L", "UpperLeg_R", "LowerLeg_R", "Foot_R"]:
+		var base := _spring.get_base_strength(leg_name)
+		var floor_val := base * target_str
+		if _spring.get_bone_strength(leg_name) < floor_val:
+			_spring.set_bone_strength(leg_name, floor_val)
 
 
 # ── Foot collision management ──────────────────────────────────────────────
