@@ -23,3 +23,6 @@ extends Resource
 @export var capsule_height: float = 0.25
 ## Radius of the sphere collision shape (only used when shape_type is "sphere").
 @export var sphere_radius: float = 0.1
+## Where the collision shape sits along the bone direction toward the child bone.
+## 0.5 = centered between bone and child. Higher values shift toward the child.
+@export_range(0.0, 1.0) var shape_offset: float = 0.5
