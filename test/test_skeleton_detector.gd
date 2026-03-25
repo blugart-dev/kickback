@@ -14,9 +14,12 @@ var _mixamo_bones := PackedStringArray([
 func test_mixamo_detection():
 	var result := SkeletonDetector.detect_from_bone_names(_mixamo_bones)
 	assert_true(result.size() >= 8, "Should detect at least 8 slots")
-	assert_eq(result.size(), 16, "Should detect all 16 slots")
+	assert_eq(result.size(), 19, "Should detect all 19 slots (16 + Neck + 2 Shoulders)")
 	assert_has(result, "Hips")
 	assert_has(result, "Head")
+	assert_has(result, "Neck")
+	assert_has(result, "Shoulder_L")
+	assert_has(result, "Shoulder_R")
 	assert_has(result, "UpperArm_L")
 	assert_has(result, "Foot_R")
 
@@ -70,6 +73,7 @@ func test_bone_definition_shape_offset_default():
 
 func test_mixamo_default_has_foot_offset():
 	var profile := RagdollProfile.create_mixamo_default()
+	assert_eq(profile.bones.size(), 19, "Mixamo default should have 19 bones")
 	for bone_def: BoneDefinition in profile.bones:
 		if bone_def.rig_name == "Foot_L" or bone_def.rig_name == "Foot_R":
 			assert_eq(bone_def.shape_offset, 0.65, "%s should have 0.65 offset" % bone_def.rig_name)
@@ -77,11 +81,28 @@ func test_mixamo_default_has_foot_offset():
 			assert_eq(bone_def.shape_offset, 0.5, "%s should have 0.5 offset" % bone_def.rig_name)
 
 
+func test_mixamo_default_head_has_child_bone():
+	var profile := RagdollProfile.create_mixamo_default()
+	for bone_def: BoneDefinition in profile.bones:
+		if bone_def.rig_name == "Head":
+			assert_eq(bone_def.child_bone, "mixamorig_HeadTop_End", "Head should have HeadTop_End as child")
+
+
+func test_mixamo_default_has_neck_and_shoulders():
+	var profile := RagdollProfile.create_mixamo_default()
+	var rig_names := PackedStringArray()
+	for bone_def: BoneDefinition in profile.bones:
+		rig_names.append(bone_def.rig_name)
+	assert_true("Neck" in rig_names, "Should have Neck bone")
+	assert_true("Shoulder_L" in rig_names, "Should have Shoulder_L bone")
+	assert_true("Shoulder_R" in rig_names, "Should have Shoulder_R bone")
+
+
 func test_proportions_table_has_all_slots():
 	var all_slots := [
-		"Hips", "Spine", "Chest", "Head",
-		"UpperArm_L", "LowerArm_L", "Hand_L",
-		"UpperArm_R", "LowerArm_R", "Hand_R",
+		"Hips", "Spine", "Chest", "Neck", "Head",
+		"Shoulder_L", "UpperArm_L", "LowerArm_L", "Hand_L",
+		"Shoulder_R", "UpperArm_R", "LowerArm_R", "Hand_R",
 		"UpperLeg_L", "LowerLeg_L", "Foot_L",
 		"UpperLeg_R", "LowerLeg_R", "Foot_R",
 	]

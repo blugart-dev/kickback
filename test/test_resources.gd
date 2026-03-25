@@ -57,8 +57,8 @@ func test_all_profiles_have_positive_values():
 func test_mixamo_profile_structure():
 	var profile := RagdollProfile.create_mixamo_default()
 	assert_not_null(profile)
-	assert_eq(profile.bones.size(), 16, "Should have 16 bones")
-	assert_eq(profile.joints.size(), 15, "Should have 15 joints")
+	assert_eq(profile.bones.size(), 19, "Should have 19 bones (16 + Neck + 2 Shoulders)")
+	assert_eq(profile.joints.size(), 18, "Should have 18 joints")
 	assert_eq(profile.root_bone, "mixamorig_Hips")
 	assert_true(profile.intermediate_bones.size() > 0)
 
@@ -99,8 +99,10 @@ func test_joint_definitions():
 	for jd: JointDefinition in profile.joints:
 		joint_pairs.append("%s→%s" % [jd.parent_rig, jd.child_rig])
 	assert_has(joint_pairs, "Hips→Spine")
-	assert_has(joint_pairs, "Chest→Head")
-	assert_has(joint_pairs, "Chest→UpperArm_L")
+	assert_has(joint_pairs, "Chest→Neck")
+	assert_has(joint_pairs, "Neck→Head")
+	assert_has(joint_pairs, "Chest→Shoulder_L")
+	assert_has(joint_pairs, "Shoulder_L→UpperArm_L")
 
 
 func test_joint_angular_limits():
