@@ -340,6 +340,10 @@ extends Resource
 ## Physics collision layers used for foot IK ground raycasts.
 ## Must include layers that your terrain/ground uses.
 @export_flags_3d_physics var foot_ik_collision_mask: int = 1
+## Disable foot body collision with ground during NORMAL state.
+## IK plants feet precisely so physics collision is redundant and causes jitter.
+## Collision is restored during STAGGER/RAGDOLL/GETTING_UP.
+@export var foot_ik_disable_foot_collision: bool = true
 
 
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()

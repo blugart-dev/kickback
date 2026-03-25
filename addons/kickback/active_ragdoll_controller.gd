@@ -67,6 +67,7 @@ var _com_initialized: bool = false
 var _sway_phase: float = 0.0
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
+var _foot_ik: FootIKSolver
 
 ## Emitted whenever the controller transitions between states.
 signal state_changed(new_state: int)
@@ -147,6 +148,14 @@ func _physics_process(delta: float) -> void:
 	if not _spring or not _rig_builder:
 		return
 
+	# Lazy foot IK init (deferred until SpringResolver has bones)
+	if not _foot_ik and _tuning and _tuning.foot_ik_enabled and _character_root:
+		if not _spring.get_all_bone_names().is_empty():
+			_foot_ik = FootIKSolver.new()
+			if not _foot_ik.initialize(_spring, _tuning, _character_root, _rig_builder):
+				push_warning("ActiveRagdollController: foot IK disabled (missing leg bones)")
+				_foot_ik = null
+
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
 	_sync_injuries_to_resolver()
@@ -158,6 +167,17 @@ func _physics_process(delta: float) -> void:
 			_update_ragdoll(delta)
 		State.GETTING_UP:
 			_update_recovery(delta)
+
+	# Foot IK: solve during NORMAL, blend out during STAGGER, reset otherwise
+	if _foot_ik:
+		match _state:
+			State.NORMAL:
+				_foot_ik.process(delta)
+			State.STAGGER:
+				if _foot_ik.is_active():
+					_foot_ik.blend_out(delta)
+			_:
+				_foot_ik.reset()
 
 
 func _update_fatigue_decay(delta: float) -> void:
