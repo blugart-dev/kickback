@@ -2,10 +2,12 @@
 extends VBoxContainer
 
 var _kc: KickbackCharacter
+var _editor_plugin: EditorPlugin
 
 
-func setup(kc: KickbackCharacter) -> void:
+func setup(kc: KickbackCharacter, editor_plugin: EditorPlugin = null) -> void:
 	_kc = kc
+	_editor_plugin = editor_plugin
 	_build_ui()
 
 
@@ -51,6 +53,27 @@ func _build_ui() -> void:
 	else:
 		_add_check("No controller found", false)
 
+	# Physics Rig bake status (Active Ragdoll only)
+	if has_active and parent:
+		var rig_builder := _find_sibling_rig_builder(parent)
+		if rig_builder:
+			_add_section("Physics Rig")
+			var baked := RigBaker.is_baked(rig_builder)
+			if baked:
+				var body_count := RigBaker.get_baked_body_count(rig_builder)
+				_add_check("Baked (%d bodies)" % body_count, true)
+			else:
+				_add_check("Runtime (generated at play)", false)
+
+			var bake_btn := Button.new()
+			if baked:
+				bake_btn.text = "Unbake Rig"
+				bake_btn.pressed.connect(_on_unbake.bind(rig_builder))
+			else:
+				bake_btn.text = "Bake Rig"
+				bake_btn.pressed.connect(_on_bake.bind(rig_builder))
+			add_child(bake_btn)
+
 	# Tips
 	add_child(HSeparator.new())
 	var tips := Label.new()
@@ -72,6 +95,23 @@ func _build_ui() -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 8
 	add_child(spacer)
+
+
+func _on_bake(rig_builder: PhysicsRigBuilder) -> void:
+	if not _editor_plugin:
+		push_error("KickbackStatusPanel: no EditorPlugin reference — cannot bake")
+		return
+	var scene_owner: Node = rig_builder.owner if rig_builder.owner else rig_builder
+	RigBaker.bake(rig_builder, _editor_plugin.get_undo_redo(), scene_owner)
+	_refresh()
+
+
+func _on_unbake(rig_builder: PhysicsRigBuilder) -> void:
+	if not _editor_plugin:
+		push_error("KickbackStatusPanel: no EditorPlugin reference — cannot unbake")
+		return
+	RigBaker.unbake(rig_builder, _editor_plugin.get_undo_redo())
+	_refresh()
 
 
 func _add_section(title: String) -> void:
@@ -129,6 +169,13 @@ func _check_skeleton_callback_mode() -> bool:
 	if not skeleton:
 		return false
 	return skeleton.modifier_callback_mode_process == Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
+
+
+func _find_sibling_rig_builder(parent: Node) -> PhysicsRigBuilder:
+	for child in parent.get_children():
+		if child is PhysicsRigBuilder:
+			return child
+	return null
 
 
 func _has_sibling_of_type(parent: Node, type_name: String) -> bool:
