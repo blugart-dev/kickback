@@ -138,33 +138,30 @@ const BONE_CHAINS := {
 }
 
 ## Per-bone-type shape proportions for auto-detection.
-## "box" bones: "proportions" Vector3(width, height, depth) multiplied by half = bone_length * 0.5.
-##   If "depth_is_length" is true, depth = full bone length (not half), for extremities like feet/hands.
-## "capsule" bones: "radius_ratio" and "height_ratio" scale the bone length.
-## "offset": collision shape offset ratio along the bone direction.
+## All minimum values are ratios of skeleton height (Hips→Head distance).
+## Extremity boxes (feet, hands) use "depth_is_length" mode.
 const BONE_PROPORTIONS := {
-	# Torso: proportions match original formula. Min sizes reflect realistic torso
-	# width — spine segments are short but torso collision shapes must be wide.
-	"Hips":        {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.30, 0.15, 0.20)},
-	"Spine":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.25, 0.14, 0.14)},
-	"Chest":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_size": Vector3(0.30, 0.18, 0.18)},
+	# Torso: min_ratio calibrated from Mixamo defaults / 0.60m Hips→Head distance
+	"Hips":        {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.583, 0.333, 0.417)},
+	"Spine":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.500, 0.300, 0.300)},
+	"Chest":       {"proportions": Vector3(1.4, 0.8, 1.0), "offset": 0.5, "min_ratio": Vector3(0.583, 0.367, 0.367)},
 	# Hands: flat, longer than wide (palm + fingers extent)
-	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
-	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_size": Vector3(0.08, 0.03, 0.10)},
+	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
+	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
 	# Feet: narrow, flat, very long (foot + toes extent)
-	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_size": Vector3(0.10, 0.05, 0.20)},
-	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_size": Vector3(0.10, 0.05, 0.20)},
+	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
+	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
 	# Limb capsules
-	"UpperArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"LowerArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"UpperArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"LowerArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"UpperLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"LowerLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"UpperLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
-	"LowerLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius": 0.03, "min_height": 0.1},
+	"UpperArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"LowerArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"UpperArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"LowerArm_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"UpperLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"LowerLeg_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"UpperLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
+	"LowerLeg_R":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
 	# Head sphere
-	"Head":        {"radius_ratio": 0.5, "offset": 0.5, "min_radius": 0.08},
+	"Head":        {"radius_ratio": 0.5, "offset": 0.5, "min_radius_ratio": 0.133},
 }
 
 
@@ -213,6 +210,8 @@ static func create_profile_from_skeleton(
 	var profile := RagdollProfile.new()
 	profile.root_bone = bone_mapping.get("Hips", "")
 
+	# Measure skeleton geometry for scale-independent shape sizing
+	var skeleton_height := _measure_skeleton_height(skeleton, bone_mapping)
 	# Create bone definitions
 	for slot: String in bone_mapping:
 		var skel_bone: String = bone_mapping[slot]
@@ -240,8 +239,8 @@ static func create_profile_from_skeleton(
 		bone_def.mass = MASS_TABLE.get(slot, 5.0)
 		bone_def.shape_type = SHAPE_TABLE.get(slot, "box")
 
-		# Estimate shape dimensions from bone length
-		_estimate_shape(skeleton, bone_def, child_bone, leaf_extent)
+		# Estimate shape dimensions from bone length and skeleton geometry
+		_estimate_shape(skeleton, bone_def, child_bone, leaf_extent, skeleton_height)
 
 		profile.bones.append(bone_def)
 
@@ -385,10 +384,26 @@ static func _max_descendant_distance(skeleton: Skeleton3D, bone_idx: int, origin
 	return max_dist
 
 
-static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, child_bone: String, leaf_extent: float = 0.0) -> void:
+## Measures the vertical distance from Hips to Head in the skeleton rest pose.
+## Used as a scale reference so all collision shapes adapt to character size.
+static func _measure_skeleton_height(skeleton: Skeleton3D, bone_mapping: Dictionary) -> float:
+	var hips_bone: String = bone_mapping.get("Hips", "")
+	var head_bone: String = bone_mapping.get("Head", "")
+	if hips_bone == "" or head_bone == "":
+		return 0.6  # Fallback: typical Hips→Head distance for humanoid rigs
+	var hips_idx := skeleton.find_bone(hips_bone)
+	var head_idx := skeleton.find_bone(head_bone)
+	if hips_idx < 0 or head_idx < 0:
+		return 0.6
+	var hips_pos := skeleton.get_bone_global_rest(hips_idx).origin
+	var head_pos := skeleton.get_bone_global_rest(head_idx).origin
+	return maxf(abs(head_pos.y - hips_pos.y), 0.5)  # Floor at 0.5m
+
+
+static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, child_bone: String, leaf_extent: float = 0.0, skeleton_height: float = 0.6) -> void:
 	var bone_idx := skeleton.find_bone(bone_def.skeleton_bone)
 	if bone_idx < 0:
-		_set_default_shape(bone_def)
+		_set_default_shape(bone_def, skeleton_height)
 		return
 
 	var bone_rest := skeleton.get_bone_global_rest(bone_idx)
@@ -410,24 +425,24 @@ static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, chil
 		"capsule":
 			var radius_ratio: float = props.get("radius_ratio", 0.15)
 			var height_ratio: float = props.get("height_ratio", 1.0)
-			var min_r: float = props.get("min_radius", 0.03)
-			var min_h: float = props.get("min_height", 0.1)
+			var min_r: float = props.get("min_radius_ratio", 0.050) * skeleton_height
+			var min_h: float = props.get("min_height_ratio", 0.167) * skeleton_height
 			bone_def.capsule_radius = maxf(length * radius_ratio, min_r)
 			bone_def.capsule_height = maxf(length * height_ratio, min_h)
 		"box":
+			var min_ratio: Vector3 = props.get("min_ratio", Vector3(0.05, 0.03, 0.05))
+			var min_s: Vector3 = min_ratio * skeleton_height
 			if props.get("depth_is_length", false):
 				# Extremities (feet, hands): Z = full length, X/Y = fractions
 				var w_ratio: float = props.get("width_ratio", 0.48)
 				var h_ratio: float = props.get("height_ratio", 0.28)
-				var min_s: Vector3 = props.get("min_size", Vector3(0.08, 0.03, 0.10))
 				bone_def.box_size = Vector3(
 					maxf(length * w_ratio, min_s.x),
 					maxf(length * h_ratio, min_s.y),
 					maxf(length, min_s.z))
 			else:
-				# Torso bones: half-based with per-bone proportions
+				# Torso bones: half-based with per-bone proportions + height-scaled minimums
 				var proportions: Vector3 = props.get("proportions", Vector3(1.4, 0.8, 1.0))
-				var min_s: Vector3 = props.get("min_size", Vector3(0.08, 0.05, 0.08))
 				var half := length * 0.5
 				bone_def.box_size = Vector3(
 					maxf(half * proportions.x, min_s.x),
@@ -435,23 +450,24 @@ static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, chil
 					maxf(half * proportions.z, min_s.z))
 		"sphere":
 			var radius_ratio: float = props.get("radius_ratio", 0.5)
-			var min_r: float = props.get("min_radius", 0.08)
+			var min_r: float = props.get("min_radius_ratio", 0.133) * skeleton_height
 			bone_def.sphere_radius = maxf(length * radius_ratio, min_r)
 
 	bone_def.shape_offset = props.get("offset", 0.5)
 
 
-static func _set_default_shape(bone_def: BoneDefinition) -> void:
+static func _set_default_shape(bone_def: BoneDefinition, skeleton_height: float = 0.6) -> void:
 	var props: Dictionary = BONE_PROPORTIONS.get(bone_def.rig_name, {})
 	bone_def.shape_offset = props.get("offset", 0.5)
 	match bone_def.shape_type:
 		"capsule":
-			bone_def.capsule_radius = 0.05
-			bone_def.capsule_height = 0.25
+			bone_def.capsule_radius = props.get("min_radius_ratio", 0.050) * skeleton_height
+			bone_def.capsule_height = props.get("min_height_ratio", 0.167) * skeleton_height
 		"box":
-			bone_def.box_size = Vector3(0.2, 0.15, 0.15)
+			var min_ratio: Vector3 = props.get("min_ratio", Vector3(0.12, 0.09, 0.09))
+			bone_def.box_size = min_ratio * skeleton_height
 		"sphere":
-			bone_def.sphere_radius = 0.1
+			bone_def.sphere_radius = props.get("min_radius_ratio", 0.133) * skeleton_height
 
 
 static func _detect_intermediate_bones(

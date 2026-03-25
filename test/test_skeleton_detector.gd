@@ -70,11 +70,21 @@ func test_bone_definition_shape_offset_default():
 
 func test_mixamo_default_has_foot_offset():
 	var profile := RagdollProfile.create_mixamo_default()
+	assert_eq(profile.bones.size(), 16, "Mixamo default should have 16 bones")
 	for bone_def: BoneDefinition in profile.bones:
 		if bone_def.rig_name == "Foot_L" or bone_def.rig_name == "Foot_R":
 			assert_eq(bone_def.shape_offset, 0.65, "%s should have 0.65 offset" % bone_def.rig_name)
 		else:
 			assert_eq(bone_def.shape_offset, 0.5, "%s should have 0.5 offset" % bone_def.rig_name)
+
+
+func test_mixamo_default_head_has_child_bone():
+	var profile := RagdollProfile.create_mixamo_default()
+	for bone_def: BoneDefinition in profile.bones:
+		if bone_def.rig_name == "Head":
+			assert_eq(bone_def.child_bone, "mixamorig_HeadTop_End", "Head should have HeadTop_End as child")
+
+
 
 
 func test_proportions_table_has_all_slots():
