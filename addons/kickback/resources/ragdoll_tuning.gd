@@ -344,6 +344,13 @@ extends Resource
 ## IK plants feet precisely so physics collision is redundant and causes jitter.
 ## Collision is restored during STAGGER/RAGDOLL/GETTING_UP.
 @export var foot_ik_disable_foot_collision: bool = true
+## Pin feet to their ground contact positions during STAGGER state.
+## Prevents foot sliding while the upper body wobbles from sway forces.
+## Leg bone spring strengths are boosted to keep feet planted.
+@export var foot_ik_stagger_pin: bool = true
+## Minimum leg bone spring strength (as fraction of base) during stagger pinning.
+## Higher = feet stay more firmly planted. Lower = legs wobble with the body.
+@export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
