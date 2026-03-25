@@ -219,15 +219,18 @@ static func create_profile_from_skeleton(
 		var child_bone: String = bone_mapping.get(child_slot, "") if child_slot != "" else ""
 
 		# Find child bone from skeleton hierarchy if not in mapping.
-		# For leaf bones (feet, hands, head), also compute the full descendant
-		# extent to capture the real body part size (e.g., foot→toeBase→toeEnd).
+		# For extremity bones (feet, hands) with depth_is_length, also compute the
+		# full descendant extent (e.g., foot→toeBase→toeEnd). Only for bones that
+		# actually use it — NOT for Chest/Head which have joints to other rig bones.
 		var leaf_extent := 0.0
 		if child_bone == "" and child_slot == "":
 			var bone_idx := skeleton.find_bone(skel_bone)
 			var children := skeleton.get_bone_children(bone_idx)
 			if not children.is_empty():
 				child_bone = skeleton.get_bone_name(children[0])
-				leaf_extent = _estimate_leaf_extent(skeleton, bone_idx)
+				var props: Dictionary = BONE_PROPORTIONS.get(slot, {})
+				if props.get("depth_is_length", false):
+					leaf_extent = _estimate_leaf_extent(skeleton, bone_idx)
 
 		var bone_def := BoneDefinition.new()
 		bone_def.rig_name = slot
