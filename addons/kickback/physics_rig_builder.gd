@@ -39,6 +39,11 @@ func _ensure_config() -> void:
 func _build_rig() -> void:
 	_ensure_config()
 
+	# Check for pre-baked rig nodes from editor
+	if _adopt_baked_rig():
+		_built = true
+		return
+
 	for bone_def: BoneDefinition in _profile.bones:
 		var bone_idx := _skeleton.find_bone(bone_def.skeleton_bone)
 		if bone_idx < 0:
@@ -56,6 +61,39 @@ func _build_rig() -> void:
 		_create_joint(joint_def)
 
 	_built = true
+
+
+## Scans children for pre-baked RigidBody3D nodes (created by RigBaker in the editor).
+## If found and valid, populates _bodies and _rig_to_bone from them. Returns true
+## if the baked rig was adopted successfully, false to fall back to runtime generation.
+func _adopt_baked_rig() -> bool:
+	var baked_bodies: Dictionary = {}
+	var baked_bones: Dictionary = {}
+
+	for child in get_children():
+		if child is RigidBody3D and child.has_meta("kickback_baked"):
+			var rig_name: String = child.get_meta("kickback_rig_name", "")
+			var skel_bone: String = child.get_meta("kickback_skeleton_bone", "")
+			if rig_name != "" and skel_bone != "":
+				baked_bodies[rig_name] = child
+				baked_bones[rig_name] = skel_bone
+
+	if baked_bodies.is_empty():
+		return false
+
+	# Validate: every bone in the profile should have a baked body
+	var missing := PackedStringArray()
+	for bone_def: BoneDefinition in _profile.bones:
+		if bone_def.rig_name not in baked_bodies:
+			missing.append(bone_def.rig_name)
+
+	if not missing.is_empty():
+		push_warning("PhysicsRigBuilder: Baked rig is missing %d bones (%s) — falling back to runtime generation" % [missing.size(), ", ".join(missing)])
+		return false
+
+	_bodies = baked_bodies
+	_rig_to_bone = baked_bones
+	return true
 
 
 func _get_bone_global(bone_name: String) -> Transform3D:

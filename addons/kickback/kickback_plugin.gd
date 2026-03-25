@@ -11,6 +11,7 @@ var _pending_anim_player: AnimationPlayer
 func _enter_tree() -> void:
 	add_tool_menu_item("Add Kickback to Selected", _on_add_kickback)
 	_inspector_plugin = preload("res://addons/kickback/editor/kickback_inspector_plugin.gd").new()
+	_inspector_plugin._editor_plugin = self
 	add_inspector_plugin(_inspector_plugin)
 
 
