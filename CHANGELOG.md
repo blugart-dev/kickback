@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.8.5] - 2026-03-26
+
+### Added
+- **Bake Physics Rig** — "Bake Rig" button in inspector generates persistent RigidBody3D + Joint nodes editable in the scene tree. Runtime auto-detects baked nodes via metadata.
+- **Per-bone shape proportions** — feet/hands use `depth_is_length` mode with leaf extent walking (foot→toeBase→toeEnd) for accurate collision shapes.
+- **Scale-independent shapes** — all minimum sizes are ratios of Hips→Head distance, works for any character size automatically.
+- **Per-bone `shape_offset`** on BoneDefinition — replaces hardcoded 0.65/0.5 offset ratio.
+- **Edit-time validation** — RagdollProfile bones checked against skeleton, RagdollTuning keys checked against profile. Warnings shown in inspector.
+- **Enhanced status panel** — bone/joint counts, foot IK status, validation section.
+- **Tuning preset dropdown** — Default, Game, Tank, Agile, Fragile presets with undo/redo. New factory methods: `create_tank()`, `create_agile()`, `create_fragile()`.
+- **Joint compliance** — `angular_softness`, `angular_damping`, `angular_restitution` on JointDefinition for stiff knees vs floppy arms.
+- **Per-state collision control** — `normal_state_disabled_collision` on RagdollTuning disables bone colliders during NORMAL state, restored on STAGGER/RAGDOLL.
+- **Live tuning** — RagdollTuning changes propagate instantly during play mode via `changed` signal.
+- **Spring strength heatmap** — larger pulsing dots at WIREFRAME+, strength % labels at FULL detail level.
+- **Balance visualization** — filled support polygon, CoM diamond colored by balance ratio, numeric BAL display, imbalance direction arrow with arrowhead.
+- Shared `create_collision_shape()` on SkeletonDetector (single source of truth).
+- Head sphere centered via HeadTop_End child bone.
+
+### Changed
+- Collision shape estimation rewritten with `BONE_PROPORTIONS` table and `_estimate_leaf_extent()`.
+- `_measure_skeleton_height()` for scale-independent shape sizing.
+- Gizmo issues (#27, #28) closed — resolved by bake feature using Godot's built-in gizmos.
+
+## [0.8.0] - 2026-03-25
+
+### Added
+- **Foot IK** — direct two-bone math solver integrated with spring resolver via target overrides. Ground raycasts, pelvis adjustment, swing detection.
+- **Anti-foot-slide** — feet pinned at stagger start position during STAGGER state.
+- **Foot IK tuning** — 11 new parameters on RagdollTuning (ankle_height, blend speeds, swing thresholds, etc.).
+- **Foot IK demo** — side-by-side IK ON vs OFF over varied terrain.
+- **Tuning playground sliders** — foot IK parameter sliders added.
+- **Unit tests** — foot IK solver tests (initialization, stagger lifecycle, tuning defaults).
+- **Architecture docs** — FOOT_IK.md documenting the IK pipeline and tuning guide.
+
+### Changed
+- Skeleton modifier callback mode set to PHYSICS during setup for IK + spring sync.
+
 ## [0.7.0] - 2026-03-21
 
 ### Added
