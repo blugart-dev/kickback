@@ -48,6 +48,7 @@ var _character_root: Node3D
 var _rig_sync: PhysicsRigSync
 var _adjacency: Dictionary = {}
 var _protected_set: Dictionary = {}  # Cached O(1) lookup for protected bones
+var _disabled_collision_masks: Dictionary = {}  # rig_name → original collision_mask
 var _state: int = State.NORMAL
 var _recovery_elapsed: float = 0.0
 var _ragdoll_elapsed: float = 0.0
@@ -133,6 +134,35 @@ func _rebuild_protected_set() -> void:
 ## Re-caches values that are stored at init time. Call when tuning changes at runtime.
 func refresh_tuning() -> void:
 	_rebuild_protected_set()
+
+
+## Disables collision_mask for bones listed in normal_state_disabled_collision.
+## Call when entering NORMAL state. Caches original masks for restoration.
+func _disable_normal_collisions() -> void:
+	if not _tuning or _tuning.normal_state_disabled_collision.is_empty():
+		return
+	if not _spring:
+		return
+	var bodies: Dictionary = _rig_builder.get_bodies() if _rig_builder else {}
+	for rig_name: String in _tuning.normal_state_disabled_collision:
+		if rig_name in bodies:
+			var body: RigidBody3D = bodies[rig_name]
+			if rig_name not in _disabled_collision_masks:
+				_disabled_collision_masks[rig_name] = body.collision_mask
+			body.collision_mask = 0
+
+
+## Restores collision_mask for bones disabled by _disable_normal_collisions().
+## Call when entering STAGGER or RAGDOLL state.
+func _restore_disabled_collisions() -> void:
+	if _disabled_collision_masks.is_empty():
+		return
+	var bodies: Dictionary = _rig_builder.get_bodies() if _rig_builder else {}
+	for rig_name: String in _disabled_collision_masks:
+		if rig_name in bodies:
+			var body: RigidBody3D = bodies[rig_name]
+			body.collision_mask = _disabled_collision_masks[rig_name]
+	_disabled_collision_masks.clear()
 
 
 func _build_adjacency() -> void:
@@ -569,6 +599,7 @@ func get_state_name() -> String:
 # ── State Transitions ───────────────────────────────────────────────────────
 
 func _full_ragdoll() -> void:
+	_restore_disabled_collisions()
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, 0.0)
 
@@ -676,6 +707,7 @@ func _finish_recovery() -> void:
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	_spring.clear_target_overrides()
 	_ragdoll_poses.clear()
+	_disable_normal_collisions()
 	state_changed.emit(_state)
 
 	for rig_name: String in _spring.get_all_bone_names():
@@ -685,6 +717,7 @@ func _finish_recovery() -> void:
 
 
 func _start_stagger(hit_dir: Vector3) -> void:
+	_restore_disabled_collisions()
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
 	_balance_stable_timer = 0.0
@@ -720,6 +753,7 @@ func _finish_stagger() -> void:
 	_balance_stable_timer = 0.0
 	_com_initialized = false
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
+	_disable_normal_collisions()
 	state_changed.emit(_state)
 	stagger_finished.emit()
 

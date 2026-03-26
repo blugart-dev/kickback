@@ -113,6 +113,13 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_z.x))
 		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_z.y))
 
+		# Joint compliance
+		if joint_def.angular_softness > 0.0 or joint_def.angular_damping > 0.0 or joint_def.angular_restitution > 0.0:
+			for axis in ["x", "y", "z"]:
+				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_LIMIT_SOFTNESS, joint_def.angular_softness)
+				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_DAMPING, joint_def.angular_damping)
+				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_RESTITUTION, joint_def.angular_restitution)
+
 		undo_redo.add_do_method(rig_builder, "add_child", joint)
 		undo_redo.add_do_method(joint, "set_owner", scene_owner)
 		undo_redo.add_do_method(joint, "set", "global_transform", joint_global)
