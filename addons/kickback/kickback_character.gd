@@ -92,6 +92,11 @@ func _ready() -> void:
 	if _partial_controller:
 		_partial_controller.configure(ragdoll_profile, ragdoll_tuning)
 
+	# Listen for tuning changes so cached values refresh at runtime
+	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
+	if not tuning.changed.is_connected(_on_tuning_changed):
+		tuning.changed.connect(_on_tuning_changed)
+
 	# Determine mode: active ragdoll takes priority if all its nodes are present
 	if _rig_builder and _spring and _rig_sync and _active_controller:
 		_mode = Mode.ACTIVE
@@ -240,6 +245,13 @@ static func _find_all_recursive(node: Node, result: Array[KickbackCharacter]) ->
 		result.append(node)
 	for child in node.get_children():
 		_find_all_recursive(child, result)
+
+
+func _on_tuning_changed() -> void:
+	if _spring:
+		_spring.refresh_tuning()
+	if _active_controller:
+		_active_controller.refresh_tuning()
 
 
 func _validate_setup() -> void:

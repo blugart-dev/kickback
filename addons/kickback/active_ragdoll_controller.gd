@@ -130,6 +130,11 @@ func _rebuild_protected_set() -> void:
 			_protected_set[bone_name] = true
 
 
+## Re-caches values that are stored at init time. Call when tuning changes at runtime.
+func refresh_tuning() -> void:
+	_rebuild_protected_set()
+
+
 func _build_adjacency() -> void:
 	for joint_def: JointDefinition in _profile.joints:
 		var p: String = joint_def.parent_rig
