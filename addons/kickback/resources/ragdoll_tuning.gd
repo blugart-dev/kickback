@@ -200,6 +200,9 @@ extends Resource
 @export_flags_3d_physics var collision_layer: int = 8
 ## Physics collision mask for ragdoll bodies.
 @export_flags_3d_physics var collision_mask: int = 14
+## Bones whose collision_mask is set to 0 during NORMAL state and restored on
+## STAGGER/RAGDOLL. Prevents clipping from animation poses (crossed arms, etc.).
+@export var normal_state_disabled_collision: PackedStringArray = []
 
 # ── Advanced: Spring Dynamics ───────────────────────────────────────────────
 

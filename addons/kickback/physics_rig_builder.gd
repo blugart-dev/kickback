@@ -164,6 +164,13 @@ func _create_joint(joint_def: JointDefinition) -> void:
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_z.x))
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_z.y))
 
+	# Joint compliance (softness, damping, restitution)
+	if joint_def.angular_softness > 0.0 or joint_def.angular_damping > 0.0 or joint_def.angular_restitution > 0.0:
+		for axis in ["x", "y", "z"]:
+			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_LIMIT_SOFTNESS, joint_def.angular_softness)
+			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_DAMPING, joint_def.angular_damping)
+			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_RESTITUTION, joint_def.angular_restitution)
+
 
 ## Enables the physics rig. On first enable, snaps bodies to skeleton and unfreezes
 ## them permanently. Subsequent calls are no-ops — bodies stay always-simulated
