@@ -375,6 +375,48 @@ static func create_game_default() -> RagdollTuning:
 	return t
 
 
+## Creates a RagdollTuning for tough characters that resist stagger and recover fast.
+static func create_tank() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.strength_map = {
+		"Hips": 0.90, "Spine": 0.85, "Chest": 0.85, "Head": 0.70,
+		"UpperArm_L": 0.75, "LowerArm_L": 0.65, "Hand_L": 0.50,
+		"UpperArm_R": 0.75, "LowerArm_R": 0.65, "Hand_R": 0.50,
+		"UpperLeg_L": 0.80, "LowerLeg_L": 0.70, "Foot_L": 0.55,
+		"UpperLeg_R": 0.80, "LowerLeg_R": 0.70, "Foot_R": 0.55,
+	}
+	t.pin_strength_overrides = {"Hips": 0.95, "Foot_L": 0.6, "Foot_R": 0.6}
+	t.default_pin_strength = 0.3
+	t.recovery_rate = 0.8
+	t.stagger_threshold = 0.3
+	t.stagger_strength_floor = 0.50
+	t.stagger_duration = 0.3
+	return t
+
+
+## Creates a RagdollTuning for nimble characters that stagger easily but recover fast.
+static func create_agile() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.stagger_threshold = 0.80
+	t.stagger_duration = 1.0
+	t.recovery_rate = 0.5
+	t.fatigue_decay = 0.15
+	t.pain_decay = 0.25
+	return t
+
+
+## Creates a RagdollTuning for characters that ragdoll easily under sustained fire.
+static func create_fragile() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.stagger_threshold = 0.80
+	t.stagger_strength_floor = 0.10
+	t.stagger_duration = 0.8
+	t.stagger_ragdoll_bonus = 3.0
+	t.pain_gain = 0.4
+	t.injury_gain = 0.3
+	return t
+
+
 ## Validates that all dictionary keys in this tuning reference valid rig names
 ## defined in the given [param profile]. Returns an array of warning strings.
 ## An empty array means all keys are valid.
