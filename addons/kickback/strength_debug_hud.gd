@@ -160,6 +160,8 @@ func _draw_active_target(target: Dictionary, camera: Camera3D, cam_pos: Vector3)
 
 
 func _draw_bone_dots(bodies: Dictionary, spring: SpringResolver, camera: Camera3D, cam_pos: Vector3) -> void:
+	var heatmap_mode := _detail_level >= 2  # Larger dots at WIREFRAME+
+	var show_percent := _detail_level >= 3  # Strength % at FULL
 	for rig_name: String in bodies:
 		var body: RigidBody3D = bodies[rig_name]
 		var world_pos := body.global_position
@@ -174,14 +176,23 @@ func _draw_bone_dots(bodies: Dictionary, spring: SpringResolver, camera: Camera3
 		var color := _ratio_to_color(ratio)
 		color.a *= alpha
 		var dot_radius := _scaled_radius(dist)
+		if heatmap_mode:
+			dot_radius *= 1.6  # Larger dots for heatmap visibility
+			# Pulse effect for weakened bones
+			if ratio < 0.5:
+				var pulse := sin(Time.get_ticks_msec() * 0.005) * 0.3 + 1.0
+				dot_radius *= pulse
 		# Outline
 		draw_circle(screen_pos, dot_radius + 1.0, Color(OUTLINE_COLOR, OUTLINE_COLOR.a * alpha))
 		# Fill
 		draw_circle(screen_pos, dot_radius, color)
-		# Label
+		# Label + strength percentage
 		if dist < LABEL_DIST:
+			var label := rig_name
+			if show_percent:
+				label += " %d%%" % int(ratio * 100.0)
 			_draw_text_shadowed(screen_pos + Vector2(dot_radius + 3, 4),
-				rig_name, FONT_SIZE, color)
+				label, FONT_SIZE, color)
 
 
 func _draw_skeleton_wireframe(builder: PhysicsRigBuilder, spring: SpringResolver, camera: Camera3D, cam_pos: Vector3) -> void:
@@ -317,36 +328,45 @@ func _draw_com_and_support(bodies: Dictionary, ctrl: ActiveRagdollController, ca
 	if not foot_l or not foot_r:
 		return
 
-	# Center of mass
-	var com := Vector3.ZERO
-	var total_mass := 0.0
-	for body: RigidBody3D in bodies.values():
-		com += body.global_position * body.mass
-		total_mass += body.mass
-	if total_mass < 0.001:
+	# Get full balance state from controller
+	var balance_state: Dictionary = ctrl.get_balance_state() if ctrl else {}
+	var com: Vector3 = balance_state.get("com", Vector3.ZERO)
+	var support_center: Vector3 = balance_state.get("support_center", Vector3.ZERO)
+	var balance: float = balance_state.get("balance_ratio", 0.0)
+	var imbalance_dir: Vector2 = balance_state.get("imbalance_dir", Vector2.ZERO)
+
+	if com == Vector3.ZERO:
 		return
-	com /= total_mass
 
 	var mid_dist := cam_pos.distance_to(com)
 	if mid_dist > DOT_FADE_END:
 		return
 	var alpha := _distance_alpha(mid_dist)
 
-	# Support line between feet
+	# Support polygon — filled quad between feet
 	var fl_pos := foot_l.global_position
 	var fr_pos := foot_r.global_position
+	var foot_fwd := (fl_pos - fr_pos).cross(Vector3.UP).normalized() * 0.1
 	if not camera.is_position_behind(fl_pos) and not camera.is_position_behind(fr_pos):
 		var fl_screen := camera.unproject_position(fl_pos)
 		var fr_screen := camera.unproject_position(fr_pos)
-		draw_line(fl_screen, fr_screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+		var fl_fwd_screen := camera.unproject_position(fl_pos + foot_fwd)
+		var fr_fwd_screen := camera.unproject_position(fr_pos + foot_fwd)
+		var fl_back_screen := camera.unproject_position(fl_pos - foot_fwd)
+		var fr_back_screen := camera.unproject_position(fr_pos - foot_fwd)
+		# Filled support area
+		var support_poly := PackedVector2Array([fl_fwd_screen, fr_fwd_screen, fr_back_screen, fl_back_screen])
+		draw_colored_polygon(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.15 * alpha))
+		draw_polyline(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+		# Close the polyline
+		draw_line(fl_back_screen, fl_fwd_screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
 
-	# CoM marker — diamond shape
+	# CoM marker — diamond shape, colored by balance
 	if not camera.is_position_behind(com):
 		var com_screen := camera.unproject_position(com)
-		var balance := ctrl.get_balance_ratio() if ctrl else 0.0
 		var com_color := COM_COLOR_GOOD.lerp(COM_COLOR_BAD, clampf(balance, 0.0, 1.0))
 		com_color.a *= alpha
-		var sz := 6.0
+		var sz := 8.0
 		var diamond := PackedVector2Array([
 			com_screen + Vector2(0, -sz),
 			com_screen + Vector2(sz, 0),
@@ -356,13 +376,30 @@ func _draw_com_and_support(bodies: Dictionary, ctrl: ActiveRagdollController, ca
 		draw_colored_polygon(diamond, com_color)
 		draw_polyline(diamond, Color(1.0, 1.0, 1.0, 0.5 * alpha), 1.0)
 
-		# Support center marker (small dot)
-		var support_center := (fl_pos + fr_pos) * 0.5
+		# Balance ratio text
+		_draw_text_shadowed(com_screen + Vector2(sz + 4, 4),
+			"BAL %.2f" % balance, FONT_SIZE, com_color)
+
+		# Support center marker
 		if not camera.is_position_behind(support_center):
 			var sc_screen := camera.unproject_position(support_center)
-			draw_circle(sc_screen, 3.0, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.8 * alpha))
-			# Line from support center to CoM projection
-			draw_line(sc_screen, com_screen, Color(1.0, 1.0, 1.0, 0.25 * alpha), 1.0)
+			draw_circle(sc_screen, 4.0, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.8 * alpha))
+			# Line from support center to CoM
+			draw_line(sc_screen, com_screen, Color(1.0, 1.0, 1.0, 0.3 * alpha), 1.5)
+
+			# Imbalance direction arrow
+			if imbalance_dir.length_squared() > 0.001 and balance > 0.05:
+				var arrow_len := clampf(balance * 40.0, 10.0, 60.0)
+				var arrow_dir := imbalance_dir.normalized()
+				var arrow_end := sc_screen + Vector2(arrow_dir.x, arrow_dir.y) * arrow_len
+				var arrow_color := com_color
+				arrow_color.a = 0.8 * alpha
+				draw_line(sc_screen, arrow_end, arrow_color, 2.5)
+				# Arrowhead
+				var perp := Vector2(-arrow_dir.y, arrow_dir.x) * 5.0
+				var tip := arrow_end + Vector2(arrow_dir.x, arrow_dir.y) * 6.0
+				var head := PackedVector2Array([tip, arrow_end + perp, arrow_end - perp])
+				draw_colored_polygon(head, arrow_color)
 
 
 func _draw_velocity_vectors(bodies: Dictionary, camera: Camera3D, cam_pos: Vector3) -> void:

@@ -505,6 +505,11 @@ func get_balance_ratio() -> float:
 	return _compute_balance_ratio()
 
 
+## Returns the full balance state: {com, support_center, balance_ratio, imbalance_dir}.
+func get_balance_state() -> Dictionary:
+	return _compute_balance_state()
+
+
 ## Returns the current fatigue level (0.0 = fresh, 1.0 = exhausted).
 func get_fatigue() -> float:
 	return _fatigue
