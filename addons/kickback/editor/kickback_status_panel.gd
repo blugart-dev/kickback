@@ -25,13 +25,27 @@ func _build_ui() -> void:
 	var has_active := _has_sibling_of_type(parent, "ActiveRagdollController") if parent else false
 	var has_partial := _has_sibling_of_type(parent, "PartialRagdollController") if parent else false
 
-	# Mode label
+	# Mode + profile summary
 	var mode_name := "Active Ragdoll" if has_active else ("Partial Ragdoll" if has_partial else "None")
 	var mode_label := Label.new()
 	mode_label.text = "Mode: %s" % mode_name
 	mode_label.add_theme_font_size_override("font_size", 12)
 	mode_label.add_theme_color_override("font_color", Color(0.45, 0.75, 0.45))
 	add_child(mode_label)
+
+	var profile: RagdollProfile = _kc.ragdoll_profile if _kc.ragdoll_profile else RagdollProfile.create_mixamo_default()
+	var tuning: RagdollTuning = _kc.ragdoll_tuning if _kc.ragdoll_tuning else RagdollTuning.create_default()
+
+	# Bone/joint counts
+	var counts_label := Label.new()
+	counts_label.text = "Bones: %d  Joints: %d" % [profile.bones.size(), profile.joints.size()]
+	counts_label.add_theme_font_size_override("font_size", 11)
+	counts_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	add_child(counts_label)
+
+	# Foot IK status
+	var ik_enabled: bool = tuning.foot_ik_enabled
+	_add_check("Foot IK: %s" % ("Enabled" if ik_enabled else "Disabled"), ik_enabled)
 
 	# Setup validation
 	_add_section("Setup")
@@ -74,14 +88,10 @@ func _build_ui() -> void:
 				bake_btn.pressed.connect(_on_bake.bind(rig_builder))
 			add_child(bake_btn)
 
-	# Validation (#23 + #24)
+	# Validation
 	_add_section("Validation")
 	var all_warnings := PackedStringArray()
 
-	var profile: RagdollProfile = _kc.ragdoll_profile if _kc.ragdoll_profile else RagdollProfile.create_mixamo_default()
-	var tuning: RagdollTuning = _kc.ragdoll_tuning if _kc.ragdoll_tuning else RagdollTuning.create_default()
-
-	# Profile vs skeleton (#23)
 	var skeleton := _kc.get_node_or_null(_kc.skeleton_path) as Skeleton3D
 	if skeleton:
 		var profile_warnings := profile.validate_against_skeleton(skeleton)
@@ -96,6 +106,20 @@ func _build_ui() -> void:
 	else:
 		for w: String in all_warnings:
 			_add_check(w, false)
+
+	# Tuning Presets (#30)
+	_add_section("Tuning Presets")
+	var preset_hbox := HBoxContainer.new()
+	var preset_option := OptionButton.new()
+	for preset_name: String in ["Default", "Game", "Tank", "Agile", "Fragile"]:
+		preset_option.add_item(preset_name)
+	preset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preset_hbox.add_child(preset_option)
+	var apply_btn := Button.new()
+	apply_btn.text = "Apply"
+	apply_btn.pressed.connect(_on_apply_preset.bind(preset_option))
+	preset_hbox.add_child(apply_btn)
+	add_child(preset_hbox)
 
 	# Tips
 	add_child(HSeparator.new())
@@ -126,6 +150,34 @@ func _on_bake(rig_builder: PhysicsRigBuilder) -> void:
 		return
 	var scene_owner: Node = rig_builder.owner if rig_builder.owner else rig_builder
 	RigBaker.bake(rig_builder, _editor_plugin.get_undo_redo(), scene_owner)
+	_refresh()
+
+
+func _on_apply_preset(option: OptionButton) -> void:
+	var preset_name: String = option.get_item_text(option.selected)
+	var new_tuning: RagdollTuning
+	match preset_name:
+		"Default":
+			new_tuning = RagdollTuning.create_default()
+		"Game":
+			new_tuning = RagdollTuning.create_game_default()
+		"Tank":
+			new_tuning = RagdollTuning.create_tank()
+		"Agile":
+			new_tuning = RagdollTuning.create_agile()
+		"Fragile":
+			new_tuning = RagdollTuning.create_fragile()
+		_:
+			new_tuning = RagdollTuning.create_default()
+
+	if _editor_plugin:
+		var undo := _editor_plugin.get_undo_redo()
+		undo.create_action("Apply Kickback Tuning Preset: %s" % preset_name)
+		undo.add_do_property(_kc, "ragdoll_tuning", new_tuning)
+		undo.add_undo_property(_kc, "ragdoll_tuning", _kc.ragdoll_tuning)
+		undo.commit_action()
+	else:
+		_kc.ragdoll_tuning = new_tuning
 	_refresh()
 
 
