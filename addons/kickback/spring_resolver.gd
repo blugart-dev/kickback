@@ -39,6 +39,15 @@ func configure(tuning: RagdollTuning) -> void:
 		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
 
 
+## Re-caches values that are stored at init time. Call when tuning changes at runtime.
+func refresh_tuning() -> void:
+	if _tuning:
+		_max_angular_vel_sq = _tuning.max_angular_velocity * _tuning.max_angular_velocity
+		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
+		_strip_root_motion = _tuning.strip_root_motion
+		_root_motion_bone = _tuning.root_motion_bone
+
+
 func _ready() -> void:
 	_skeleton = get_node(skeleton_path) as Skeleton3D
 	_rig_builder = get_node(rig_builder_path) as PhysicsRigBuilder
