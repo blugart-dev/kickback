@@ -18,7 +18,7 @@ var _dragging: bool = false
 var _fps_label: Label
 var _budget_label: Label
 var _budget_slider: HSlider
-var _manager: KickbackManager
+var _manager: Node
 
 var YBOT_SCENE: PackedScene
 
@@ -35,7 +35,7 @@ func _ready() -> void:
 	_explosion.base_impulse = 50.0
 
 	# Budget manager
-	_manager = KickbackManager.new()
+	_manager = load("res://addons/kickback/kickback_manager.gd").new()
 	_manager.name = "KickbackManager"
 	_manager.max_active_ragdolls = 5
 	add_child(_manager)

@@ -1,7 +1,6 @@
 ## Global budget manager for Kickback. Tracks how many active ragdolls are
 ## currently simulating. Add as an autoload or place in the scene root.
 @icon("res://addons/kickback/icons/kickback_manager.svg")
-class_name KickbackManager
 extends Node
 
 @export_group("Budget")
