@@ -33,6 +33,7 @@ kickback/
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
 │       ├── partial_ragdoll_controller.gd # Standalone selective bone simulation
+│       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── hit_event.gd             # Hit data object
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)
