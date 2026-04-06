@@ -15,6 +15,10 @@ var _built: bool = false
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
+## Emitted when all ragdoll bodies and joints have been created.
+## After this signal, [method get_bodies] returns the full rig dictionary.
+signal bodies_built()
+
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
 	_profile = profile
@@ -26,6 +30,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_build_rig()
+	bodies_built.emit()
 	set_enabled(false)
 
 
@@ -200,6 +205,13 @@ func snap_to_skeleton() -> void:
 
 
 func get_bodies() -> Dictionary:
+	return _bodies
+
+
+## Returns the bodies dictionary, waiting for the rig to be built if needed.
+func await_bodies() -> Dictionary:
+	if not _built:
+		await bodies_built
 	return _bodies
 
 
