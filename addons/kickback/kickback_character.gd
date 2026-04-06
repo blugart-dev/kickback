@@ -44,6 +44,7 @@ var _partial_controller: PartialRagdollController
 
 var _mode: int = Mode.NONE
 var _ready_complete: bool = false
+var _exiting: bool = false
 
 ## Emitted when all controllers are initialized and the character is ready for use.
 signal setup_complete()
@@ -105,11 +106,10 @@ func _ready() -> void:
 
 	_validate_setup()
 
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
+	for i in 5:
+		await get_tree().process_frame
+		if _exiting:
+			return
 
 	# Enable the chosen mode
 	if _mode == Mode.ACTIVE:
@@ -122,8 +122,14 @@ func _ready() -> void:
 	elif _mode == Mode.PARTIAL:
 		_simulator.active = true
 
+	if not is_inside_tree():
+		return
 	_ready_complete = true
 	setup_complete.emit()
+
+
+func _exit_tree() -> void:
+	_exiting = true
 
 
 ## Routes an incoming hit to the active controller.
