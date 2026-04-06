@@ -19,7 +19,8 @@ kickback/
 ├── docs/
 │   ├── STEP_BY_STEP.md              # Implementation history
 │   ├── GODOT_CONSTRAINTS.md         # Engine quirks and workarounds
-│   └── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
+│   ├── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
+│   └── INTEGRATION.md              # Integration guide: timing, layers, state machine, scoring
 ├── addons/
 │   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg

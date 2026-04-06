@@ -420,6 +420,42 @@ static func create_fragile() -> RagdollTuning:
 	return t
 
 
+## Creates a RagdollTuning for responsive action games. Low stagger duration,
+## fast recovery, exaggerated micro-reactions for snappy hit feedback.
+static func create_responsive() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.stagger_duration = 0.4
+	t.recovery_rate = 1.0
+	t.stagger_recovery_rate = 0.08
+	t.micro_reaction_strength = 1.5
+	t.micro_head_whip_strength = 4.0
+	t.micro_torso_bend_strength = 3.0
+	t.pain_decay = 0.3
+	t.fatigue_decay = 0.2
+	return t
+
+
+## Creates a RagdollTuning for heavy, weighty characters. High damping,
+## slow recovery, and subdued micro-reactions for a realistic mass feel.
+static func create_heavy() -> RagdollTuning:
+	var t := RagdollTuning.new()
+	t.strength_map = {
+		"Hips": 0.80, "Spine": 0.75, "Chest": 0.75, "Head": 0.50,
+		"UpperArm_L": 0.55, "LowerArm_L": 0.40, "Hand_L": 0.30,
+		"UpperArm_R": 0.55, "LowerArm_R": 0.40, "Hand_R": 0.30,
+		"UpperLeg_L": 0.70, "LowerLeg_L": 0.55, "Foot_L": 0.40,
+		"UpperLeg_R": 0.70, "LowerLeg_R": 0.55, "Foot_R": 0.40,
+	}
+	t.stagger_duration = 2.0
+	t.recovery_rate = 0.2
+	t.gravity_scale = 1.2
+	t.angular_damp = 4.0
+	t.linear_damp = 1.5
+	t.stagger_sway_strength = 300.0
+	t.micro_reaction_strength = 0.5
+	return t
+
+
 ## Validates that all dictionary keys in this tuning reference valid rig names
 ## defined in the given [param profile]. Returns an array of warning strings.
 ## An empty array means all keys are valid.
