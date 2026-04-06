@@ -19,7 +19,8 @@ kickback/
 ├── docs/
 │   ├── STEP_BY_STEP.md              # Implementation history
 │   ├── GODOT_CONSTRAINTS.md         # Engine quirks and workarounds
-│   └── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
+│   ├── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
+│   └── INTEGRATION.md              # Integration guide: timing, layers, state machine, scoring
 ├── addons/
 │   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg
@@ -33,6 +34,7 @@ kickback/
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
 │       ├── partial_ragdoll_controller.gd # Standalone selective bone simulation
+│       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── hit_event.gd             # Hit data object
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)

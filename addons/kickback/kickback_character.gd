@@ -30,6 +30,9 @@ enum Mode {
 ## Physics tuning (spring strengths, recovery, collision layers).
 ## If null, uses built-in defaults.
 @export var ragdoll_tuning: RagdollTuning
+## State to enter automatically after setup completes. "Normal" does nothing.
+## "Ragdoll" triggers an immediate ragdoll. "Persistent" enters persistent ragdoll.
+@export_enum("Normal", "Ragdoll", "Persistent") var initial_state: String = "Normal"
 
 var _skeleton: Skeleton3D
 var _anim_player: AnimationPlayer
@@ -44,6 +47,7 @@ var _partial_controller: PartialRagdollController
 
 var _mode: int = Mode.NONE
 var _ready_complete: bool = false
+var _exiting: bool = false
 
 ## Emitted when all controllers are initialized and the character is ready for use.
 signal setup_complete()
@@ -105,11 +109,10 @@ func _ready() -> void:
 
 	_validate_setup()
 
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await get_tree().process_frame
+	for i in 5:
+		await get_tree().process_frame
+		if _exiting:
+			return
 
 	# Enable the chosen mode
 	if _mode == Mode.ACTIVE:
@@ -122,8 +125,23 @@ func _ready() -> void:
 	elif _mode == Mode.PARTIAL:
 		_simulator.active = true
 
+	if not is_inside_tree():
+		return
 	_ready_complete = true
 	setup_complete.emit()
+
+	# Apply initial state (after setup_complete so listeners can connect first)
+	match initial_state:
+		"Ragdoll":
+			if _active_controller:
+				_active_controller.trigger_ragdoll()
+		"Persistent":
+			if _active_controller:
+				_active_controller.set_persistent(true)
+
+
+func _exit_tree() -> void:
+	_exiting = true
 
 
 ## Routes an incoming hit to the active controller.
@@ -220,6 +238,28 @@ func trigger_ragdoll() -> void:
 		push_warning("KickbackCharacter: no ActiveRagdollController available for trigger_ragdoll()")
 
 
+## Triggers ragdoll as soon as setup completes. Safe to call at spawn time
+## before the physics rig is built. If setup has already completed, triggers
+## immediately.
+func queue_ragdoll() -> void:
+	if _ready_complete:
+		trigger_ragdoll()
+		return
+	if not setup_complete.is_connected(_deferred_ragdoll):
+		setup_complete.connect(_deferred_ragdoll, CONNECT_ONE_SHOT)
+
+
+## Enables persistent ragdoll as soon as setup completes. Safe to call at
+## spawn time before the physics rig is built. If setup has already completed,
+## enables immediately.
+func queue_persistent() -> void:
+	if _ready_complete:
+		set_persistent(true)
+		return
+	if not setup_complete.is_connected(_deferred_persistent):
+		setup_complete.connect(_deferred_persistent, CONNECT_ONE_SHOT)
+
+
 ## Enables or disables persistent ragdoll (death/knockdown).
 func set_persistent(enabled: bool) -> void:
 	if _active_controller:
@@ -245,6 +285,14 @@ static func _find_all_recursive(node: Node, result: Array[KickbackCharacter]) ->
 		result.append(node)
 	for child in node.get_children():
 		_find_all_recursive(child, result)
+
+
+func _deferred_ragdoll() -> void:
+	trigger_ragdoll()
+
+
+func _deferred_persistent() -> void:
+	set_persistent(true)
 
 
 func _on_tuning_changed() -> void:

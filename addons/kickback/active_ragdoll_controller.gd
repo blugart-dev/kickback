@@ -66,6 +66,8 @@ var _prev_com: Vector3 = Vector3.ZERO
 var _com_velocity: Vector3 = Vector3.ZERO
 var _com_initialized: bool = false
 var _sway_phase: float = 0.0
+var _hit_guard_frame: int = -1
+var _hit_guard_bodies: Dictionary = {}
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 var _foot_ik: FootIKSolver
@@ -362,6 +364,17 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 	if not _tuning or not _spring:
 		push_warning("ActiveRagdollController: apply_hit() called before configure()")
 		return
+
+	# Per-frame debounce: ignore duplicate hits on the same body within a single
+	# physics frame. Prevents feedback loops when body_entered re-triggers hits.
+	var frame := Engine.get_physics_frames()
+	if frame != _hit_guard_frame:
+		_hit_guard_frame = frame
+		_hit_guard_bodies.clear()
+	var body_rid := body.get_rid()
+	if body_rid in _hit_guard_bodies:
+		return
+	_hit_guard_bodies[body_rid] = true
 
 	# Hit streak: rapid consecutive hits escalate
 	var now := Time.get_ticks_msec() / 1000.0
