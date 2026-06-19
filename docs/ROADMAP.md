@@ -55,13 +55,12 @@ the remainder is tracked here.
   shape pipeline.
 - ✅ **Runtime/physics tests** (PR #64) — the rig is built and stepped in a headless SceneTree
   in CI (spring tracking, ragdoll, recovery, sync, foot IK, budget).
+- ✅ **`PhysicsRigSync` is a `SkeletonModifier3D`** — retired the deprecated
+  `set_bone_global_pose_override`. The modifier's per-frame pose roll-back keeps the spring's
+  `get_bone_pose()` read clean (no feedback loop), and the node self-promotes under the
+  skeleton at runtime. See [SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).
 
 **Still open:**
 
 - **Spring math is implicitly 60 Hz-bound** — corrections are divided by `delta` with no
   substepping awareness.
-- **`PhysicsRigSync` uses a deprecated API** — `set_bone_global_pose_override()` has been
-  deprecated since Godot 4.3 (still functional in 4.7) and will be removed in a future major.
-  The supported fix is a `SkeletonModifier3D` migration, deferred to **0.9.0** because it is
-  structural and needs in-editor visual validation. Scoped in
-  [SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).

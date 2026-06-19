@@ -43,12 +43,12 @@
   to drive the real controller/solver rather than re-implement their formulas. Shared
   builder: `test/helpers/rig_harness.gd`. Also covers the budget hard cap (downgrade vs
   bypass, slot accounting). Suite is now 89 tests.
-- **`SkeletonModifier3D` migration plan** — [docs/SKELETON_MODIFIER_MIGRATION.md](docs/SKELETON_MODIFIER_MIGRATION.md)
-  scopes the deferred (0.9.0) path to retire the deprecated `set_bone_global_pose_override`
-  in `PhysicsRigSync`, grounded in a Godot 4.7 investigation: 4.7 leaves the skeleton/modifier
-  subsystem unchanged, and the modifier's per-frame pose roll-back is what preserves the
-  spring's clean `get_bone_pose()` read target (so the migration is viable and localized).
-  Cross-linked from `GODOT_CONSTRAINTS.md` and `ROADMAP.md`.
+- **`SkeletonModifier3D` migration — docs + Godot 4.7 investigation** —
+  [docs/SKELETON_MODIFIER_MIGRATION.md](docs/SKELETON_MODIFIER_MIGRATION.md) records the
+  rationale and as-built notes, grounded in a 4.7 investigation (4.7 leaves the
+  skeleton/modifier subsystem unchanged; the modifier's per-frame roll-back is what preserves
+  the spring's clean `get_bone_pose()` read target). The migration itself shipped — see
+  *Changed* below. Cross-linked from `GODOT_CONSTRAINTS.md` and `ROADMAP.md`.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
@@ -94,11 +94,16 @@
   `JointDefinition.apply_to()`, shared by the runtime `PhysicsRigBuilder` and the editor
   `RigBaker`. Replaces the `joint.call("set_flag_" + axis, …)` / `set_param_` dynamic
   dispatch with typed per-axis calls (and de-duplicates the two copies).
-- `PhysicsRigSync` now documents why it keeps the deprecated `set_bone_global_pose_override`:
-  the override is a *separate* layer that doesn't alter `get_bone_pose()` — which
-  `SpringResolver` reads as its animation target — so a naive swap to `set_bone_global_pose()`
-  would create a spring feedback loop. The supported `SkeletonModifier3D` migration is a
-  larger, visually-sensitive refactor deferred to a future milestone.
+- **`PhysicsRigSync` is now a `SkeletonModifier3D`** — retires the deprecated
+  `set_bone_global_pose_override`. It writes the physics rig onto the skeleton inside
+  `_process_modification_with_delta` via `set_bone_global_pose()` in parent-first bone order;
+  the engine applies the result to the skin and rolls it back each frame, so `get_bone_pose()`
+  (the spring's animation target) stays uncontaminated — no feedback loop. The node
+  self-promotes under the `Skeleton3D` at runtime (deferred reparent), so `KickbackCharacter`,
+  `ActiveRagdollController`, all 8 demos, and the test harness were untouched; only the setup
+  tool's node type changed (`Node` → `SkeletonModifier3D`). Validated headlessly (89 GUT tests
+  incl. a signal-time multi-bone sync assertion that exercises the write ordering + clean
+  scene-smoke on all 8 demos); mesh-tracking polish verified in-editor.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5
