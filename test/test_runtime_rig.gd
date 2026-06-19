@@ -159,6 +159,17 @@ func test_skeleton_sync_follows_physics_during_ragdoll():
 		assert_lt(float(diffs.get(pair[0], 999.0)), 0.06,
 			"skeleton bone '%s' follows its physics body via the modifier" % pair[0])
 
+	# Roll-back invariant: OUTSIDE the skeleton_updated callback, the skeleton's
+	# queryable pose is the clean (rolled-back) animation pose — NOT the fallen
+	# physics body. This is exactly what keeps the spring's get_bone_pose() target
+	# uncontaminated (no feedback loop).
+	var hips_idx := skel.find_bone("mixamorig_Hips")
+	var hips_bone_world := (skel.global_transform * skel.get_bone_global_pose(hips_idx)).origin
+	assert_gt(hips_bone_world.y, 0.7,
+		"outside skeleton_updated the hips bone reads the rolled-back animation pose (~rest height)")
+	assert_gt(hips_bone_world.distance_to(hips.global_position), 0.1,
+		"the rolled-back pose differs from the fallen physics body — modifier rollback is working")
+
 
 # ── Coordinator facade + balance ────────────────────────────────────────────
 
@@ -183,3 +194,51 @@ func test_anticipate_threat_emits_signal():
 	h.character.anticipate_threat(Vector3.FORWARD, 0.8)
 	assert_signal_emitted(h.controller, "threat_anticipated",
 		"anticipate_threat routes through to the controller signal")
+
+
+# ── Spawn-time queue API (deferral until setup_complete) ─────────────────────
+
+func test_queue_ragdoll_before_setup_defers():
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(_core_tuning(), null, true)
+	assert_false(h.character.is_setup_complete(), "not yet set up immediately after setup()")
+	h.character.queue_ragdoll()  # queued before the physics rig exists
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "setup completed")
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.RAGDOLL,
+		"queue_ragdoll fired on setup_complete")
+
+
+func test_queue_persistent_before_setup_defers():
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(_core_tuning(), null, true)
+	h.character.queue_persistent()
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "setup completed")
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"queue_persistent fired on setup_complete")
+
+
+# ── apply_hit per-frame debounce ─────────────────────────────────────────────
+
+func test_apply_hit_debounces_same_body_same_frame():
+	var h = await _spawn()
+	var head: RigidBody3D = h.get_body("Head")
+	var impact := ImpactProfile.new()
+	impact.base_impulse = 5.0
+	impact.impulse_transfer_ratio = 0.3
+	impact.ragdoll_probability = 0.0   # deterministic — never random-ragdoll
+	impact.strength_reduction = 0.5
+	impact.strength_spread = 0
+	impact.recovery_rate = 1.0
+	# Two hits on the same body with NO frame advance between them.
+	h.controller.apply_hit(head, Vector3.FORWARD, head.global_position, impact)
+	var after_first: float = h.spring.get_bone_strength("Head")
+	h.controller.apply_hit(head, Vector3.FORWARD, head.global_position, impact)
+	var after_second: float = h.spring.get_bone_strength("Head")
+	assert_lt(after_first, h.spring.get_base_strength("Head"),
+		"first hit reduced strength (guards against a trivially-passing test)")
+	assert_almost_eq(after_second, after_first, 0.0001,
+		"a second same-frame hit on the same body is debounced — no extra reduction")

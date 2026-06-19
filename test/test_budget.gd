@@ -101,3 +101,18 @@ func test_persistent_bypasses_cap():
 	h.controller.set_persistent(true)
 	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
 		"set_persistent (death/knockdown) ignores the budget")
+
+
+# ── Slot release on removal (despawn mid-ragdoll) ────────────────────────────
+
+func test_exit_tree_releases_budget_slot():
+	var h = await _spawn(_fast_tuning())
+	var mgr = _add_manager(1)
+	_hit(h)
+	assert_eq(mgr.get_active_ragdoll_count(), 1, "slot held during ragdoll")
+	# Despawn the character mid-ragdoll (e.g. removing a dead enemy). The
+	# controller's _exit_tree must release its slot or the budget leaks.
+	remove_child(h)
+	await get_tree().process_frame
+	assert_eq(mgr.get_active_ragdoll_count(), 0,
+		"removing the character mid-ragdoll releases its budget slot")

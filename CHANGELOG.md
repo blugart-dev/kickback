@@ -55,7 +55,11 @@
   `SkeletonDetector.create_collision_shape` (box/capsule/sphere) + `create_profile_from_skeleton`
   (a 16-body/15-joint round-trip that re-validates clean) in `test_skeleton_detector.gd`. The
   synthetic-skeleton builder was promoted to a reusable `RigHarness.build_mixamo_skeleton()`.
-  Suite is now 103 tests.
+- **Runtime lifecycle test gaps closed** — budget slot release on `_exit_tree` (despawn
+  mid-ragdoll), the `PhysicsCollisionMonitor` connect/disconnect lifecycle (its `_exit_tree`
+  signal-leak fix), `queue_ragdoll`/`queue_persistent` pre-setup deferral, the `apply_hit`
+  per-frame debounce, and a `SkeletonModifier3D` roll-back assertion (outside `skeleton_updated`
+  the skeleton reads the clean animation pose, not the physics body). Suite is now 108 tests.
 - **`SkeletonModifier3D` migration — docs + Godot 4.7 investigation** —
   [docs/SKELETON_MODIFIER_MIGRATION.md](docs/SKELETON_MODIFIER_MIGRATION.md) records the
   rationale and as-built notes, grounded in a 4.7 investigation (4.7 leaves the
