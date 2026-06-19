@@ -168,8 +168,6 @@
   resistance and the tip/recovery checks — it sums center-of-mass over every body and was
   being computed twice per frame. `StrengthDebugHUD` disables `_process` while the overlay is
   off (F3), so it does no per-frame redraw work until it is toggled on.
-
-### Performance
 - **Foot IK solver per-frame allocations removed** — the target-override dictionary handed to
   the `SpringResolver` each solve is now a reused buffer instead of a fresh `{}` (safe because
   the solve and the spring's read never interleave within a physics frame), and animation bone
