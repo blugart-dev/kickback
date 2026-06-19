@@ -47,12 +47,16 @@ const DETAIL_LABELS := ["OFF", "DOTS", "WIREFRAME", "FULL"]
 func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Starts off — no per-frame redraw work until the overlay is toggled on (F3).
+	set_process(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F3:
 		_detail_level = (_detail_level + 1) % 4
 		visible = _detail_level > 0
+		# Only run _process (per-frame queue_redraw) while the overlay is visible.
+		set_process(_detail_level > 0)
 		if _detail_level > 0 and not _discovered:
 			_discover_targets()
 		queue_redraw()

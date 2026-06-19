@@ -306,14 +306,18 @@ func _update_stagger(delta: float) -> void:
 		if _spring.get_bone_strength(rig_name) < floor_val:
 			_spring.set_bone_strength(rig_name, floor_val)
 
+	# Balance is read by both active resistance and the tip/recovery checks below.
+	# It sums CoM over every body, so compute it once per stagger frame and share
+	# it (bodies don't move between these reads — only spring strengths change).
+	var balance_state := _compute_balance_state()
+
 	# Active resistance: dynamic per-frame strength adjustment
-	_apply_active_resistance(delta)
+	_apply_active_resistance(delta, balance_state)
 
 	# Continuous sway force: fights springs to create visible wobble
 	_apply_stagger_sway(delta)
 
 	# Balance-informed stagger (only when foot support can actually be measured)
-	var balance_state := _compute_balance_state()
 	var balance: float = balance_state.balance_ratio
 	var has_support: bool = balance_state.has_support
 	balance_changed.emit(balance)
@@ -1150,13 +1154,12 @@ func _is_leg_bone(rig_name: String) -> bool:
 	return _leg_rig_set.has(rig_name)
 
 
-func _apply_active_resistance(delta: float) -> void:
+func _apply_active_resistance(delta: float, balance_state: Dictionary) -> void:
 	# Early exit if all resistance is disabled
 	if _tuning.resistance_counter_strength <= 0.0 and _tuning.resistance_core_ramp <= 0.0 and _tuning.resistance_leg_brace <= 0.0:
 		return
 
 	var bodies := _rig_builder.get_bodies()
-	var balance_state := _compute_balance_state()
 	var com: Vector3 = balance_state.com
 	var support_center: Vector3 = balance_state.support_center
 	var balance_ratio: float = balance_state.balance_ratio
