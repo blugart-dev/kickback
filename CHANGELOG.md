@@ -66,6 +66,11 @@
 - **`RagdollProfile.root_bone`** no longer defaults to the Mixamo-specific `"mixamorig_Hips"`.
   It defaults to empty and derives from `root_rig` via `get_root_skeleton_bone()`, so the
   partial-ragdoll recursion guard is correct on any rig.
+- **`RagdollTuning.validate_against_profile`** foot-IK check now resolves feet/legs through the
+  profile's semantic roles (`foot_rigs` / `left_leg_chain` / `right_leg_chain`) instead of the
+  hardcoded `Foot_L`/`UpperLeg_L`/… names, matching `RagdollProfile.validate_against_skeleton`.
+  Non-Mixamo rigs that set the role fields no longer get spurious "foot_ik requires 'Foot_L'"
+  warnings. (Completes the PR #62 de-hardcoding, which missed this one validator.)
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
