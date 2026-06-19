@@ -476,9 +476,15 @@ func validate_against_profile(profile: RagdollProfile) -> PackedStringArray:
 		if bone_name not in valid_names:
 			warnings.append("core_bracing_bones entry '%s' not found in profile rig names" % bone_name)
 
+	# Foot IK resolves feet/legs through the profile's semantic roles, not hardcoded
+	# Mixamo names — mirror RagdollProfile.validate_against_skeleton so a non-Mixamo rig
+	# with its role fields set doesn't get spurious "requires 'Foot_L'" warnings.
 	if foot_ik_enabled:
-		for foot_name in ["Foot_L", "Foot_R", "UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R"]:
-			if foot_name not in valid_names:
-				warnings.append("foot_ik requires '%s' in profile but not found" % foot_name)
+		if profile.get_foot_rigs().size() < 2:
+			warnings.append("foot_ik_enabled requires two foot bodies (profile foot_rigs role)")
+		for side: String in ["L", "R"]:
+			if profile.get_leg_chain(side).is_empty():
+				warnings.append("foot_ik_enabled requires a complete %s leg chain (profile %s_leg_chain role)" % [
+					side, "left" if side == "L" else "right"])
 
 	return warnings
