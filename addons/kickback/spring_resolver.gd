@@ -2,7 +2,8 @@
 ## animation skeleton poses. Each frame, computes rotation/position error per
 ## bone and lerps rigid body velocities toward the correction, weighted by
 ## per-bone strength. Strength can be reduced on hit so physics wins temporarily,
-## then recovers over time.
+## then recovers over time. Corrections are normalized to a 60 Hz reference, so
+## the feel is frame-rate independent — bit-identical at 60 Hz, stable at 30/120.
 @icon("res://addons/kickback/icons/spring_resolver.svg")
 class_name SpringResolver
 extends Node
@@ -30,6 +31,10 @@ var _strip_root_motion: bool = true
 var _root_motion_bone: String = "Hips"
 
 const PROPERTY_THRESHOLD := 0.01
+## Spring tuning is calibrated at 60 Hz. Per-tick blend weights and velocity
+## targets are normalized to this reference so behaviour matches across physics
+## tick rates (and is bit-identical at 60 Hz). See [method _fr_weight].
+const _REFERENCE_HZ := 60.0
 
 
 func configure(tuning: RagdollTuning) -> void:
@@ -156,7 +161,7 @@ func _physics_process(delta: float) -> void:
 		if pin_injury > 0.0:
 			pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
 		var pos_error := target_xform.origin - current_xform.origin
-		body.linear_velocity = body.linear_velocity.lerp(pos_error / delta, pin)
+		body.linear_velocity = body.linear_velocity.lerp(pos_error * _REFERENCE_HZ, _fr_weight(pin, delta))
 
 		if body.angular_velocity.length_squared() > _max_angular_vel_sq:
 			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
@@ -183,8 +188,18 @@ func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Tran
 	if axis_raw.length_squared() < 0.0001 or angle < 0.001:
 		return
 
-	var target_vel := (axis_raw.normalized() * angle) / delta
-	body.angular_velocity = body.angular_velocity.lerp(target_vel, strength)
+	var target_vel := (axis_raw.normalized() * angle) * _REFERENCE_HZ
+	body.angular_velocity = body.angular_velocity.lerp(target_vel, _fr_weight(strength, delta))
+
+
+## Converts a 60 Hz-calibrated lerp weight into a frame-rate-independent weight for
+## the current physics step. The per-tick fraction is reparameterized so the
+## convergence rate per unit wall-clock time stays constant across tick rates; at
+## 60 Hz this returns the weight unchanged (delta * _REFERENCE_HZ == 1). The weight
+## is clamped to [0, 1] (a >1 lerp would mean extrapolation, which has no stable
+## frame-rate-independent form).
+static func _fr_weight(weight: float, delta: float) -> float:
+	return 1.0 - pow(1.0 - clampf(weight, 0.0, 1.0), delta * _REFERENCE_HZ)
 
 
 func _get_pin_strength(rig_name: String) -> float:

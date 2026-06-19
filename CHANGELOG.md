@@ -93,6 +93,14 @@
   name differs from its `kickback_rig_name` metadata, hits previously no-op'd the strength
   logic silently (impulse still applied, but no reaction). Now the hit affects the correct
   bone, and a body that isn't a registered rig body warns and is ignored.
+- **Spring math is now frame-rate independent** — `SpringResolver` previously divided
+  corrections by `delta` and applied a constant per-tick blend weight, so the effective
+  stiffness (and the residual velocity that feeds damping and the velocity clamp) drifted
+  with the physics tick rate — stiffer at 120 Hz, mushier at 30 Hz, with all tuning
+  implicitly calibrated to 60 Hz. Velocity targets and blend weights are now normalized to a
+  60 Hz reference (`_fr_weight`): **bit-identical at 60 Hz** (existing tuning unchanged) and
+  convergence-stable at other tick rates. Stays velocity-based (not a PD rewrite). Resolves
+  the last "Still open" item in [ROADMAP.md](docs/ROADMAP.md).
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
