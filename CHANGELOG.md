@@ -32,6 +32,16 @@
 - **`KickbackLayers`** — named collision-layer constants (active ragdoll = UI layer 4,
   partial ragdoll = UI layer 5) replacing magic numbers in `KickbackRaycast` and
   `SkeletonDetector`.
+- **Runtime / physics smoke tests** — the first automated coverage of the physics runtime
+  (previously 0 %). The GUT suite now builds a real rig in a headless `SceneTree` — a
+  synthetic Mixamo-named skeleton wired to `PhysicsRigBuilder` + `SpringResolver` +
+  `PhysicsRigSync` + `ActiveRagdollController` via `KickbackCharacter` — steps Jolt physics,
+  and asserts rig construction (16 bodies / 15 joints, bodies snapped to bone globals),
+  spring tracking against gravity, `apply_hit` strength reduction, full ragdoll → recovery,
+  stagger and persistent transitions, physics→skeleton sync, and the real `FootIKSolver`
+  planting feet over ground. `test_state_machine.gd` and `test_foot_ik.gd` were refactored
+  to drive the real controller/solver rather than re-implement their formulas. Shared
+  builder: `test/helpers/rig_harness.gd`. Suite is now 84 tests.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
