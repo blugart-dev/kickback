@@ -134,3 +134,41 @@ func test_pelvis_never_lifts_on_flat_ground():
 	# Feet rest on flat ground level with the root, so the pelvis must not rise.
 	assert_true(solver._pelvis_offset <= 0.001,
 		"pelvis offset never lifts above zero (got %f)" % solver._pelvis_offset)
+
+
+# A foot over a drop-off (ground beyond pelvis reach) must NOT drag the whole
+# pelvis down and break the other, planted foot. Regression for the pelvis-drop
+# support gate: only feet on reachable ground inform the drop.
+func test_pelvis_ignores_foot_over_dropoff():
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(RagdollTuning.create_default(), null, false)  # no default ground
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "Kickback setup completed within frame budget")
+	# Solid ground under the LEFT foot (x > 0), top flush with the feet (y ≈ 0).
+	h.add_child(_platform(Vector3(5.0, -0.2, 0.0), Vector3(10.0, 0.4, 20.0)))
+	# A deep drop-off under the RIGHT foot (x < 0): ground ~1 m below the feet,
+	# far beyond foot_ik_max_pelvis_drop (0.35 m).
+	h.add_child(_platform(Vector3(-5.0, -1.2, 0.0), Vector3(10.0, 0.4, 20.0)))
+	await wait_physics_frames(35)
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	assert_gt(solver._ik_weight_l, 0.4, "left foot plants on the solid ground")
+	# The right foot's drop-off is excluded, so the pelvis stays near neutral
+	# instead of being yanked to -foot_ik_max_pelvis_drop by the deep ground.
+	assert_gt(solver._pelvis_offset, -0.1,
+		"pelvis is not dragged into the drop-off (got %f)" % solver._pelvis_offset)
+
+
+# Builds a layer-1 StaticBody3D box platform at [param pos] with [param size].
+func _platform(pos: Vector3, size: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	body.position = pos
+	return body
