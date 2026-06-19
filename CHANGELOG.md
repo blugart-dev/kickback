@@ -49,6 +49,13 @@
   to drive the real controller/solver rather than re-implement their formulas. Shared
   builder: `test/helpers/rig_harness.gd`. Also covers the budget hard cap (downgrade vs
   bypass, slot accounting). Suite is now 89 tests.
+- **Resource & detector validation tests** — `RagdollProfile.validate_against_skeleton`
+  (clean Mixamo round-trip plus each warning branch: missing skeleton/child bone, undefined
+  joint/role rig, absent feet, missing intermediate) in `test_profile_validation.gd`, and
+  `SkeletonDetector.create_collision_shape` (box/capsule/sphere) + `create_profile_from_skeleton`
+  (a 16-body/15-joint round-trip that re-validates clean) in `test_skeleton_detector.gd`. The
+  synthetic-skeleton builder was promoted to a reusable `RigHarness.build_mixamo_skeleton()`.
+  Suite is now 103 tests.
 - **`SkeletonModifier3D` migration — docs + Godot 4.7 investigation** —
   [docs/SKELETON_MODIFIER_MIGRATION.md](docs/SKELETON_MODIFIER_MIGRATION.md) records the
   rationale and as-built notes, grounded in a 4.7 investigation (4.7 leaves the
