@@ -15,8 +15,6 @@ enum Mode {
 @export_group("References")
 ## Path to the Skeleton3D node that drives this character's mesh.
 @export var skeleton_path: NodePath
-## Path to the AnimationPlayer (optional — only needed if using RagdollAnimator).
-@export var animation_player_path: NodePath
 ## Path to the character's root Node3D (gameplay root, not model sub-node).
 ## This node is teleported during ragdoll recovery. The setup tool defaults to
 ## ".." assuming Kickback nodes are direct children of the character root. If
@@ -35,7 +33,6 @@ enum Mode {
 @export_enum("Normal", "Ragdoll", "Persistent") var initial_state: String = "Normal"
 
 var _skeleton: Skeleton3D
-var _anim_player: AnimationPlayer
 var _character_root: Node3D
 var _simulator: PhysicalBoneSimulator3D
 
@@ -61,9 +58,6 @@ func _ready() -> void:
 
 	# Set skeleton modifier callback to Physics so IK and spring resolver stay in sync
 	_skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
-
-	if not animation_player_path.is_empty():
-		_anim_player = get_node_or_null(animation_player_path) as AnimationPlayer
 
 	if not character_root_path.is_empty():
 		_character_root = get_node_or_null(character_root_path) as Node3D
@@ -166,15 +160,6 @@ func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vec
 ## Returns the current mode as a [enum Mode] value.
 func get_mode() -> int:
 	return _mode
-
-
-## Returns a human-readable label for the current mode.
-func get_mode_name() -> String:
-	match _mode:
-		Mode.ACTIVE: return "ACTIVE"
-		Mode.PARTIAL: return "PARTIAL"
-		Mode.NONE: return "NONE"
-	return "UNKNOWN"
 
 
 ## Returns true if the character is in full ragdoll, getting up, or persistent ragdoll.

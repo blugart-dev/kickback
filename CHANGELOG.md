@@ -115,6 +115,10 @@
   `shooting_range` and `tuning_playground` — see Changed above).
 - Stray debug `print()` output across setup/baking/HUD paths (meaningful notices kept as
   `push_warning`).
+- The vestigial `RagdollAnimator` hook — the write-only `_anim_player` field, the
+  `animation_player_path` export, and the setup tool's `AnimationPlayer` detection that fed
+  it. Nothing consumed it (the controllers are animation-agnostic by design). Also removed
+  the unused `JoltCheck.warn_if_not_jolt()` and `KickbackCharacter.get_mode_name()`.
 
 ---
 
