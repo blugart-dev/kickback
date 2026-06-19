@@ -74,6 +74,15 @@ var _profile: RagdollProfile
 var _tuning: RagdollTuning
 var _foot_ik: FootIKSolver
 
+# Cached semantic role rig-names, resolved from the profile (see RagdollProfile roles).
+# Consumers query these instead of hardcoding "Hips"/"Foot_L"/... so non-Mixamo rigs work.
+var _root_rig: String = "Hips"
+var _chest_rig: String = "Chest"
+var _head_rig: String = "Head"
+var _foot_rigs: PackedStringArray = ["Foot_L", "Foot_R"]
+var _torso_rigs: PackedStringArray = ["Hips", "Spine", "Chest"]
+var _leg_rig_set: Dictionary = {}  # rig_name → true, O(1) leg membership
+
 # Budget manager (optional, discovered via group). Holds at most one ragdoll slot.
 var _manager: Node = null
 var _holds_ragdoll_slot: bool = false
@@ -110,6 +119,7 @@ signal region_injured(rig_name: String, severity: float)
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
 	_profile = profile
 	_tuning = tuning
+	_resolve_roles()
 	_rebuild_protected_set()
 
 
@@ -130,6 +140,21 @@ func _ensure_config() -> void:
 		_profile = RagdollProfile.create_mixamo_default()
 	if not _tuning:
 		_tuning = RagdollTuning.create_default()
+	_resolve_roles()
+
+
+## Resolves and caches semantic role rig-names from the profile.
+func _resolve_roles() -> void:
+	if not _profile:
+		return
+	_root_rig = _profile.get_root_rig()
+	_chest_rig = _profile.get_chest_rig()
+	_head_rig = _profile.get_head_rig()
+	_foot_rigs = _profile.get_foot_rigs()
+	_torso_rigs = _profile.get_torso_rigs()
+	_leg_rig_set.clear()
+	for leg: String in _profile.get_all_leg_rigs():
+		_leg_rig_set[leg] = true
 
 
 func _rebuild_protected_set() -> void:
@@ -195,7 +220,7 @@ func _physics_process(delta: float) -> void:
 	if not _foot_ik and _tuning and _tuning.foot_ik_enabled and _character_root:
 		if not _spring.get_all_bone_names().is_empty():
 			_foot_ik = FootIKSolver.new()
-			if not _foot_ik.initialize(_spring, _tuning, _character_root, _rig_builder):
+			if not _foot_ik.initialize(_spring, _tuning, _character_root, _rig_builder, _profile):
 				push_warning("ActiveRagdollController: foot IK disabled (missing leg bones)")
 				_foot_ik = null
 
@@ -573,7 +598,7 @@ func anticipate_threat(threat_dir: Vector3, urgency: float = 0.5) -> void:
 	var pulse_intensity := urgency * _tuning.threat_anticipation_strength
 	if pulse_intensity > 0.01:
 		var bodies := _rig_builder.get_bodies()
-		var hips_body: RigidBody3D = bodies.get("Hips")
+		var hips_body: RigidBody3D = bodies.get(_root_rig)
 		if not hips_body:
 			return
 		# Find the bone closest to the threat direction for targeted pulse
@@ -623,6 +648,19 @@ func get_state_name() -> String:
 	return "UNKNOWN"
 
 
+## Resolved root rig name (for the debug HUD / external queries).
+func get_root_rig() -> String:
+	return _root_rig
+
+## Resolved head rig name.
+func get_head_rig() -> String:
+	return _head_rig
+
+## Resolved foot rig names.
+func get_foot_rigs() -> PackedStringArray:
+	return _foot_rigs
+
+
 # ── State Transitions ───────────────────────────────────────────────────────
 
 func _full_ragdoll() -> void:
@@ -662,12 +700,12 @@ func _start_recovery() -> void:
 	state_changed.emit(_state)
 
 	var bodies := _rig_builder.get_bodies()
-	var hip_body: RigidBody3D = bodies.get("Hips")
+	var hip_body: RigidBody3D = bodies.get(_root_rig)
 	if not hip_body:
 		_finish_recovery()
 		return
-	var chest_body: RigidBody3D = bodies.get("Chest")
-	var head_body: RigidBody3D = bodies.get("Head")
+	var chest_body: RigidBody3D = bodies.get(_chest_rig)
+	var head_body: RigidBody3D = bodies.get(_head_rig)
 
 	# Detect orientation BEFORE moving root
 	var face_up := true
@@ -862,9 +900,14 @@ func _compute_average_strength_ratio() -> float:
 func _compute_balance_state() -> Dictionary:
 	var empty := {"com": Vector3.ZERO, "support_center": Vector3.ZERO, "balance_ratio": 0.0, "imbalance_dir": Vector2.ZERO, "has_support": false}
 	var bodies := _rig_builder.get_bodies()
-	var foot_l: RigidBody3D = bodies.get("Foot_L")
-	var foot_r: RigidBody3D = bodies.get("Foot_R")
-	if not foot_l or not foot_r:
+
+	# Collect the foot bodies that actually exist (role-driven, multi-rig safe).
+	var feet: Array[RigidBody3D] = []
+	for foot_rig: String in _foot_rigs:
+		var fb: RigidBody3D = bodies.get(foot_rig)
+		if fb:
+			feet.append(fb)
+	if feet.is_empty():
 		return empty
 
 	var com := Vector3.ZERO
@@ -876,9 +919,15 @@ func _compute_balance_state() -> Dictionary:
 		return empty
 	com /= total_mass
 
-	var support_center := (foot_l.global_position + foot_r.global_position) * 0.5
-	var foot_spread := foot_l.global_position.distance_to(foot_r.global_position)
-	var support_radius := maxf(foot_spread * 0.5, _tuning.balance_support_radius_min)
+	var support_center := Vector3.ZERO
+	for f: RigidBody3D in feet:
+		support_center += f.global_position
+	support_center /= feet.size()
+
+	# Support radius = furthest foot from the centre (= half the spread for two feet).
+	var support_radius := _tuning.balance_support_radius_min
+	for f: RigidBody3D in feet:
+		support_radius = maxf(support_radius, f.global_position.distance_to(support_center))
 
 	var com_xz := Vector2(com.x, com.z)
 	var support_xz := Vector2(support_center.x, support_center.z)
@@ -929,21 +978,23 @@ func _apply_micro_reaction(hit_dir: Vector3, profile: ImpactProfile) -> void:
 	var intensity: float = profile.strength_reduction * _tuning.micro_reaction_strength
 
 	# Head whip: torque pushes head in hit direction
-	var head: RigidBody3D = bodies.get("Head")
+	var head: RigidBody3D = bodies.get(_head_rig)
 	if head:
 		var whip_torque := hit_dir.cross(Vector3.UP) * intensity * _tuning.micro_head_whip_strength
 		head.apply_torque_impulse(whip_torque)
 
-	# Torso bend: spine/chest bend away from hit direction
-	for bone_name: String in ["Spine", "Chest"]:
-		var bone_body: RigidBody3D = bodies.get(bone_name)
+	# Torso bend: spine/chest bend away from hit direction (skip the root/pelvis)
+	for torso_rig: String in _torso_rigs:
+		if torso_rig == _root_rig:
+			continue
+		var bone_body: RigidBody3D = bodies.get(torso_rig)
 		if bone_body:
 			var bend_torque := (-hit_dir).cross(Vector3.UP) * intensity * _tuning.micro_torso_bend_strength
 			bone_body.apply_torque_impulse(bend_torque)
 
 	# Spin: high-caliber hits twist the torso around Y axis
 	if profile.base_impulse > 10.0:
-		var hips: RigidBody3D = bodies.get("Hips")
+		var hips: RigidBody3D = bodies.get(_root_rig)
 		if hips:
 			var spin_strength := profile.base_impulse * _tuning.micro_spin_strength * 0.01
 			hips.apply_torque_impulse(Vector3.UP * spin_strength * signf(hit_dir.x))
@@ -1002,7 +1053,7 @@ func _release_ragdoll_slot() -> void:
 
 func _apply_directional_bracing(hit_dir: Vector3) -> void:
 	var bodies := _rig_builder.get_bodies()
-	var hips_body: RigidBody3D = bodies.get("Hips")
+	var hips_body: RigidBody3D = bodies.get(_root_rig)
 	if not hips_body:
 		return
 	var center := hips_body.global_position
@@ -1045,15 +1096,7 @@ func _apply_directional_bracing(hit_dir: Vector3) -> void:
 
 
 func _is_leg_bone(rig_name: String) -> bool:
-	return rig_name.begins_with("UpperLeg") or rig_name.begins_with("LowerLeg") or rig_name.begins_with("Foot")
-
-
-func _get_bone_side(rig_name: String) -> String:
-	if rig_name.ends_with("_L"):
-		return "L"
-	elif rig_name.ends_with("_R"):
-		return "R"
-	return ""
+	return _leg_rig_set.has(rig_name)
 
 
 func _apply_active_resistance(delta: float) -> void:
@@ -1089,22 +1132,25 @@ func _apply_active_resistance(delta: float) -> void:
 	var velocity_multiplier := 1.0 + velocity_factor * _tuning.resistance_velocity_spike
 
 	# Determine which leg is load-bearing (closer to the fall direction)
+	# Load-bearing leg = the foot furthest in the fall direction; brace its side.
 	var brace_side := ""
-	if _tuning.resistance_leg_brace > 0.0:
-		var foot_l: RigidBody3D = bodies.get("Foot_L")
-		var foot_r: RigidBody3D = bodies.get("Foot_R")
-		if foot_l and foot_r and imbalance_dir.length_squared() > 0.001:
-			var support_xz := Vector2(support_center.x, support_center.z)
-			var fl_xz := Vector2(foot_l.global_position.x, foot_l.global_position.z)
-			var fr_xz := Vector2(foot_r.global_position.x, foot_r.global_position.z)
-			var l_offset := fl_xz - support_xz
-			var r_offset := fr_xz - support_xz
-			var l_dot: float = l_offset.normalized().dot(imbalance_dir) if l_offset.length_squared() > 0.001 else 0.0
-			var r_dot: float = r_offset.normalized().dot(imbalance_dir) if r_offset.length_squared() > 0.001 else 0.0
-			brace_side = "L" if l_dot > r_dot else "R"
+	if _tuning.resistance_leg_brace > 0.0 and imbalance_dir.length_squared() > 0.001:
+		var support_xz := Vector2(support_center.x, support_center.z)
+		var best_dot := -INF
+		for foot_rig: String in _foot_rigs:
+			var fb: RigidBody3D = bodies.get(foot_rig)
+			if not fb:
+				continue
+			var f_offset := Vector2(fb.global_position.x, fb.global_position.z) - support_xz
+			if f_offset.length_squared() <= 0.001:
+				continue
+			var d := f_offset.normalized().dot(imbalance_dir)
+			if d > best_dot:
+				best_dot = d
+				brace_side = _profile.get_leg_side(foot_rig)
 
 	# Hips center for bone offset computation
-	var hips_body: RigidBody3D = bodies.get("Hips")
+	var hips_body: RigidBody3D = bodies.get(_root_rig)
 	if not hips_body:
 		return
 	var hips_center := Vector2(hips_body.global_position.x, hips_body.global_position.z)
@@ -1135,7 +1181,7 @@ func _apply_active_resistance(delta: float) -> void:
 
 		# Component 3: Load-bearing leg bracing
 		if _tuning.resistance_leg_brace > 0.0 and brace_side != "":
-			if _is_leg_bone(rig_name) and _get_bone_side(rig_name) == brace_side:
+			if _is_leg_bone(rig_name) and _profile.get_leg_side(rig_name) == brace_side:
 				boost += balance_ratio * _tuning.resistance_leg_brace * resistance_capacity
 
 		# Apply velocity multiplier and clamp to effective base
@@ -1152,7 +1198,7 @@ func _apply_stagger_sway(_delta: float) -> void:
 		return
 
 	var bodies := _rig_builder.get_bodies()
-	var hips: RigidBody3D = bodies.get("Hips")
+	var hips: RigidBody3D = bodies.get(_root_rig)
 	if not hips:
 		return
 
@@ -1171,19 +1217,22 @@ func _apply_stagger_sway(_delta: float) -> void:
 	var perp := _stagger_hit_dir.cross(Vector3.UP).normalized()
 	var force := (_stagger_hit_dir * osc_primary + perp * osc_secondary) * _tuning.stagger_sway_strength * decay
 
-	# Apply force to core bones (decreasing intensity up the chain)
+	# Apply full force to the root, then the rest of the torso with falloff
+	# (chest_rig uses the chest falloff; other torso bones use the spine falloff).
 	hips.apply_central_force(force)
-	var spine: RigidBody3D = bodies.get("Spine")
-	if spine:
-		spine.apply_central_force(force * _tuning.stagger_sway_spine_falloff)
-	var chest: RigidBody3D = bodies.get("Chest")
-	if chest:
-		chest.apply_central_force(force * _tuning.stagger_sway_chest_falloff)
 
 	# Upper body twist: independent torso rotation at a third frequency
 	var twist_osc := sin(t * freq * _tuning.stagger_sway_twist_ratio * TAU)
 	var torque := Vector3.UP * _tuning.stagger_sway_strength * twist_osc * decay * _tuning.stagger_sway_twist
-	if spine:
-		spine.apply_torque(torque)
-	if chest:
-		chest.apply_torque(torque * _tuning.stagger_sway_chest_falloff)
+
+	for torso_rig: String in _torso_rigs:
+		if torso_rig == _root_rig:
+			continue
+		var tb: RigidBody3D = bodies.get(torso_rig)
+		if not tb:
+			continue
+		var is_chest := torso_rig == _chest_rig
+		var force_falloff: float = _tuning.stagger_sway_chest_falloff if is_chest else _tuning.stagger_sway_spine_falloff
+		tb.apply_central_force(force * force_falloff)
+		var twist_falloff: float = _tuning.stagger_sway_chest_falloff if is_chest else 1.0
+		tb.apply_torque(torque * twist_falloff)

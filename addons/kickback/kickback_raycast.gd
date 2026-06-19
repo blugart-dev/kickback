@@ -8,12 +8,9 @@
 ## [/codeblock]
 class_name KickbackRaycast
 
-## Collision layer bit for active ragdoll RigidBody3D nodes (layer 4 in UI).
-const ACTIVE_RAGDOLL_BIT := 3
-## Collision layer bit for partial ragdoll PhysicalBone3D nodes (layer 5 in UI).
-const PARTIAL_RAGDOLL_BIT := 4
-## Default collision mask targeting both ragdoll layers.
-const DEFAULT_MASK := (1 << ACTIVE_RAGDOLL_BIT) | (1 << PARTIAL_RAGDOLL_BIT)
+## Default collision mask targeting both ragdoll layers (active + partial).
+## See [KickbackLayers] for the layer convention.
+const DEFAULT_MASK := KickbackLayers.BOTH_RAGDOLL_MASK
 
 
 ## Performs a raycast from the viewport camera through [param screen_pos] and

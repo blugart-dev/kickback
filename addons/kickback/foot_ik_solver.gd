@@ -20,6 +20,16 @@ var _lower_leg_len: float = 0.0
 var _bone_idx: Dictionary = {}  # rig_name → skeleton bone index
 var _hips_idx: int = -1
 
+# Resolved role rig-names (from RagdollProfile semantic roles). Defaults match the
+# Mixamo convention; initialize() overwrites them from the profile.
+var _root: String = "Hips"
+var _upper_l: String = "UpperLeg_L"
+var _lower_l: String = "LowerLeg_L"
+var _foot_l: String = "Foot_L"
+var _upper_r: String = "UpperLeg_R"
+var _lower_r: String = "LowerLeg_R"
+var _foot_r: String = "Foot_R"
+
 var _ik_weight_l: float = 0.0
 var _ik_weight_r: float = 0.0
 var _pelvis_offset: float = 0.0
@@ -39,7 +49,7 @@ var _pin_pos_r: Vector3 = Vector3.ZERO
 
 
 func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: Node3D,
-		rig_builder: PhysicsRigBuilder) -> bool:
+		rig_builder: PhysicsRigBuilder, profile: RagdollProfile) -> bool:
 	_spring = spring
 	_tuning = tuning
 	_character_root = character_root
@@ -49,22 +59,35 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 	if not _skeleton or not _world_3d:
 		return false
 
-	# Look up bone indices for all required leg bones + hips
-	var required := ["UpperLeg_L", "LowerLeg_L", "Foot_L", "UpperLeg_R", "LowerLeg_R", "Foot_R"]
-	for rig_name: String in required:
+	# Resolve leg chains + root from the profile's semantic roles. A chain is empty
+	# if incomplete (foot IK needs hip→knee→foot), in which case IK is unavailable.
+	var left := profile.get_leg_chain("L")
+	var right := profile.get_leg_chain("R")
+	_root = profile.get_root_rig()
+	if left.size() != 3 or right.size() != 3 or _root == "":
+		return false
+	_upper_l = left[0]
+	_lower_l = left[1]
+	_foot_l = left[2]
+	_upper_r = right[0]
+	_lower_r = right[1]
+	_foot_r = right[2]
+
+	# Look up bone indices for all required leg bones + root
+	for rig_name: String in [_upper_l, _lower_l, _foot_l, _upper_r, _lower_r, _foot_r]:
 		var idx := spring.get_bone_idx(rig_name)
 		if idx < 0:
 			return false
 		_bone_idx[rig_name] = idx
 
-	_hips_idx = spring.get_bone_idx("Hips")
+	_hips_idx = spring.get_bone_idx(_root)
 	if _hips_idx < 0:
 		return false
 
 	# Compute bone lengths from rest poses (use left leg — symmetric skeleton)
-	var ul := _skeleton.get_bone_global_rest(_bone_idx["UpperLeg_L"])
-	var ll := _skeleton.get_bone_global_rest(_bone_idx["LowerLeg_L"])
-	var fl := _skeleton.get_bone_global_rest(_bone_idx["Foot_L"])
+	var ul := _skeleton.get_bone_global_rest(_bone_idx[_upper_l])
+	var ll := _skeleton.get_bone_global_rest(_bone_idx[_lower_l])
+	var fl := _skeleton.get_bone_global_rest(_bone_idx[_foot_l])
 	_upper_leg_len = ul.origin.distance_to(ll.origin)
 	_lower_leg_len = ll.origin.distance_to(fl.origin)
 
@@ -73,8 +96,8 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 
 	# Cache foot body refs for collision management
 	var bodies := rig_builder.get_bodies()
-	_foot_body_l = bodies.get("Foot_L")
-	_foot_body_r = bodies.get("Foot_R")
+	_foot_body_l = bodies.get(_foot_l)
+	_foot_body_r = bodies.get(_foot_r)
 	if _foot_body_l:
 		_foot_mask_l = _foot_body_l.collision_mask
 	if _foot_body_r:
@@ -159,12 +182,12 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	# Animation poses
 	var hips_anim := sg * _spring.get_animation_bone_global(_hips_idx)
 	var hip_y := hips_anim.origin.y
-	var upper_l := sg * _spring.get_animation_bone_global(_bone_idx["UpperLeg_L"])
-	var lower_l := sg * _spring.get_animation_bone_global(_bone_idx["LowerLeg_L"])
-	var foot_l := sg * _spring.get_animation_bone_global(_bone_idx["Foot_L"])
-	var upper_r := sg * _spring.get_animation_bone_global(_bone_idx["UpperLeg_R"])
-	var lower_r := sg * _spring.get_animation_bone_global(_bone_idx["LowerLeg_R"])
-	var foot_r := sg * _spring.get_animation_bone_global(_bone_idx["Foot_R"])
+	var upper_l := sg * _spring.get_animation_bone_global(_bone_idx[_upper_l])
+	var lower_l := sg * _spring.get_animation_bone_global(_bone_idx[_lower_l])
+	var foot_l := sg * _spring.get_animation_bone_global(_bone_idx[_foot_l])
+	var upper_r := sg * _spring.get_animation_bone_global(_bone_idx[_upper_r])
+	var lower_r := sg * _spring.get_animation_bone_global(_bone_idx[_lower_r])
+	var foot_r := sg * _spring.get_animation_bone_global(_bone_idx[_foot_r])
 
 	# Foot XZ source: animation (NORMAL) or pinned positions (STAGGER)
 	var foot_xz_l := Vector2(foot_l.origin.x, foot_l.origin.z)
@@ -240,7 +263,7 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 		var ft := Vector3(foot_xz_l.x, gpos_l.y + _tuning.foot_ik_ankle_height, foot_xz_l.y)
 		var ik := _solve_two_bone_ik(upper_l.origin + ps, ft, lower_l.origin + ps, gnorm_l, foot_l)
 		if not ik.is_empty():
-			_blend_leg(overrides, "UpperLeg_L", "LowerLeg_L", "Foot_L",
+			_blend_leg(overrides, _upper_l, _lower_l, _foot_l,
 				upper_l, lower_l, foot_l, ik, _ik_weight_l, ps)
 
 	# Solve right leg
@@ -248,7 +271,7 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 		var ft := Vector3(foot_xz_r.x, gpos_r.y + _tuning.foot_ik_ankle_height, foot_xz_r.y)
 		var ik := _solve_two_bone_ik(upper_r.origin + ps, ft, lower_r.origin + ps, gnorm_r, foot_r)
 		if not ik.is_empty():
-			_blend_leg(overrides, "UpperLeg_R", "LowerLeg_R", "Foot_R",
+			_blend_leg(overrides, _upper_r, _lower_r, _foot_r,
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
 
 	_spring.set_target_overrides(overrides)
@@ -339,7 +362,7 @@ func _raycast_ground(origin: Vector3, distance: float) -> Dictionary:
 
 func _boost_leg_strength() -> void:
 	var target_str := _tuning.foot_ik_stagger_leg_strength
-	for leg_name: String in ["UpperLeg_L", "LowerLeg_L", "Foot_L", "UpperLeg_R", "LowerLeg_R", "Foot_R"]:
+	for leg_name: String in [_upper_l, _lower_l, _foot_l, _upper_r, _lower_r, _foot_r]:
 		var base := _spring.get_base_strength(leg_name)
 		var floor_val := base * target_str
 		if _spring.get_bone_strength(leg_name) < floor_val:

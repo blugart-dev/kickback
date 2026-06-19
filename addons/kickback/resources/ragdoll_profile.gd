@@ -17,15 +17,115 @@ extends Resource
 ## Skeleton bones not in the physics rig that need interpolated pose overrides.
 @export var intermediate_bones: Array[IntermediateBoneEntry] = []
 
+@export_group("Semantic Roles")
+## Rig name of the pelvis/root body — centre-of-mass base, root motion, sway anchor.
+@export var root_rig: String = "Hips"
+## Rig name of the upper-torso/chest body — head-whip + arm attach point.
+@export var chest_rig: String = "Chest"
+## Rig name of the head body — head-whip, state gizmos.
+@export var head_rig: String = "Head"
+## Rig names of the torso/core bodies, root→top. Recovery pose blend + sway falloff.
+@export var torso_rigs: PackedStringArray = ["Hips", "Spine", "Chest"]
+## Rig names of the foot bodies — balance support polygon, foot IK, CoM gizmos.
+@export var foot_rigs: PackedStringArray = ["Foot_L", "Foot_R"]
+## Ordered left leg chain, hip→knee→foot, used by foot IK.
+@export var left_leg_chain: PackedStringArray = ["UpperLeg_L", "LowerLeg_L", "Foot_L"]
+## Ordered right leg chain, hip→knee→foot, used by foot IK.
+@export var right_leg_chain: PackedStringArray = ["UpperLeg_R", "LowerLeg_R", "Foot_R"]
+
 @export_group("Special Bones")
 ## Skeleton bone name used as recursion guard in partial ragdoll chain traversal.
-@export var root_bone: String = "mixamorig_Hips"
+## Leave empty to derive it from [member root_rig] — see [method get_root_skeleton_bone].
+@export var root_bone: String = ""
+
+
+# ── Semantic role accessors ─────────────────────────────────────────────────
+# Consumers (controller, foot IK, debug HUD) query these instead of hardcoding
+# rig-name literals, so non-Mixamo rigs work by overriding the role fields above.
+# List accessors filter out names that don't map to a defined bone, so a missing
+# body degrades gracefully instead of resolving to a null lookup.
+
+## Returns the root rig name if it maps to a defined bone, else "".
+func get_root_rig() -> String:
+	return root_rig if _has_rig(root_rig) else ""
+
+## Returns the chest rig name if it maps to a defined bone, else "".
+func get_chest_rig() -> String:
+	return chest_rig if _has_rig(chest_rig) else ""
+
+## Returns the head rig name if it maps to a defined bone, else "".
+func get_head_rig() -> String:
+	return head_rig if _has_rig(head_rig) else ""
+
+## Returns the torso/core rig names that map to defined bones (root→top order).
+func get_torso_rigs() -> PackedStringArray:
+	return _filter_present(torso_rigs)
+
+## Returns the foot rig names that map to defined bones.
+func get_foot_rigs() -> PackedStringArray:
+	return _filter_present(foot_rigs)
+
+## Returns the ordered leg chain (hip→knee→foot) for [param side] ("L" or "R"),
+## or an empty array if the chain is incomplete (foot IK needs all three links).
+func get_leg_chain(side: String) -> PackedStringArray:
+	var chain := left_leg_chain if side == "L" else right_leg_chain
+	var present := _filter_present(chain)
+	return present if present.size() == chain.size() else PackedStringArray()
+
+## Returns every leg rig name across both sides that maps to a defined bone.
+func get_all_leg_rigs() -> PackedStringArray:
+	var out := _filter_present(left_leg_chain)
+	out.append_array(_filter_present(right_leg_chain))
+	return out
+
+## True if [param rig_name] belongs to either leg chain.
+func is_leg_rig(rig_name: String) -> bool:
+	return rig_name in left_leg_chain or rig_name in right_leg_chain
+
+## Returns "L"/"R" if [param rig_name] is in a leg chain, else "".
+func get_leg_side(rig_name: String) -> String:
+	if rig_name in left_leg_chain:
+		return "L"
+	if rig_name in right_leg_chain:
+		return "R"
+	return ""
+
+## Returns the skeleton bone name of the root body, used as the partial-ragdoll
+## recursion guard. Uses the explicit [member root_bone] if set, otherwise derives
+## it from [member root_rig]'s BoneDefinition.
+func get_root_skeleton_bone() -> String:
+	if root_bone != "":
+		return root_bone
+	for bone_def: BoneDefinition in bones:
+		if bone_def.rig_name == root_rig:
+			return bone_def.skeleton_bone
+	return ""
+
+
+func _has_rig(rig_name: String) -> bool:
+	if rig_name == "":
+		return false
+	for bone_def: BoneDefinition in bones:
+		if bone_def.rig_name == rig_name:
+			return true
+	return false
+
+
+func _filter_present(names: PackedStringArray) -> PackedStringArray:
+	var defined := {}
+	for bone_def: BoneDefinition in bones:
+		defined[bone_def.rig_name] = true
+	var out := PackedStringArray()
+	for n: String in names:
+		if defined.has(n):
+			out.append(n)
+	return out
 
 
 ## Creates a fully populated profile for Mixamo-compatible humanoid skeletons.
 static func create_mixamo_default() -> RagdollProfile:
 	var profile := RagdollProfile.new()
-	profile.root_bone = "mixamorig_Hips"
+	# root_bone derives from root_rig ("Hips" → "mixamorig_Hips") via get_root_skeleton_bone().
 
 	# --- Bone definitions ---
 	var bone_data: Array[Array] = [
@@ -134,11 +234,28 @@ func validate_against_skeleton(skeleton: Skeleton3D) -> PackedStringArray:
 		if joint_def.child_rig not in rig_names:
 			warnings.append("Joint child '%s' is not a defined rig bone" % joint_def.child_rig)
 
-	# Foot IK requires specific bones
-	var ik_bones := ["Foot_L", "Foot_R", "UpperLeg_L", "UpperLeg_R", "LowerLeg_L", "LowerLeg_R"]
-	for ik_bone: String in ik_bones:
-		if ik_bone not in rig_names:
-			warnings.append("Foot IK requires '%s' but it is not defined" % ik_bone)
+	# Semantic roles must reference defined rig bones
+	var single_roles := {"root_rig": root_rig, "chest_rig": chest_rig, "head_rig": head_rig}
+	for role_name: String in single_roles:
+		var rig: String = single_roles[role_name]
+		if rig != "" and rig not in rig_names:
+			warnings.append("Role '%s' references '%s' which is not a defined rig bone" % [role_name, rig])
+	var list_roles := {
+		"torso_rigs": torso_rigs, "foot_rigs": foot_rigs,
+		"left_leg_chain": left_leg_chain, "right_leg_chain": right_leg_chain,
+	}
+	for role_name: String in list_roles:
+		for rig: String in list_roles[role_name]:
+			if rig not in rig_names:
+				warnings.append("Role '%s' lists '%s' which is not a defined rig bone" % [role_name, rig])
+
+	# Foot IK requires two feet and a complete leg chain per side (role-based)
+	if get_foot_rigs().size() < 2:
+		warnings.append("Foot IK requires two foot bodies (foot_rigs role)")
+	for side: String in ["L", "R"]:
+		if get_leg_chain(side).is_empty():
+			warnings.append("Foot IK requires a complete %s leg chain (%s_leg_chain role)" % [
+				side, "left" if side == "L" else "right"])
 
 	for entry: IntermediateBoneEntry in intermediate_bones:
 		if skeleton.find_bone(entry.skeleton_bone) < 0:

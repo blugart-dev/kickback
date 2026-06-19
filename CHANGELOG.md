@@ -19,6 +19,20 @@
   references, and CI bumped from 4.6.1 to 4.7. Validated: clean headless import +
   76/76 GUT tests pass.
 
+### Added
+- **Semantic role accessors on `RagdollProfile`** — `get_root_rig`, `get_chest_rig`,
+  `get_head_rig`, `get_torso_rigs`, `get_foot_rigs`, `get_leg_chain`, `get_all_leg_rigs`,
+  `is_leg_rig`, `get_leg_side`, and `get_root_skeleton_bone`, backed by overridable
+  `root_rig`/`chest_rig`/`head_rig`/`torso_rigs`/`foot_rigs`/`left_leg_chain`/`right_leg_chain`
+  export fields (defaulting to the Mixamo convention). The controller, `FootIKSolver`, and
+  debug HUD query these instead of hardcoding `"Hips"`/`"Foot_L"`/…, so non-Mixamo rigs work
+  by overriding the role fields. List accessors filter out names that don't map to a defined
+  bone, so a missing body degrades gracefully. `validate_against_skeleton` now flags role
+  names that don't reference a defined rig bone.
+- **`KickbackLayers`** — named collision-layer constants (active ragdoll = UI layer 4,
+  partial ragdoll = UI layer 5) replacing magic numbers in `KickbackRaycast` and
+  `SkeletonDetector`.
+
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
   skeletons that don't expose `Foot_L`/`Foot_R` bodies. `_compute_balance_state` now
@@ -27,6 +41,14 @@
 - **PhysicsCollisionMonitor** disconnects its `body_entered` signals on `_exit_tree`
   (was leaking connections to bodies that outlive the monitor); `max_contacts_reported`
   now uses `maxi` (was `maxf` assigned into an int property).
+- **Multi-rig balance/IK completed** — the controller, `FootIKSolver`, and debug HUD now
+  resolve root/torso/feet/leg-side bones through `RagdollProfile`'s semantic roles instead
+  of hardcoded Mixamo names, and `_compute_balance_state` supports any number of feet.
+  Non-Mixamo rigs gain working balance/IK/sway by setting the role fields (previously they
+  silently lost them). Completes the PR #60 `has_support` guard.
+- **`RagdollProfile.root_bone`** no longer defaults to the Mixamo-specific `"mixamorig_Hips"`.
+  It defaults to empty and derives from `root_rig` via `get_root_skeleton_bone()`, so the
+  partial-ragdoll recursion guard is correct on any rig.
 
 ### Changed
 - **Budget manager wired in** — `ActiveRagdollController` requests a slot from
@@ -41,6 +63,10 @@
   Custom character driven by the live, now-scrollable slider panel. Preset tunings reuse
   the `RagdollTuning.create_*` factory methods where available. The patrol/recover/resume
   loop `ball_throw` demonstrated already lives in `animated_npc`.
+- **Partial-ragdoll collision shapes scale to the character** —
+  `SkeletonDetector.populate_physical_bones` reuses the active-rig shape pipeline
+  (`create_profile_from_skeleton` + `create_collision_shape`) instead of fixed 0.15 m
+  boxes / 0.05 m capsules.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5

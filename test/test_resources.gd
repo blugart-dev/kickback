@@ -59,7 +59,7 @@ func test_mixamo_profile_structure():
 	assert_not_null(profile)
 	assert_eq(profile.bones.size(), 16, "Should have 16 bones")
 	assert_eq(profile.joints.size(), 15, "Should have 15 joints")
-	assert_eq(profile.root_bone, "mixamorig_Hips")
+	assert_eq(profile.get_root_skeleton_bone(), "mixamorig_Hips")
 	assert_true(profile.intermediate_bones.size() > 0)
 
 
