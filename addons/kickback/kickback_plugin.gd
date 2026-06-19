@@ -233,7 +233,7 @@ func _show_setup_report(character_name: String, bone_mapping: Dictionary, node_c
 		report += "Skeleton: Using Mixamo defaults (auto-detection failed)\n\n"
 
 	report += "Collision Layers:\n"
-	report += "  Layer 2: Environment (ground raycasts during recovery)\n"
+	report += "  Layer 1: Environment (foot-IK + recovery ground raycasts)\n"
 	report += "  Layer 4: Active ragdoll bodies (RigidBody3D)\n"
 
 	report += "\nSignals (connect in your code to handle animations):\n"

@@ -69,7 +69,7 @@ transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 3, 8)
 
 [node name="GroundLeft" type="StaticBody3D" parent="." unique_id=696640374]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, -0.1, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="GroundLeft" unique_id=89624005]
@@ -81,7 +81,7 @@ shape = SubResource("Shape_GroundL")
 
 [node name="Step1" type="StaticBody3D" parent="." unique_id=2016308712]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0.075, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Step1" unique_id=922588195]
@@ -93,7 +93,7 @@ shape = SubResource("Shape_Step1")
 
 [node name="Step2" type="StaticBody3D" parent="." unique_id=1059188893]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.3, 0.15, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Step2" unique_id=43794156]
@@ -105,7 +105,7 @@ shape = SubResource("Shape_Step2")
 
 [node name="Step3" type="StaticBody3D" parent="." unique_id=1477955755]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.1, 0.225, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Step3" unique_id=484387193]
@@ -117,7 +117,7 @@ shape = SubResource("Shape_Step3")
 
 [node name="Ramp" type="StaticBody3D" parent="." unique_id=780230453]
 transform = Transform3D(-0.9659, -0.2588, -8.742278e-08, -0.2588, 0.9659, 0, 8.444166e-08, 2.2625013e-08, -1, 0.5, 0.55, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Ramp" unique_id=1175852030]
@@ -129,7 +129,7 @@ shape = SubResource("Shape_Ramp")
 
 [node name="Plateau" type="StaticBody3D" parent="." unique_id=1287424013]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Plateau" unique_id=511985218]
@@ -141,7 +141,7 @@ shape = SubResource("Shape_Plateau")
 
 [node name="GroundRight" type="StaticBody3D" parent="." unique_id=584297269]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, -0.1, 1.25)
-collision_layer = 3
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="GroundRight" unique_id=1117262187]

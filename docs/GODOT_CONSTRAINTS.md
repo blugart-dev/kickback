@@ -131,7 +131,7 @@ Recommended values for Mixamo Y Bot:
 ### Self-collision
 Set PhysicalBone3D `collision_mask` to include its own layer (layer 5) for
 inter-bone collision. Without this, limbs pass through each other.
-Mask = 18 (layer 2 environment + layer 5 self).
+Mask = 17 (layer 1 environment + layer 5 self).
 
 ### Damping
 Auto-generated bones have zero damping — ragdoll feels liquid. Add:
@@ -259,16 +259,19 @@ for typed node reference exports (`@export var x: Node3D`). Do NOT use it for
 
 ## Collision layers
 
-Use this layout:
-- Layer 1: Character controllers (CharacterBody3D)
-- Layer 2: Environment (StaticBody3D, terrain)
-- Layer 3: Props, dynamic objects
-- Layer 4: Ragdoll physics bodies (RigidBody3D from dual-skeleton)
-- Layer 5: PhysicalBone3D (partial ragdoll)
+Use this layout (matches `KickbackLayers` and the bundled demos):
+- Layer 1: Environment (StaticBody3D floors, walls, terrain) — foot-IK + recovery rays hit this
+- Layer 2: Projectiles / raycasts (e.g. the shooting-range ball)
+- Layer 3: Player / character controllers (CharacterBody3D)
+- Layer 4: Active ragdoll bodies (RigidBody3D)
+- Layer 5: Godot built-in ragdoll (PhysicalBone3D, comparison demo only)
 
-Ragdoll bodies (layer 4) should:
-- Collide with: layer 2 (environment), layer 3 (props), layer 4 (self — inter-bone collision)
-- NOT collide with: layer 1 (would conflict with CharacterBody3D)
+Active ragdoll bodies default to `collision_layer` 4 and `collision_mask` 15
+(collide with layers 1–4): environment (1), projectiles (2), characters (3), and
+other ragdoll bodies (4 — inter-bone and ragdoll-vs-ragdoll). Keep the
+CharacterBody3D that drives a ragdoll on its own layer (3) and disable its
+collider during reactions so the rig and controller body don't fight (see the
+CharacterBody3D integration notes in CLAUDE.md).
 
 ## Performance budget
 

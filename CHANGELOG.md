@@ -151,6 +151,15 @@
   tool's node type changed (`Node` → `SkeletonModifier3D`). Validated headlessly (89 GUT tests
   incl. a signal-time multi-bone sync assertion that exercises the write ordering + clean
   scene-smoke on all 8 demos); mesh-tracking polish verified in-editor.
+- **Collision layers standardized — environment is layer 1 everywhere** — `KickbackLayers.ENVIRONMENT_LAYER`
+  is now layer 1 (was 2), matching the foot-IK (`foot_ik_collision_mask`) and recovery
+  (`ground_raycast_mask`) ground-ray masks — which always defaulted to layer 1 — and the
+  `INTEGRATION.md` convention. All demo floors moved from layer 2 (and the `foot_ik_demo`
+  terrain from layer 3) to layer 1, so foot-IK and recovery raycasts now actually hit the
+  ground in every demo (they were silently missing it before; the rig still rested via body
+  collision). The shooting-range player moved to its own layer (3) and the thrown ball's mask
+  now references ground as layer 1. The setup-report dialog, `GODOT_CONSTRAINTS.md`, and
+  `STEP_BY_STEP.md` were updated to the same layer-1-environment scheme.
 - **Demo wiring deduplicated into `demo/demo_helpers.gd`** — the active-rig assembly,
   skeleton / AnimationPlayer lookup, orbit-camera math, and debug-HUD setup that all 8 demo
   scripts hand-duplicated are now shared static helpers (`build_active_rig`,
