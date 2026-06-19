@@ -16,8 +16,8 @@
   [EUPHORIA_COMPARISON.md](docs/EUPHORIA_COMPARISON.md) with honest real/partial/nominal
   classifications.
 - **Upgraded to Godot 4.7** — `project.godot` features, all documentation version
-  references, and CI bumped from 4.6.1 to 4.7. Validated: clean headless import +
-  76/76 GUT tests pass.
+  references, and CI (both the `tests` and `release` workflows) bumped from 4.6.1 to 4.7.
+  Validated: clean headless import + GUT suite passing.
 
 ### Added
 - **Semantic role accessors on `RagdollProfile`** — `get_root_rig`, `get_chest_rig`,

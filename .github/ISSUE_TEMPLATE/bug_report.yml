@@ -11,8 +11,8 @@ body:
     id: godot-version
     attributes:
       label: Godot Version
-      description: e.g. 4.6.1
-      placeholder: "4.6.1"
+      description: e.g. 4.7
+      placeholder: "4.7"
     validations:
       required: true
 
