@@ -242,3 +242,22 @@ func test_apply_hit_debounces_same_body_same_frame():
 		"first hit reduced strength (guards against a trivially-passing test)")
 	assert_almost_eq(after_second, after_first, 0.0001,
 		"a second same-frame hit on the same body is debounced — no extra reduction")
+
+
+func test_apply_hit_resolves_rig_name_after_body_rename():
+	var h = await _spawn()
+	var chest: RigidBody3D = h.get_body("Chest")
+	var before: float = h.spring.get_bone_strength("Chest")
+	# Simulate a Godot node-name collision rename: the node is no longer named
+	# "Chest", but the builder's body map still keys it as the Chest rig.
+	chest.name = "Chest@@2"
+	var impact := ImpactProfile.new()
+	impact.base_impulse = 5.0
+	impact.impulse_transfer_ratio = 0.3
+	impact.ragdoll_probability = 0.0
+	impact.strength_reduction = 0.5
+	impact.strength_spread = 0
+	impact.recovery_rate = 1.0
+	h.controller.apply_hit(chest, Vector3.FORWARD, chest.global_position, impact)
+	assert_lt(h.spring.get_bone_strength("Chest"), before,
+		"apply_hit resolves the rig via the builder map — the right bone weakens even after a body rename")

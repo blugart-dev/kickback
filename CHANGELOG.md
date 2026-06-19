@@ -88,6 +88,11 @@
   hardcoded `Foot_L`/`UpperLeg_L`/… names, matching `RagdollProfile.validate_against_skeleton`.
   Non-Mixamo rigs that set the role fields no longer get spurious "foot_ik requires 'Foot_L'"
   warnings. (Completes the PR #62 de-hardcoding, which missed this one validator.)
+- **`apply_hit` resolves the rig name from the builder's body map** instead of trusting
+  `body.name`. If Godot suffix-renames a body on a node-name collision, or a baked rig's node
+  name differs from its `kickback_rig_name` metadata, hits previously no-op'd the strength
+  logic silently (impulse still applied, but no reaction). Now the hit affects the correct
+  bone, and a body that isn't a registered rig body warns and is ignored.
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
