@@ -105,6 +105,14 @@
   60 Hz reference (`_fr_weight`): **bit-identical at 60 Hz** (existing tuning unchanged) and
   convergence-stable at other tick rates. Stays velocity-based (not a PD rewrite). Resolves
   the last "Still open" item in [ROADMAP.md](docs/ROADMAP.md).
+- **Foot IK pelvis drop ignores feet over drop-offs** — the pelvis lowers to the lowest
+  *supported* foot, but a foot over a gap (no ground hit) or a drop-off deeper than
+  `foot_ik_max_pelvis_drop` no longer counts as support. Previously such a foot — whose ground
+  raycast could hit up to `foot_ik_max_adjustment` (0.5 m) below — pulled the whole pelvis down
+  to its limit, sinking the body and breaking the other, planted foot's contact. Now only feet
+  on ground the body can reach inform the drop (`foot_ik_solver.gd`). New regression test:
+  split ground (solid under one foot, a deep drop-off under the other) asserts the pelvis stays
+  near neutral. Suite is now 113 tests.
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
@@ -160,6 +168,11 @@
   resistance and the tip/recovery checks — it sums center-of-mass over every body and was
   being computed twice per frame. `StrengthDebugHUD` disables `_process` while the overlay is
   off (F3), so it does no per-frame redraw work until it is toggled on.
+- **Foot IK solver per-frame allocations removed** — the target-override dictionary handed to
+  the `SpringResolver` each solve is now a reused buffer instead of a fresh `{}` (safe because
+  the solve and the spring's read never interleave within a physics frame), and animation bone
+  globals are memoized per solve so the hip/leg reads and the full-body shift no longer re-walk
+  the same parent chains.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5
