@@ -27,6 +27,12 @@ var _skeleton: Skeleton3D
 var _bone_map: Dictionary  # bone_name (String) → PhysicalBone3D
 var _active_tween: Tween
 var _is_reacting: bool = false
+## Monotonic reaction id. Every hit bumps it, so an in-flight reaction coroutine
+## from a prior hit bails on its next resume (see [method _is_current]). This is
+## what prevents the hold-window race where a second hit used to spawn a competing
+## coroutine.
+var _generation: int = 0
+var _exiting: bool = false
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 
@@ -62,28 +68,33 @@ func _build_bone_map() -> void:
 
 
 func apply_hit(event: HitEvent) -> void:
+	if not is_instance_valid(_simulator):
+		return
 	var chain := _get_bone_chain(event.hit_bone_name)
 	if chain.is_empty():
 		push_warning("PartialRagdollController: bone '%s' not part of PhysicalBoneSimulator3D — partial ragdoll hit ignored" % event.hit_bone_name)
 		return
 
-	# If already reacting during blend-out, extend instead of full restart.
-	# Killing the tween abandons the old _blend_out() coroutine's await — this is
-	# safe because _is_reacting stays true throughout, and a new blend-out takes over.
+	# Re-hit DURING the blend-out tween: extend smoothly without stopping the
+	# simulation (no snap). Bump the generation so the abandoned blend coroutine
+	# stays bailed, apply the extra impulse, and re-blend from the current influence.
 	if _is_reacting and _active_tween and _active_tween.is_valid():
 		_active_tween.kill()
-		# Apply additional impulse to the already-simulating bones
-		if event.hit_bone:
-			var local_offset := event.hit_bone.to_local(event.hit_position)
-			event.hit_bone.apply_impulse(event.hit_direction * event.impulse_magnitude, local_offset)
-		# Restart blend-out from current influence
-		_blend_out()
+		_active_tween = null
+		_apply_impulse(event)
+		_generation += 1
+		_blend_out(_generation)
 		return
 
-	# Fresh reaction
+	# Fresh hit, OR a re-hit during the hold / pre-simulation window (no live tween).
+	# Bumping the generation makes any in-flight reaction coroutine from a prior hit
+	# bail on its next resume — the fix for the hold-window race where the old code
+	# fell through here and spawned a second, competing coroutine.
+	_generation += 1
+	_set_reacting(true)
 	_simulator.physical_bones_stop_simulation()
 	_simulator.influence = 1.0
-	_run_reaction(event, chain)
+	_run_reaction(event, chain, _generation)
 
 
 func _get_bone_chain(bone_name: String) -> PackedStringArray:
@@ -114,32 +125,40 @@ func _collect_children(bone_idx: int, chain: PackedStringArray) -> void:
 		_collect_children(child_idx, chain)
 
 
-func _run_reaction(event: HitEvent, chain: PackedStringArray) -> void:
-	_set_reacting(true)
-
-	# Start partial simulation (deferred)
+func _run_reaction(event: HitEvent, chain: PackedStringArray, gen: int) -> void:
+	# Start partial simulation (deferred a frame so the simulator settles first).
 	await get_tree().physics_frame
+	if not _is_current(gen):
+		return
 	_simulator.physical_bones_start_simulation(chain)
 
-	# Apply impulse now that the bone is simulating
+	# Apply impulse now that the bones are simulating.
 	await get_tree().physics_frame
-	if event.hit_bone:
-		var local_offset := event.hit_bone.to_local(event.hit_position)
-		event.hit_bone.apply_impulse(event.hit_direction * event.impulse_magnitude, local_offset)
+	if not _is_current(gen):
+		return
+	_apply_impulse(event)
 
-	# Hold — let physics play out
+	_hold_then_blend(gen)
+
+
+func _hold_then_blend(gen: int) -> void:
+	# Hold — let physics play out — then blend back to animation.
 	await get_tree().create_timer(hold_time).timeout
+	if not _is_current(gen):
+		return
+	_blend_out(gen)
 
-	_blend_out()
 
-
-func _blend_out() -> void:
+func _blend_out(gen: int) -> void:
 	_active_tween = create_tween()
 	_active_tween.tween_property(_simulator, "influence", 0.0, blend_duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	await _active_tween.finished
+	if not _is_current(gen):
+		return
 
 	_simulator.physical_bones_stop_simulation()
 	_simulator.influence = 1.0
+	_active_tween = null
 	_set_reacting(false)
 
 
@@ -151,3 +170,23 @@ func _set_reacting(value: bool) -> void:
 
 func is_reacting() -> bool:
 	return _is_reacting
+
+
+func _apply_impulse(event: HitEvent) -> void:
+	if event.hit_bone:
+		var local_offset := event.hit_bone.to_local(event.hit_position)
+		event.hit_bone.apply_impulse(event.hit_direction * event.impulse_magnitude, local_offset)
+
+
+## A reaction coroutine is stale if a newer hit superseded it (the generation was
+## bumped), the controller is leaving the tree, or the simulator was freed (the
+## character despawned mid-reaction). Stale coroutines bail instead of touching a
+## freed simulator.
+func _is_current(gen: int) -> bool:
+	return gen == _generation and not _exiting and is_instance_valid(_simulator)
+
+
+func _exit_tree() -> void:
+	_exiting = true
+	if _active_tween and _active_tween.is_valid():
+		_active_tween.kill()

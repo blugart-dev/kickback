@@ -93,6 +93,14 @@
   name differs from its `kickback_rig_name` metadata, hits previously no-op'd the strength
   logic silently (impulse still applied, but no reaction). Now the hit affects the correct
   bone, and a body that isn't a registered rig body warns and is ignored.
+- **Partial-ragdoll path hardened** — `PartialRagdollController` (the standalone
+  `PhysicalBoneSimulator3D` mode). A re-hit during the hold window used to fall through and
+  spawn a second, competing reaction coroutine (overlapping simulate/stop + blend), and a hit
+  on a character despawned mid-reaction could dereference the freed simulator. Reactions are now
+  tracked by a generation counter (a newer hit cleanly supersedes the in-flight one) and bail
+  via `_is_current()` after each await; `_exit_tree` cancels the blend. Adds the first automated
+  coverage for this mode (`test_partial_ragdoll.gd`): chain selection (children + parent, root
+  excluded), the react→hold→blend lifecycle, re-hit settling, and despawn-mid-reaction safety.
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
