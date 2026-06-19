@@ -208,7 +208,9 @@ func _execute_preset(preset_name: String) -> void:
 		builder.set("skeleton_path", NodePath("../%s" % skeleton_name))
 		nodes.append(builder)
 
-		var sync := Node.new()
+		# SkeletonModifier3D-based: PhysicsRigSync promotes itself under the Skeleton3D at
+		# runtime, so it can be created here alongside the other Kickback nodes.
+		var sync := SkeletonModifier3D.new()
 		sync.name = "PhysicsRigSync"
 		sync.set_script(scripts["physics_rig_sync"])
 		sync.set("skeleton_path", NodePath("../%s" % skeleton_name))

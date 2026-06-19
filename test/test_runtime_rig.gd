@@ -136,10 +136,28 @@ func test_skeleton_sync_follows_physics_during_ragdoll():
 
 	assert_gt(start.distance_to(hips.global_position), 0.1,
 		"with springs zeroed, physics moves the hips body")
-	# PhysicsRigSync should have written that physics pose onto the skeleton.
-	var synced: Vector3 = h.skeleton_bone_world_origin("mixamorig_Hips")
-	assert_lt(synced.distance_to(hips.global_position), 0.06,
-		"skeleton hips bone follows the physics body via PhysicsRigSync")
+
+	# PhysicsRigSync is a SkeletonModifier3D: its output is applied to the skin then rolled
+	# back, so the modified pose is only live during the skeleton_updated signal — capture
+	# it there. Bones span the hierarchy (incl. the deep foot) to also verify the
+	# parent-first write order.
+	var skel: Skeleton3D = h.skeleton
+	var checks := [["Hips", "mixamorig_Hips"], ["Chest", "mixamorig_Spine2"], ["Foot_L", "mixamorig_LeftFoot"]]
+	var diffs := {}
+	var on_updated := func() -> void:
+		for pair in checks:
+			var idx: int = skel.find_bone(pair[1])
+			var body: RigidBody3D = h.get_body(pair[0])
+			var bone_world: Vector3 = (skel.global_transform * skel.get_bone_global_pose(idx)).origin
+			diffs[pair[0]] = bone_world.distance_to(body.global_position)
+	skel.skeleton_updated.connect(on_updated)
+	await wait_physics_frames(3)
+	skel.skeleton_updated.disconnect(on_updated)
+
+	assert_eq(diffs.size(), checks.size(), "modifier ran (skeleton_updated fired during ragdoll)")
+	for pair in checks:
+		assert_lt(float(diffs.get(pair[0], 999.0)), 0.06,
+			"skeleton bone '%s' follows its physics body via the modifier" % pair[0])
 
 
 # ── Coordinator facade + balance ────────────────────────────────────────────

@@ -157,13 +157,13 @@ func _get_animation_bone_global(bone_idx: int) -> Transform3D:
     return xform
 ```
 
-This separation is why `PhysicsRigSync` deliberately keeps the **deprecated**
-`set_bone_global_pose_override()` (the override is a side layer that leaves `get_bone_pose()`
-clean). The supported fix — turning `PhysicsRigSync` into a `SkeletonModifier3D`, whose
-output rolls back each frame and so preserves the clean read — is scoped in
-[SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md). Do **not** naively swap the
-override for `set_bone_global_pose()`: it would contaminate `get_bone_pose()` and feed the
-spring its own output.
+This separation is preserved by `PhysicsRigSync` being a **`SkeletonModifier3D`**: the engine
+applies its writes to the skin and then rolls the pose back each frame, so `get_bone_pose()`
+outside the modifier callback stays the clean animation pose. (Historically this used the
+deprecated `set_bone_global_pose_override`; see
+[SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).) The spring's read above is
+therefore still safe — do **not** "simplify" it to `get_bone_global_pose()`, which would read
+the modifier's own output back as the target and create a feedback loop.
 
 ### Zero gravity when spring active
 Angular springs can't lift mass against gravity — they only correct rotation.

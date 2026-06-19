@@ -1,9 +1,27 @@
 # PhysicsRigSync → SkeletonModifier3D migration plan
 
-**Status: deferred** (planned for the `0.9.0` production-hardening milestone). This is a
-written plan, not yet implemented. It exists so the work can be picked up against a clear,
-code-grounded scope and so no future audit naively "fixes" the deprecated call (see
-[GODOT_CONSTRAINTS.md](GODOT_CONSTRAINTS.md)).
+**Status: implemented** (0.3.0). `PhysicsRigSync` is now a `SkeletonModifier3D`; the
+deprecated `set_bone_global_pose_override` is gone from runtime code. The rationale below
+(roll-back semantics, 4.7 findings, code inventory) is retained as the record of *why* this
+is the correct approach.
+
+### As built (supersedes the "concretely" sketch below)
+
+The implementation kept the blast radius far smaller than the original sketch by having the
+node **promote itself**: `PhysicsRigSync extends SkeletonModifier3D`, is created next to the
+other Kickback nodes (a sibling, as before), resolves its skeleton from `skeleton_path` in
+`_ready`, and then `reparent.call_deferred()`s itself under that skeleton. Deferring the
+reparent means every `NodePath` resolved at `_ready` (KickbackCharacter's sibling scan, the
+controller's `rig_sync_path`) still finds it as a sibling first — their references survive
+the move. Net result: **`KickbackCharacter`, `ActiveRagdollController`, all 8 demos, and the
+test harness were untouched.** The only changes were `physics_rig_sync.gd`, a one-line node
+type in the setup tool (`Node` → `SkeletonModifier3D` so `set_script` is valid), and moving
+the runtime sync test's read to the `skeleton_updated` signal. Writes use
+`set_bone_global_pose()` in **parent-first bone order** (it composes a child through its
+parent's already-written pose). Headless-validated: 89 GUT tests (incl. a multi-bone,
+signal-time sync assertion that exercises the ordering) + clean scene-smoke on all 8 demos.
+Visual polish (mesh tracking, no jitter, no 1-frame recovery pop) is verified in-editor at
+review time, since headless cannot cover it.
 
 ## Why this exists
 
