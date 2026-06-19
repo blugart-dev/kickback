@@ -36,7 +36,7 @@ and systems with difficulty ratings and implementation notes for Godot 4.7+.
 - 🟡 Cumulative pain / fatigue — decaying scalars that scale existing strength reductions
 - ⚪ Regional impairment — a per-bone injury scalar feeding a multiplier; no limb-specific behavior
 - ⚪ Threat anticipation — one strength pulse + a signal (a flinch knob, not anticipatory posture)
-- ⚪ Budget system for concurrent ragdolls — `KickbackManager` counter is **not wired** into controllers
+- 🟡 Budget hard-cap for concurrent ragdolls — `KickbackManager` bounds simultaneous ragdolls; over-budget *spontaneous* ragdolls downgrade to a stagger, while explicit/death ragdolls bypass. (A count-based cap, not LOD/quality tiers.)
 
 ### The objective — absent (this is what 1.0 means)
 Every behavior that makes Euphoria *Euphoria* — active balance recovery, stumble steps,

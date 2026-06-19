@@ -25,8 +25,11 @@ review time, since headless cannot cover it.
 
 ## Why this exists
 
+> The file/line references in this and the following planning sections describe the
+> **pre-migration** code; see *As built* above for the shipped result.
+
 `PhysicsRigSync` pushes the physics ragdoll back onto the visible mesh with
-`Skeleton3D.set_bone_global_pose_override()` (`physics_rig_sync.gd:127`). That method has
+`Skeleton3D.set_bone_global_pose_override()` (pre-migration `physics_rig_sync.gd`). That method has
 been **deprecated since Godot 4.3** ("may be changed or removed in future versions"). It
 still works in 4.7 with no runtime warning, so there's no pressure today — but it will be
 removed in a future major (Godot 5 is the likely point), at which time the ragdoll mesh
@@ -166,4 +169,6 @@ expected change — not a regression.
 The code change is **localized** (essentially `physics_rig_sync.gd` plus node-placement
 wiring) but it is **structural** (node moves under the skeleton) and **visually sensitive**
 (it's the core render path of the ragdoll). It cannot be fully validated by automated tests.
-That combination is why it's a dedicated `0.9.0` milestone rather than a cleanup PR.
+That combination is why it was carved out as its own focused, visually-validated PR —
+ultimately pulled forward and shipped in `0.3.0` rather than waiting for the original
+`0.9.0` hardening slot.

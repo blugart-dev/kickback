@@ -138,6 +138,11 @@ Used standalone for far targets, combined with partial ragdoll for mid-range.
 
 ## Step 3 — Dual-skeleton physics rig ✅ COMPLETE
 
+> **Update (0.3.0):** the sync layer described below was later migrated from
+> `set_bone_global_pose_override` to a `SkeletonModifier3D` (its per-frame roll-back keeps
+> the spring's `get_bone_pose()` animation target clean). The steps here record the
+> *original* implementation — see [SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).
+
 **Goal**: Build the RigidBody3D skeleton that will become the active ragdoll.
 No spring resolver yet — just verify the physics rig works as a passive ragdoll.
 
@@ -409,7 +414,7 @@ One-click "Add Kickback to character", visual strength debugger, weapon profile
 editor, collision shape visualization.
 
 **Status**: Complete. Key features:
-- Tool menu "Add Kickback to Selected": creates all 7 controller nodes with auto-wired NodePaths
+- Tool menu "Add Kickback to Selected": creates the Active-Ragdoll node set (5 nodes; 2 for Partial Ragdoll) with auto-wired NodePaths
 - Validates Skeleton3D + AnimationPlayer prerequisites, prevents duplicates
 - Undoable via EditorUndoRedoManager
 - StrengthDebugHUD: 2D overlay (F3 toggle) showing per-bone strength as colored dots
