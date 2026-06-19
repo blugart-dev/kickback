@@ -4,6 +4,8 @@
 ## with the same hit so you can compare how each tuning reacts.
 extends Node3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 var _profile: ImpactProfile           # shared test-hit profile (IMPACT sliders edit this)
 var _custom_tuning: RagdollTuning     # Custom character's body tuning (all other sliders)
 var _custom_kickback: KickbackCharacter
@@ -40,11 +42,7 @@ func _ready() -> void:
 	_custom_kickback = _setup_character($Characters/Custom, _custom_tuning)
 
 	# Debug gizmos
-	var debug_hud := StrengthDebugHUD.new()
-	debug_hud.name = "StrengthDebugHUD"
-	debug_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	debug_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(debug_hud)
+	DemoHelpers.add_debug_hud(self)
 
 	_build_slider_panel()
 
@@ -95,63 +93,10 @@ func _make_protected_tuning() -> RagdollTuning:
 
 
 func _setup_character(char_root: Node3D, tuning: RagdollTuning) -> KickbackCharacter:
-	var ybot_name := ""
-	for child in char_root.get_children():
-		if _find_child_of_type(child, "Skeleton3D"):
-			ybot_name = child.name
-			break
-	if ybot_name.is_empty():
-		return null
-
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rb := PhysicsRigBuilder.new()
-	rb.name = "PhysicsRigBuilder"
-	rb.skeleton_path = skel_path
-
-	var rs := PhysicsRigSync.new()
-	rs.name = "PhysicsRigSync"
-	rs.skeleton_path = skel_path
-	rs.rig_builder_path = builder_path
-
-	var sp := SpringResolver.new()
-	sp.name = "SpringResolver"
-	sp.skeleton_path = skel_path
-	sp.rig_builder_path = builder_path
-
-	var ac := ActiveRagdollController.new()
-	ac.name = "ActiveRagdollController"
-	ac.spring_resolver_path = spring_path
-	ac.rig_builder_path = builder_path
-	ac.character_root_path = root_path
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = tuning
-
-	char_root.add_child(rb)
-	char_root.add_child(rs)
-	char_root.add_child(sp)
-	char_root.add_child(ac)
-	char_root.add_child(kc)
-	_kickbacks.append(kc)
+	var kc := DemoHelpers.build_active_rig(char_root, "", tuning)
+	if kc:
+		_kickbacks.append(kc)
 	return kc
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_child_of_type(child, type_name)
-		if found:
-			return found
-	return null
 
 
 # --- Slider panel (edits the Custom character) ---
@@ -363,13 +308,4 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	if not _cam:
 		return
-	var pivot := Vector3(0, 1.0, 0)
-	var yaw_rad := deg_to_rad(_cam_yaw)
-	var pitch_rad := deg_to_rad(_cam_pitch)
-	var offset := Vector3(
-		sin(yaw_rad) * cos(pitch_rad),
-		-sin(pitch_rad),
-		cos(yaw_rad) * cos(pitch_rad),
-	) * _cam_distance
-	_cam.global_position = pivot + offset
-	_cam.look_at(pivot)
+	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
