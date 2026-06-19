@@ -140,6 +140,16 @@
   incl. a signal-time multi-bone sync assertion that exercises the write ordering + clean
   scene-smoke on all 8 demos); mesh-tracking polish verified in-editor.
 
+### Performance
+- **Per-frame allocation & redundant-work cleanup** — `SpringResolver.get_all_bone_names()`
+  now returns a list cached at init instead of rebuilding a `PackedStringArray` from
+  `_bones.keys()` on every call (it is read each physics frame by the controller, HUD, and
+  foot-IK across ~12 call sites; the key set is fixed once the rig is built). The controller
+  computes `_compute_balance_state()` once per stagger frame and shares it between active
+  resistance and the tip/recovery checks — it sums center-of-mass over every body and was
+  being computed twice per frame. `StrengthDebugHUD` disables `_process` while the overlay is
+  off (F3), so it does no per-frame redraw work until it is toggled on.
+
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5
   unused tuning parameters (`spring_active_gravity`, `spring_active_angular_damp`,

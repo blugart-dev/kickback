@@ -20,6 +20,7 @@ var _skeleton: Skeleton3D
 var _rig_builder: PhysicsRigBuilder
 var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
+var _bone_names: PackedStringArray = PackedStringArray()  # cached _bones.keys(); stable after _init_bones()
 var _settle_timer: float = 0.0
 var _default_recovery_rate: float = 0.3
 var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
@@ -88,6 +89,11 @@ func _init_bones() -> void:
 			"base_strength": base_str,
 			"strength": base_str,
 		}
+	# Cache the rig-name list once. The key set is fixed after init (only the
+	# per-bone values mutate), and get_all_bone_names() is hit every physics
+	# frame by the controller/HUD/foot-IK — returning the cached PackedStringArray
+	# avoids rebuilding it from _bones.keys() on each call.
+	_bone_names = PackedStringArray(_bones.keys())
 
 
 ## Returns the Skeleton3D used for animation target poses.
@@ -241,8 +247,10 @@ func get_base_strength(rig_name: String) -> float:
 
 
 ## Returns the rig names of all registered bones (e.g. "Hips", "Spine", "Head").
+## Cached at init (the key set is fixed once bones are built); callers must treat
+## the result as read-only.
 func get_all_bone_names() -> PackedStringArray:
-	return PackedStringArray(_bones.keys())
+	return _bone_names
 
 
 func get_default_recovery_rate() -> float:
