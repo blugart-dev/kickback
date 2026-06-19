@@ -100,7 +100,7 @@ func _get_bone_chain(bone_name: String) -> PackedStringArray:
 	var parent_idx := _skeleton.get_bone_parent(hit_idx)
 	if parent_idx >= 0:
 		var parent_name := _skeleton.get_bone_name(parent_idx)
-		if parent_name in _bone_map and parent_name != _profile.root_bone:
+		if parent_name in _bone_map and parent_name != _profile.get_root_skeleton_bone():
 			chain.append(parent_name)
 
 	return chain

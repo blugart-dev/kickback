@@ -222,7 +222,7 @@ func _draw_skeleton_wireframe(builder: PhysicsRigBuilder, spring: SpringResolver
 
 
 func _draw_state_label(bodies: Dictionary, ctrl: ActiveRagdollController, camera: Camera3D, cam_pos: Vector3) -> void:
-	var head_body: RigidBody3D = bodies.get("Head")
+	var head_body: RigidBody3D = bodies.get(ctrl.get_head_rig())
 	if not head_body:
 		return
 	var head_pos := head_body.global_position
@@ -239,7 +239,7 @@ func _draw_state_label(bodies: Dictionary, ctrl: ActiveRagdollController, camera
 
 
 func _draw_status_panel(bodies: Dictionary, spring: SpringResolver, ctrl: ActiveRagdollController, camera: Camera3D, cam_pos: Vector3) -> void:
-	var hips_body: RigidBody3D = bodies.get("Hips")
+	var hips_body: RigidBody3D = bodies.get(ctrl.get_root_rig())
 	if not hips_body:
 		return
 	var hips_pos := hips_body.global_position
@@ -322,13 +322,19 @@ func _draw_status_panel(bodies: Dictionary, spring: SpringResolver, ctrl: Active
 
 
 func _draw_com_and_support(bodies: Dictionary, ctrl: ActiveRagdollController, camera: Camera3D, cam_pos: Vector3) -> void:
-	var foot_l: RigidBody3D = bodies.get("Foot_L")
-	var foot_r: RigidBody3D = bodies.get("Foot_R")
-	if not foot_l or not foot_r:
+	if not ctrl:
+		return
+	# Resolve feet via roles (CoM gizmo needs ≥1; the support quad needs 2).
+	var feet: Array[RigidBody3D] = []
+	for foot_rig: String in ctrl.get_foot_rigs():
+		var fb: RigidBody3D = bodies.get(foot_rig)
+		if fb:
+			feet.append(fb)
+	if feet.is_empty():
 		return
 
 	# Get full balance state from controller
-	var balance_state: Dictionary = ctrl.get_balance_state() if ctrl else {}
+	var balance_state: Dictionary = ctrl.get_balance_state()
 	var com: Vector3 = balance_state.get("com", Vector3.ZERO)
 	var support_center: Vector3 = balance_state.get("support_center", Vector3.ZERO)
 	var balance: float = balance_state.get("balance_ratio", 0.0)
@@ -342,23 +348,24 @@ func _draw_com_and_support(bodies: Dictionary, ctrl: ActiveRagdollController, ca
 		return
 	var alpha := _distance_alpha(mid_dist)
 
-	# Support polygon — filled quad between feet
-	var fl_pos := foot_l.global_position
-	var fr_pos := foot_r.global_position
-	var foot_fwd := (fl_pos - fr_pos).cross(Vector3.UP).normalized() * 0.1
-	if not camera.is_position_behind(fl_pos) and not camera.is_position_behind(fr_pos):
-		var fl_screen := camera.unproject_position(fl_pos)
-		var fr_screen := camera.unproject_position(fr_pos)
-		var fl_fwd_screen := camera.unproject_position(fl_pos + foot_fwd)
-		var fr_fwd_screen := camera.unproject_position(fr_pos + foot_fwd)
-		var fl_back_screen := camera.unproject_position(fl_pos - foot_fwd)
-		var fr_back_screen := camera.unproject_position(fr_pos - foot_fwd)
-		# Filled support area
-		var support_poly := PackedVector2Array([fl_fwd_screen, fr_fwd_screen, fr_back_screen, fl_back_screen])
-		draw_colored_polygon(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.15 * alpha))
-		draw_polyline(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
-		# Close the polyline
-		draw_line(fl_back_screen, fl_fwd_screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+	# Support polygon — filled quad between the first two feet
+	if feet.size() >= 2:
+		var fl_pos := feet[0].global_position
+		var fr_pos := feet[1].global_position
+		var foot_fwd := (fl_pos - fr_pos).cross(Vector3.UP).normalized() * 0.1
+		if not camera.is_position_behind(fl_pos) and not camera.is_position_behind(fr_pos):
+			var fl_screen := camera.unproject_position(fl_pos)
+			var fr_screen := camera.unproject_position(fr_pos)
+			var fl_fwd_screen := camera.unproject_position(fl_pos + foot_fwd)
+			var fr_fwd_screen := camera.unproject_position(fr_pos + foot_fwd)
+			var fl_back_screen := camera.unproject_position(fl_pos - foot_fwd)
+			var fr_back_screen := camera.unproject_position(fr_pos - foot_fwd)
+			# Filled support area
+			var support_poly := PackedVector2Array([fl_fwd_screen, fr_fwd_screen, fr_back_screen, fl_back_screen])
+			draw_colored_polygon(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.15 * alpha))
+			draw_polyline(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+			# Close the polyline
+			draw_line(fl_back_screen, fl_fwd_screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
 
 	# CoM marker — diamond shape, colored by balance
 	if not camera.is_position_behind(com):

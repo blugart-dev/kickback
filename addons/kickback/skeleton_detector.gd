@@ -268,37 +268,21 @@ static func populate_physical_bones(
 	bone_mapping: Dictionary,
 	owner: Node
 ) -> void:
-	for slot: String in bone_mapping:
-		var skel_bone: String = bone_mapping[slot]
-		var bone_idx := skeleton.find_bone(skel_bone)
-		if bone_idx < 0:
+	# Reuse the active-rig pipeline so partial-ragdoll shapes scale to the character
+	# (instead of fixed 0.15m boxes / 0.05m capsules) and stay the single source of truth.
+	var profile := create_profile_from_skeleton(skeleton, bone_mapping)
+	for bone_def: BoneDefinition in profile.bones:
+		if skeleton.find_bone(bone_def.skeleton_bone) < 0:
 			continue
 
 		var pb := PhysicalBone3D.new()
-		pb.name = "PhysicalBone_%s" % slot
-		pb.bone_name = skel_bone
-		pb.mass = MASS_TABLE.get(slot, 5.0)
-		pb.collision_layer = 16  # Layer 5 (bit 4) — partial ragdoll bones
-		pb.collision_mask = 18   # Layers 2 + 5 (environment + other partial bones)
+		pb.name = "PhysicalBone_%s" % bone_def.rig_name
+		pb.bone_name = bone_def.skeleton_bone
+		pb.mass = bone_def.mass
+		pb.collision_layer = KickbackLayers.PARTIAL_RAGDOLL_LAYER
+		pb.collision_mask = KickbackLayers.ENVIRONMENT_LAYER | KickbackLayers.PARTIAL_RAGDOLL_LAYER
 
-		# Add collision shape
-		var col := CollisionShape3D.new()
-		var shape_type: String = SHAPE_TABLE.get(slot, "box")
-		match shape_type:
-			"box":
-				var box := BoxShape3D.new()
-				box.size = Vector3(0.15, 0.15, 0.15)
-				col.shape = box
-			"capsule":
-				var capsule := CapsuleShape3D.new()
-				capsule.radius = 0.05
-				capsule.height = 0.2
-				col.shape = capsule
-			"sphere":
-				var sphere := SphereShape3D.new()
-				sphere.radius = 0.1
-				col.shape = sphere
-
+		var col := create_collision_shape(bone_def)
 		pb.add_child(col)
 		col.owner = owner
 		simulator.add_child(pb)

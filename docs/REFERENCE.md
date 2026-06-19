@@ -495,6 +495,36 @@ func classify_region(bone_name: StringName) -> StringName:
     return &"core"  # Default
 ```
 
+## Semantic roles (custom rigs)
+
+The controller, foot IK solver, and debug HUD never hardcode bone names. They ask
+`RagdollProfile` which rig bodies play each role, via accessors that default to the
+canonical convention (`Hips`, `Chest`, `Head`, `Foot_L/R`, `UpperLeg_*`…):
+
+| Role field (export)             | Accessor                  | Used for |
+|---------------------------------|---------------------------|----------|
+| `root_rig` (`"Hips"`)           | `get_root_rig()`          | CoM base, root motion, sway anchor |
+| `chest_rig` (`"Chest"`)         | `get_chest_rig()`         | head-whip, recovery orientation |
+| `head_rig` (`"Head"`)           | `get_head_rig()`          | head-whip, state gizmo |
+| `torso_rigs`                    | `get_torso_rigs()`        | torso bend, sway falloff |
+| `foot_rigs`                     | `get_foot_rigs()`         | balance support polygon, foot IK, CoM gizmo |
+| `left_leg_chain`/`right_leg_chain` | `get_leg_chain("L"/"R")` | two-bone foot IK (hip→knee→foot) |
+
+A profile that follows the convention needs **zero** configuration. For a non-Mixamo
+rig with different rig names, override the role fields to match:
+
+```gdscript
+profile.root_rig = "pelvis"
+profile.foot_rigs = PackedStringArray(["l_ankle", "r_ankle"])
+profile.left_leg_chain = PackedStringArray(["l_thigh", "l_shin", "l_ankle"])
+profile.right_leg_chain = PackedStringArray(["r_thigh", "r_shin", "r_ankle"])
+```
+
+List accessors filter out names that don't map to a defined bone, so a missing body
+degrades gracefully instead of resolving to a null lookup. `root_bone` (the partial-ragdoll
+recursion guard) derives from `root_rig` when left empty — see `get_root_skeleton_bone()`.
+Run `validate_against_skeleton()` to flag role names that don't reference a defined bone.
+
 ## Animation requirements
 
 ### Minimum set (Step 0-2)
