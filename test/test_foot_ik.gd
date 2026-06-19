@@ -1,11 +1,31 @@
 extends GutTest
 
 
-# ── FootIKSolver unit tests ────────────────────────────────────────────────
-# Tests the IK solver's math and state management without a full scene.
-# Scene-dependent features (raycasting, spring integration) require
-# integration tests in the demo scenes.
+# ── FootIKSolver tests ──────────────────────────────────────────────────────
+# Two layers:
+#   1. Lifecycle / config tests that exercise the real solver and the real
+#      RagdollTuning validation with no scene.
+#   2. Runtime tests that drive the REAL FootIKSolver — the one the
+#      ActiveRagdollController lazily creates — on a live rig standing over a
+#      ground plane (built via res://test/helpers/rig_harness.gd), replacing the
+#      old re-implemented swing/pelvis formula tests.
 
+const RigHarness := preload("res://test/helpers/rig_harness.gd")
+
+
+# Builds a rig with foot IK ENABLED over a ground plane, then steps physics so
+# the controller's lazy FootIKSolver initializes and solves a few NORMAL frames.
+func _spawn_with_foot_ik(extra_frames: int = 20):
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(RagdollTuning.create_default(), null, true)  # foot_ik_enabled is on by default
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "Kickback setup completed within frame budget")
+	await wait_physics_frames(extra_frames)
+	return h
+
+
+# ── Solver lifecycle (real class, no scene) ────────────────────────────────
 
 func test_solver_creation():
 	var solver := FootIKSolver.new()
@@ -42,7 +62,7 @@ func test_stagger_lifecycle():
 	assert_false(solver._stagger_pinning)
 
 
-# ── RagdollTuning foot IK defaults ────────────────────────────────────────
+# ── RagdollTuning foot IK defaults / validation ────────────────────────────
 
 func test_default_tuning_has_foot_ik():
 	var t := RagdollTuning.create_default()
@@ -80,53 +100,37 @@ func test_tuning_warns_missing_foot_bones():
 	assert_true(warnings.size() > 0, "Should warn about missing foot IK bones")
 
 
-# ── Swing detection math ──────────────────────────────────────────────────
+# ── Real FootIKSolver on a live rig ────────────────────────────────────────
 
-func test_swing_detection_logic():
-	# Replicate the swing detection formula from FootIKSolver
-	var swing_threshold := 0.25
-	var plant_threshold := 0.17
-	var range_val := swing_threshold - plant_threshold
-
-	# Foot at root level (planted)
-	var far_planted := 0.10
-	var tw_planted := clampf(1.0 - (far_planted - plant_threshold) / range_val, 0.0, 1.0)
-	assert_almost_eq(tw_planted, 1.0, 0.01, "Foot at root should be fully planted")
-
-	# Foot at swing threshold (transitioning)
-	var far_swing := 0.25
-	var tw_swing := clampf(1.0 - (far_swing - plant_threshold) / range_val, 0.0, 1.0)
-	assert_almost_eq(tw_swing, 0.0, 0.01, "Foot at swing threshold should have zero weight")
-
-	# Foot mid-range
-	var far_mid := 0.21
-	var tw_mid := clampf(1.0 - (far_mid - plant_threshold) / range_val, 0.0, 1.0)
-	assert_true(tw_mid > 0.0 and tw_mid < 1.0, "Mid-range should be partial weight")
-
-	# Foot well above swing threshold
-	var far_high := 0.5
-	if far_high >= swing_threshold:
-		pass  # Weight stays 0 (not computed)
-	assert_true(true, "High foot skipped correctly")
+func test_controller_creates_foot_ik_solver():
+	var h = await _spawn_with_foot_ik()
+	assert_not_null(h.controller._foot_ik, "controller lazily created a FootIKSolver")
+	assert_true(h.controller._foot_ik.is_initialized(), "solver initialized against the rig")
 
 
-func test_pelvis_offset_clamping():
-	var max_drop := 0.35
-	# Both feet below animation → pelvis drops
-	var offset_l := -0.2
-	var offset_r := -0.3
-	var wl := 1.0
-	var wr := 1.0
-	var target := clampf(minf(offset_l * wl, offset_r * wr), -max_drop, 0.0)
-	assert_almost_eq(target, -0.3, 0.001, "Pelvis should drop to lowest foot")
+func test_solver_reads_leg_lengths_from_rest():
+	var h = await _spawn_with_foot_ik()
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	# Lengths are derived from the skeleton's rest poses (0.42 m + 0.40 m).
+	assert_almost_eq(solver._upper_leg_len, 0.42, 0.02, "upper leg length read from rest")
+	assert_almost_eq(solver._lower_leg_len, 0.40, 0.02, "lower leg length read from rest")
 
-	# Extreme drop gets clamped
-	offset_r = -0.5
-	target = clampf(minf(offset_l * wl, offset_r * wr), -max_drop, 0.0)
-	assert_almost_eq(target, -max_drop, 0.001, "Pelvis drop should clamp to max")
 
-	# Positive offset (foot above animation) → no pelvis lift
-	offset_l = 0.1
-	offset_r = 0.2
-	target = clampf(minf(offset_l * wl, offset_r * wr), -max_drop, 0.0)
-	assert_almost_eq(target, 0.0, 0.001, "Pelvis should not lift above zero")
+func test_feet_plant_over_ground():
+	# Extra frames so the exponential weight blend has time to ramp toward 1.
+	var h = await _spawn_with_foot_ik(35)
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	assert_gt(solver._ik_weight_l, 0.4, "left foot plants over the ground")
+	assert_gt(solver._ik_weight_r, 0.4, "right foot plants over the ground")
+	assert_true(solver.is_active(), "foot IK reports active")
+
+
+func test_pelvis_never_lifts_on_flat_ground():
+	var h = await _spawn_with_foot_ik(35)
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	# Feet rest on flat ground level with the root, so the pelvis must not rise.
+	assert_true(solver._pelvis_offset <= 0.001,
+		"pelvis offset never lifts above zero (got %f)" % solver._pelvis_offset)
