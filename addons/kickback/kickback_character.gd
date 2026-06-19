@@ -193,6 +193,8 @@ func trigger_stagger(hit_dir: Vector3 = Vector3.FORWARD) -> void:
 func anticipate_threat(threat_dir: Vector3, urgency: float = 0.5) -> void:
 	if _active_controller:
 		_active_controller.anticipate_threat(threat_dir, urgency)
+	else:
+		push_warning("KickbackCharacter: no ActiveRagdollController available for anticipate_threat()")
 
 
 ## Returns the active ragdoll state name, or "N/A" if no active controller.

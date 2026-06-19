@@ -196,9 +196,11 @@ extends Resource
 # ── Collision ───────────────────────────────────────────────────────────────
 
 @export_group("Collision")
-## Physics collision layer for ragdoll bodies.
+## Physics layer the ragdoll bodies occupy (default 8 = UI layer 4,
+## [constant KickbackLayers.ACTIVE_RAGDOLL_LAYER]).
 @export_flags_3d_physics var collision_layer: int = 8
-## Physics collision mask for ragdoll bodies.
+## Layers the ragdoll bodies collide against (default 15 = UI layers 1-4: the
+## environment plus the other ragdoll bodies).
 @export_flags_3d_physics var collision_mask: int = 15
 ## Bones whose collision_mask is set to 0 during NORMAL state and restored on
 ## STAGGER/RAGDOLL. Prevents clipping from animation poses (crossed arms, etc.).

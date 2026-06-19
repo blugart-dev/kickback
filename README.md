@@ -177,6 +177,8 @@ Character (Node3D)
 - `threat_anticipated(direction, urgency)` — anticipate_threat() was called
 - `region_injured(rig_name, severity)` — bone sustained persistent injury
 
+**Optional component:** add a `PhysicsCollisionMonitor` next to the controllers to emit `body_impact(bone_name, velocity, contact_body)` whenever ragdoll bodies strike the environment — handy for impact SFX, decals, or scoring. See [INTEGRATION.md](docs/INTEGRATION.md).
+
 **Important:** All root movement and rotation must happen in `_physics_process`, not `_process`, to stay in sync with the spring resolver.
 
 ## Demo Scenes

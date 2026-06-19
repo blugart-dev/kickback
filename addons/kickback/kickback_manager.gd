@@ -10,6 +10,7 @@
 ## death ragdoll must always proceed. If no manager is present, ragdolls are
 ## unbounded.
 @icon("res://addons/kickback/icons/kickback_manager.svg")
+class_name KickbackManager
 extends Node
 
 @export_group("Budget")
