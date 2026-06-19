@@ -2,26 +2,51 @@
 
 Comparison of the Kickback plugin against NaturalMotion's Euphoria system
 (GTA IV/V, Red Dead Redemption 2, Max Payne 3). Documents missing behaviors
-and systems with difficulty ratings and implementation notes for Godot 4.6+.
+and systems with difficulty ratings and implementation notes for Godot 4.7+.
 
 ## Status Legend
-- [x] Implemented in Kickback
-- [ ] Not yet implemented
+- ✅ **Real** — a genuine behavior, robust
+- 🟡 **Partial** — works narrowly, or a tunable knob doing a fraction of the behavior
+- ⚪ **Nominal** — exists in name/API only; not a meaningful behavior yet
+- ❌ **Missing** — not implemented
 
-## Implemented Features
-- [x] Per-bone spring-based pose matching (velocity springs)
-- [x] Per-bone strength reduction with adjacency spreading
-- [x] 5-state machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
-- [x] Impact profiles per weapon type (5 presets)
-- [x] Protected bones (selective immunity)
-- [x] Signal-driven architecture (animation-agnostic)
-- [x] Recovery with face-up/face-down orientation detection
-- [x] Budget system for concurrent ragdolls
-- [x] Stagger state with auto-recovery
-- [x] Momentum transfer on ragdoll entry (v0.6)
-- [x] Center of mass balance tracking (v0.6)
+> ⚠️ **Honest accounting.** Counting features equally suggests Kickback is ~67% of the
+> way to Euphoria. That overstates it: several "implemented" items are scalar knobs, not
+> behaviors, and every *active self-preservation* behavior is absent. Difficulty-weighted,
+> real parity is **~30%** (see the [ROADMAP.md](ROADMAP.md) scorecard).
+
+## What's actually built
+
+### Foundation — real and robust
+- ✅ Per-bone spring-based pose matching (velocity springs) — the technical core
+- ✅ Per-bone strength reduction with adjacency spreading
+- ✅ 5-state machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
+- ✅ Stagger state with balance-driven auto-recovery
+- ✅ Impact profiles per weapon type (5 presets)
+- ✅ Protected bones (selective immunity)
+- ✅ Signal-driven, animation-agnostic architecture
+- ✅ Momentum transfer on ragdoll entry
+- ✅ Center of mass **sensing** vs foot-support polygon
+- ✅ Micro hit reactions (torso bend / head whip / spin torque)
+- ✅ Terrain foot IK (two-bone solver + pelvis drop) — *planting only, not balance-stepping*
+
+### Reactive modulators — partial / nominal
+- 🟡 Recovery with face-up/down detection — single canned animation blend, no get-up variety
+- 🟡 Active Resistance ("bracing") — biases spring *stiffness* toward balance; **no** bracing/limb motion
+- 🟡 Cumulative pain / fatigue — decaying scalars that scale existing strength reductions
+- ⚪ Regional impairment — a per-bone injury scalar feeding a multiplier; no limb-specific behavior
+- ⚪ Threat anticipation — one strength pulse + a signal (a flinch knob, not anticipatory posture)
+- ⚪ Budget system for concurrent ragdolls — `KickbackManager` counter is **not wired** into controllers
+
+### The objective — absent (this is what 1.0 means)
+Every behavior that makes Euphoria *Euphoria* — active balance recovery, stumble steps,
+arm/wall bracing, environmental grabbing, ground crawling, and procedural pose
+generation — is **not yet built**. See the table below.
 
 ## Missing Features — Summary
+
+> Note: ~~struck-through~~ items are addressed in code — see *What's actually built*
+> above for how deeply (several are partial or nominal, not full behaviors).
 
 | # | Feature | Difficulty | Impact | Lines Est. |
 |---|---------|-----------|--------|------------|

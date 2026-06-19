@@ -1,12 +1,12 @@
-# Kickback — Physics-Based Reactive Characters for Godot 4.6+
+# Kickback — Physics-Based Reactive Characters for Godot 4.7+
 
 ## What this is
 
-An open-source plugin for Euphoria-like hit reactions in Godot 4.6+.
+An open-source plugin for Euphoria-like hit reactions in Godot 4.7+.
 Characters react dynamically to impacts using physics-driven ragdoll
 and spring-based pose matching. Fully configurable and extensible.
 
-**Engine**: Godot 4.6.1+ with Jolt physics.
+**Engine**: Godot 4.7+ with Jolt physics.
 **Language**: GDScript.
 
 ## Project structure

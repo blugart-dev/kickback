@@ -1,10 +1,10 @@
 # Kickback
 
 [![Tests](https://github.com/blugart-dev/kickback/actions/workflows/tests.yml/badge.svg)](https://github.com/blugart-dev/kickback/actions/workflows/tests.yml)
-[![Godot 4.6+](https://img.shields.io/badge/Godot-4.6%2B-blue?logo=godot-engine)](https://godotengine.org)
+[![Godot 4.7+](https://img.shields.io/badge/Godot-4.7%2B-blue?logo=godot-engine)](https://godotengine.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Physics-based reactive characters for Godot 4.6+**
+**Physics-based reactive characters for Godot 4.7+**
 
 Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Characters react dynamically to gunshots, explosions, melee hits, and arrows using active ragdoll physics — every hit produces a unique, physically-driven reaction.
 
@@ -34,6 +34,22 @@ Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full
   <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="Ball throw demo — NPCs patrol, react to hits, recover with injuries" width="640">
 </p>
 </details>
+
+## Project status
+
+Kickback is **pre-1.0 and actively evolving**. It has a robust *passive* reaction
+foundation — velocity springs, balance sensing, a full state machine, terrain foot IK —
+but the *active self-preservation* behaviors that define
+[Euphoria](docs/EUPHORIA_COMPARISON.md) (stumble-stepping, arm/wall bracing, grabbing,
+procedural poses) are still ahead.
+
+By difficulty-weighted progress toward that goal, the project is at **~30%** — which is
+exactly what the version `0.3.x` is meant to convey. `1.0.0` is reserved for full
+Euphoria parity. See **[ROADMAP.md](docs/ROADMAP.md)** for the scorecard and milestones,
+and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
+
+> Today it works well as a hit-reaction system for humanoid (Mixamo-style) rigs.
+> General multi-rig robustness and the self-preservation layer are on the roadmap.
 
 ## Features
 
@@ -66,7 +82,7 @@ Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full
 
 ## Requirements
 
-- Godot 4.6.1+
+- Godot 4.7+
 - Jolt Physics (Project Settings > Physics > 3D > Physics Engine = "Jolt Physics")
 
 ## Installation
@@ -178,7 +194,7 @@ Run any scene from `demo/` to see the plugin in action:
 | `ball_throw.tscn` | Throw physics balls, velocity-scaled impact |
 | `tuning_presets.tscn` | 5 characters: Tank/Standard/Loose/Fragile/Protected side-by-side |
 | `protected_bones.tscn` | Protected vs unprotected legs — same hit, different result |
-| `euphoria_showcase.tscn` | All v0.7 features: active resistance, stagger sway, pain, momentum, injuries |
+| `euphoria_showcase.tscn` | Active resistance, stagger sway, pain, momentum, injuries |
 
 ## Collision Layers
 

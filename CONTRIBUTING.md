@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Here's how to get started.
 ## Setup
 
 1. **Fork and clone** the repository
-2. **Install Godot 4.6.1+** from [godotengine.org](https://godotengine.org/download)
+2. **Install Godot 4.7+** from [godotengine.org](https://godotengine.org/download)
 3. **Enable Jolt Physics**: Project Settings > Physics > 3D > Physics Engine > Jolt Physics
 4. **Enable the plugin**: Project > Project Settings > Plugins > Kickback > Enable
 5. **Run a demo**: Open any scene from `demo/` to verify setup

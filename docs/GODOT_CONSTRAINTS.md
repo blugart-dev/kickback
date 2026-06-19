@@ -1,7 +1,7 @@
-# Godot 4.6 Constraints and Workarounds
+# Godot Constraints and Workarounds
 
 Read this BEFORE writing any physics code. These are confirmed issues and
-workarounds specific to Godot 4.6.x with Jolt physics.
+workarounds specific to Godot 4.6+ with Jolt physics.
 
 ## Why we use RigidBody3D instead of PhysicalBone3D for active ragdoll
 
