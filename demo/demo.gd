@@ -1,5 +1,7 @@
 extends Node3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Arrow", "Shotgun", "Explosion"])
 var _weapon_idx: int = 0
@@ -38,17 +40,13 @@ func _ready() -> void:
 	_setup_godot_ragdoll($PartialChar)
 
 	# Debug gizmos — self-contained, finds all characters
-	var debug_hud := StrengthDebugHUD.new()
-	debug_hud.name = "StrengthDebugHUD"
-	debug_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	debug_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(debug_hud)
+	DemoHelpers.add_debug_hud(self)
 
 	_update_weapon_label()
 
 
 func _setup_active(char_root: Node3D) -> KickbackCharacter:
-	var ybot_name := _get_ybot_name(char_root)
+	var ybot_name := DemoHelpers.find_skeleton_owner(char_root, "Demo")
 	if ybot_name.is_empty():
 		return null
 
@@ -58,44 +56,7 @@ func _setup_active(char_root: Node3D) -> KickbackCharacter:
 	if baked_sim:
 		baked_sim.queue_free()
 
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rig_builder := PhysicsRigBuilder.new()
-	rig_builder.name = "PhysicsRigBuilder"
-	rig_builder.skeleton_path = skel_path
-
-	var rig_sync := PhysicsRigSync.new()
-	rig_sync.name = "PhysicsRigSync"
-	rig_sync.skeleton_path = skel_path
-	rig_sync.rig_builder_path = builder_path
-
-	var spring := SpringResolver.new()
-	spring.name = "SpringResolver"
-	spring.skeleton_path = skel_path
-	spring.rig_builder_path = builder_path
-
-	var active_ctrl := ActiveRagdollController.new()
-	active_ctrl.name = "ActiveRagdollController"
-	active_ctrl.spring_resolver_path = spring_path
-	active_ctrl.rig_builder_path = builder_path
-	active_ctrl.character_root_path = root_path
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = RagdollTuning.create_default()
-
-	char_root.add_child(rig_builder)
-	char_root.add_child(rig_sync)
-	char_root.add_child(spring)
-	char_root.add_child(active_ctrl)
-	char_root.add_child(kc)
-	return kc
+	return DemoHelpers.build_active_rig(char_root, ybot_name)
 
 
 # The "what Godot offers" half: a bare PhysicalBoneSimulator3D ragdoll driven by
@@ -103,7 +64,7 @@ func _setup_active(char_root: Node3D) -> KickbackCharacter:
 # Kickback is the active spring ragdoll on the left; this side is the engine's
 # built-in tool, for contrast.
 func _setup_godot_ragdoll(char_root: Node3D) -> void:
-	var ybot_name := _get_ybot_name(char_root)
+	var ybot_name := DemoHelpers.find_skeleton_owner(char_root, "Demo")
 	if ybot_name.is_empty():
 		return
 
@@ -120,24 +81,6 @@ func _setup_godot_ragdoll(char_root: Node3D) -> void:
 	_godot_ctrl.simulator_path = sim_path
 	_godot_ctrl.skeleton_path = skel_path
 	char_root.add_child(_godot_ctrl)
-
-
-func _get_ybot_name(char_root: Node3D) -> String:
-	for child in char_root.get_children():
-		if _find_child_of_type(child, "Skeleton3D"):
-			return child.name
-	push_error("Demo: No Skeleton3D found in %s" % char_root.name)
-	return ""
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_child_of_type(child, type_name)
-		if found:
-			return found
-	return null
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -186,18 +129,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# Camera orbits the midpoint between both characters
-	var pivot := Vector3(0, 1.0, 0)
-	var yaw_rad := deg_to_rad(_cam_yaw)
-	var pitch_rad := deg_to_rad(_cam_pitch)
-
-	var offset := Vector3(
-		sin(yaw_rad) * cos(pitch_rad),
-		-sin(pitch_rad),
-		cos(yaw_rad) * cos(pitch_rad),
-	) * _cam_distance
-
-	_cam.global_position = pivot + offset
-	_cam.look_at(pivot)
+	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
 
 
 func _set_weapon(idx: int) -> void:

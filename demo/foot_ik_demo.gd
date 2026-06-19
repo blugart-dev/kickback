@@ -4,6 +4,8 @@
 ## Right (Z=2.5): foot IK disabled — feet float through terrain.
 extends Node3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 const WALK_SPEED := 1.5
 const WAYPOINT_A := Vector3(-6, 0, 0)
 const WAYPOINT_B := Vector3(6, 0, 0)
@@ -45,11 +47,7 @@ func _ready() -> void:
 	_setup_hud()
 	_add_3d_labels()
 
-	var dh := StrengthDebugHUD.new()
-	dh.name = "StrengthDebugHUD"
-	dh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dh.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dh)
+	DemoHelpers.add_debug_hud(self)
 
 
 # =============================================================================
@@ -60,59 +58,21 @@ func _init_npc(char_root: Node3D, label: String, ik_enabled: bool) -> Dictionary
 	if not char_root:
 		return {}
 
-	var ybot_name := _get_ybot_name(char_root)
-	if ybot_name.is_empty():
-		return {}
-
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rb := PhysicsRigBuilder.new()
-	rb.name = "PhysicsRigBuilder"
-	rb.skeleton_path = skel_path
-
-	var rs := PhysicsRigSync.new()
-	rs.name = "PhysicsRigSync"
-	rs.skeleton_path = skel_path
-	rs.rig_builder_path = builder_path
-
-	var sp := SpringResolver.new()
-	sp.name = "SpringResolver"
-	sp.skeleton_path = skel_path
-	sp.rig_builder_path = builder_path
-
-	var ac := ActiveRagdollController.new()
-	ac.name = "ActiveRagdollController"
-	ac.spring_resolver_path = spring_path
-	ac.rig_builder_path = builder_path
-	ac.character_root_path = root_path
-
 	var tuning := RagdollTuning.create_default()
 	tuning.foot_ik_enabled = ik_enabled
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = tuning
-
-	char_root.add_child(rb)
-	char_root.add_child(rs)
-	char_root.add_child(sp)
-	char_root.add_child(ac)
-	char_root.add_child(kc)
+	var kc := DemoHelpers.build_active_rig(char_root, "", tuning)
+	if not kc:
+		return {}
+	var ac := kc.get_active_controller()
 
 	# Find anim player + skeleton
 	var anim: AnimationPlayer
 	var skeleton: Skeleton3D
 	for child in char_root.get_children():
-		var a := _find_child_of_type(child, "AnimationPlayer") as AnimationPlayer
+		var a := DemoHelpers.find_descendant_of_type(child, "AnimationPlayer") as AnimationPlayer
 		if a:
 			anim = a
-		var s := _find_child_of_type(child, "Skeleton3D") as Skeleton3D
+		var s := DemoHelpers.find_descendant_of_type(child, "Skeleton3D") as Skeleton3D
 		if s:
 			skeleton = s
 
@@ -199,11 +159,7 @@ func _update_camera() -> void:
 	if not _cam or _npc_ik.is_empty():
 		return
 	var pivot: Vector3 = _npc_ik.char_root.global_position + Vector3(0, 1.0, 1.25)
-	var yr := deg_to_rad(_cam_yaw)
-	var pr := deg_to_rad(_cam_pitch)
-	var off := Vector3(sin(yr) * cos(pr), -sin(pr), cos(yr) * cos(pr)) * _cam_distance
-	_cam.global_position = pivot + off
-	_cam.look_at(pivot)
+	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance, pivot)
 
 
 # =============================================================================
@@ -299,23 +255,4 @@ func _add_3d_labels() -> void:
 	label_no_ik.position = Vector3(0, 2.5, 2.5)
 
 
-# =============================================================================
-# UTILITIES
-# =============================================================================
-
-func _get_ybot_name(char_root: Node3D) -> String:
-	for child in char_root.get_children():
-		if _find_child_of_type(child, "Skeleton3D"):
-			return child.name
-	push_error("FootIKDemo: No Skeleton3D found in %s" % char_root.name)
-	return ""
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_child_of_type(child, type_name)
-		if found:
-			return found
-	return null
+# (skeleton/anim lookup now lives in demo_helpers.gd)
