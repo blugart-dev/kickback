@@ -5,7 +5,6 @@ extends EditorPlugin
 var _inspector_plugin: EditorInspectorPlugin
 var _pending_root: Node
 var _pending_skeleton: Skeleton3D
-var _pending_anim_player: AnimationPlayer
 
 
 func _enter_tree() -> void:
@@ -42,7 +41,6 @@ func _on_add_kickback() -> void:
 
 	_pending_root = root
 	_pending_skeleton = skeleton
-	_pending_anim_player = _find_child_of_type(root, "AnimationPlayer")
 
 	_show_preset_dialog()
 
@@ -128,10 +126,8 @@ func _show_preset_dialog() -> void:
 func _execute_preset(preset_name: String) -> void:
 	var root := _pending_root
 	var skeleton := _pending_skeleton
-	var anim_player := _pending_anim_player
 
 	var skeleton_name := skeleton.name
-	var anim_name: String = anim_player.name if anim_player else ""
 	var simulator_path := "../%s/PhysicalBoneSimulator3D" % skeleton_name
 	var scene_owner: Node = root.owner if root.owner else root
 
@@ -195,8 +191,6 @@ func _execute_preset(preset_name: String) -> void:
 	kc.name = "KickbackCharacter"
 	kc.set_script(scripts["kickback_character"])
 	kc.set("skeleton_path", NodePath("../%s" % skeleton_name))
-	if anim_player:
-		kc.set("animation_player_path", NodePath("../%s" % anim_name))
 	kc.set("character_root_path", NodePath(".."))
 	kc.set("ragdoll_profile", auto_profile)
 	nodes.append(kc)
