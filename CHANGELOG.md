@@ -32,6 +32,12 @@
 - **`KickbackLayers`** — named collision-layer constants (active ragdoll = UI layer 4,
   partial ragdoll = UI layer 5) replacing magic numbers in `KickbackRaycast` and
   `SkeletonDetector`.
+- **`KickbackManager` registers a `class_name`** — the budget manager is now a first-class,
+  typeable node (it had an `@icon` but no `class_name`, so the icon was inert). Discovery is
+  still group-based; purely additive. Also clarified docstrings/tooltips (`balance_changed`
+  is stagger-only, `ImpactProfile.strength_spread` counts joint-hops, collision layer/mask
+  defaults) and gave `KickbackCharacter.anticipate_threat` the same no-controller
+  `push_warning` as the other facade mutators.
 - **Runtime / physics smoke tests** — the first automated coverage of the physics runtime
   (previously 0 %). The GUT suite now builds a real rig in a headless `SceneTree` — a
   synthetic Mixamo-named skeleton wired to `PhysicsRigBuilder` + `SpringResolver` +

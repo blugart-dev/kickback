@@ -102,6 +102,7 @@ signal stagger_started(hit_direction: Vector3)
 ## Emitted when the character recovers from stagger and returns to NORMAL.
 signal stagger_finished()
 ## Emitted each physics frame during stagger with the current balance ratio.
+## Not emitted outside STAGGER — poll [method get_balance_ratio] for continuous monitoring.
 signal balance_changed(ratio: float)
 ## Emitted when fatigue level changes significantly. 0.0 = fresh, 1.0 = exhausted.
 signal fatigue_changed(level: float)

@@ -19,7 +19,8 @@ extends Resource
 @export_range(0.0, 1.0) var ragdoll_probability: float = 0.0
 ## How much spring strength is reduced on the hit bone (0 = none, 1 = full).
 @export_range(0.0, 1.0) var strength_reduction: float = 0.4
-## How many neighbor bones also lose strength (0 = hit bone only).
+## How far the strength reduction propagates through the joint graph, in hops
+## (0 = hit bone only, 1 = direct neighbors, 99 = effectively the whole body).
 @export_range(0, 99) var strength_spread: int = 1
 
 @export_group("Recovery")
