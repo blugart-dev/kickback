@@ -41,7 +41,8 @@
   stagger and persistent transitions, physics→skeleton sync, and the real `FootIKSolver`
   planting feet over ground. `test_state_machine.gd` and `test_foot_ik.gd` were refactored
   to drive the real controller/solver rather than re-implement their formulas. Shared
-  builder: `test/helpers/rig_harness.gd`. Suite is now 84 tests.
+  builder: `test/helpers/rig_harness.gd`. Also covers the budget hard cap (downgrade vs
+  bypass, slot accounting). Suite is now 89 tests.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
@@ -61,10 +62,14 @@
   partial-ragdoll recursion guard is correct on any rig.
 
 ### Changed
-- **Budget manager wired in** — `ActiveRagdollController` requests a slot from
-  `KickbackManager` on full ragdoll and releases it on recovery/removal (discovered via
-  the `kickback_manager` group). Currently a soft cap — the ragdoll still proceeds when
-  over budget; hard enforcement/eviction is a follow-up.
+- **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
+  `kickback_manager` group) now actually bounds simultaneous ragdolls. When a slot is
+  denied, a *spontaneous* hit- or balance-driven full ragdoll is downgraded to a stagger
+  (the character still reacts but skips the expensive limp/settle/get-up cycle), and a
+  tipping-over character retries on later frames so it ragdolls as soon as a slot frees up.
+  Explicit `trigger_ragdoll()` and `set_persistent()` (death/knockdown) bypass the cap — a
+  deliberate or death ragdoll must always proceed. Slots are released on recovery/removal.
+  With no manager present, ragdolls stay unbounded. (Supersedes the earlier soft cap.)
 - Moved `strip_root_motion.gd` from `demo/` to `addons/kickback/editor/`.
 - **Demos consolidated** (11 → 8). `ball_throw` folded into `shooting_range` as a
   right-click ball-throw alt-fire (velocity-scaled impact, mouse-wheel throw strength).

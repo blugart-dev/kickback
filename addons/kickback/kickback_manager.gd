@@ -1,5 +1,14 @@
-## Global budget manager for Kickback. Tracks how many active ragdolls are
-## currently simulating. Add as an autoload or place in the scene root.
+## Global budget manager for Kickback. Caps how many active ragdolls simulate at
+## once. Add as an autoload or place in the scene root — controllers discover it
+## via the [constant GROUP] group, so no wiring is needed.
+##
+## The cap is HARD for spontaneous reactions: when [method request_active_ragdoll]
+## denies a slot, a hit- or balance-driven full ragdoll is downgraded to a stagger
+## (the character still reacts, but skips the expensive limp/settle/get-up cycle).
+## Explicit [method ActiveRagdollController.trigger_ragdoll] and
+## [method ActiveRagdollController.set_persistent] bypass the cap — a deliberate or
+## death ragdoll must always proceed. If no manager is present, ragdolls are
+## unbounded.
 @icon("res://addons/kickback/icons/kickback_manager.svg")
 extends Node
 
