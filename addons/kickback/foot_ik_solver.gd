@@ -47,6 +47,18 @@ var _stagger_pinning: bool = false
 var _pin_pos_l: Vector3 = Vector3.ZERO
 var _pin_pos_r: Vector3 = Vector3.ZERO
 
+# Per-solve scratch buffers, reused to avoid per-frame allocations.
+#   _anim_cache:   bone_idx → world-space animation global, rebuilt each solve so
+#                  no bone's parent chain is walked more than once per frame.
+#   _overrides_buf: the target-override dict handed to the SpringResolver. Safe to
+#                  reuse because the controller's solve and the spring's read of it
+#                  never interleave within a physics frame — each node's
+#                  _physics_process runs to completion in turn, so the spring never
+#                  observes a half-cleared buffer (and a same-frame solve fully
+#                  rebuilds it before the spring reads).
+var _anim_cache: Dictionary = {}
+var _overrides_buf: Dictionary = {}
+
 
 func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: Node3D,
 		rig_builder: PhysicsRigBuilder, profile: RagdollProfile) -> bool:
@@ -179,15 +191,17 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	var sg := _skeleton.global_transform
 	var root_y := _character_root.global_position.y
 
-	# Animation poses
-	var hips_anim := sg * _spring.get_animation_bone_global(_hips_idx)
+	# Animation poses (memoized per solve; the cache is reused by the full-body
+	# shift below so no bone's parent chain is walked more than once per frame).
+	_anim_cache.clear()
+	var hips_anim := _anim_global(_hips_idx, sg)
 	var hip_y := hips_anim.origin.y
-	var upper_l := sg * _spring.get_animation_bone_global(_bone_idx[_upper_l])
-	var lower_l := sg * _spring.get_animation_bone_global(_bone_idx[_lower_l])
-	var foot_l := sg * _spring.get_animation_bone_global(_bone_idx[_foot_l])
-	var upper_r := sg * _spring.get_animation_bone_global(_bone_idx[_upper_r])
-	var lower_r := sg * _spring.get_animation_bone_global(_bone_idx[_lower_r])
-	var foot_r := sg * _spring.get_animation_bone_global(_bone_idx[_foot_r])
+	var upper_l := _anim_global(_bone_idx[_upper_l], sg)
+	var lower_l := _anim_global(_bone_idx[_lower_l], sg)
+	var foot_l := _anim_global(_bone_idx[_foot_l], sg)
+	var upper_r := _anim_global(_bone_idx[_upper_r], sg)
+	var lower_r := _anim_global(_bone_idx[_lower_r], sg)
+	var foot_r := _anim_global(_bone_idx[_foot_r], sg)
 
 	# Foot XZ source: animation (NORMAL) or pinned positions (STAGGER)
 	var foot_xz_l := Vector2(foot_l.origin.x, foot_l.origin.z)
@@ -213,12 +227,20 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	var gpos_r := foot_r.origin
 	var gnorm_l := Vector3.UP
 	var gnorm_r := Vector3.UP
+	# A foot only counts as "supporting" the pelvis when it found ground the body
+	# can actually reach (see the pelvis adjustment below). offset_* feed ONLY the
+	# pelvis drop — the per-leg solves target gpos_*.y directly.
+	var supported_l := false
+	var supported_r := false
 
 	if not gl.is_empty():
 		gpos_l = gl["position"]
 		gnorm_l = gl.get("normal", Vector3.UP)
-		offset_l = (gpos_l.y + _tuning.foot_ik_ankle_height) - foot_l.origin.y
-		offset_l = clampf(offset_l, -_tuning.foot_ik_max_adjustment, _tuning.foot_ik_max_adjustment)
+		var raw_offset_l := (gpos_l.y + _tuning.foot_ik_ankle_height) - foot_l.origin.y
+		offset_l = clampf(raw_offset_l, -_tuning.foot_ik_max_adjustment, _tuning.foot_ik_max_adjustment)
+		# Ground deeper than the pelvis can drop to is a drop-off, not support: such
+		# a foot must not drag the body down and break the other foot's plant.
+		supported_l = raw_offset_l >= -_tuning.foot_ik_max_pelvis_drop
 		var far := foot_l.origin.y - root_y
 		if far < _tuning.foot_ik_swing_threshold:
 			tw_l = clampf(
@@ -228,8 +250,9 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	if not gr.is_empty():
 		gpos_r = gr["position"]
 		gnorm_r = gr.get("normal", Vector3.UP)
-		offset_r = (gpos_r.y + _tuning.foot_ik_ankle_height) - foot_r.origin.y
-		offset_r = clampf(offset_r, -_tuning.foot_ik_max_adjustment, _tuning.foot_ik_max_adjustment)
+		var raw_offset_r := (gpos_r.y + _tuning.foot_ik_ankle_height) - foot_r.origin.y
+		offset_r = clampf(raw_offset_r, -_tuning.foot_ik_max_adjustment, _tuning.foot_ik_max_adjustment)
+		supported_r = raw_offset_r >= -_tuning.foot_ik_max_pelvis_drop
 		var far := foot_r.origin.y - root_y
 		if far < _tuning.foot_ik_swing_threshold:
 			tw_r = clampf(
@@ -241,21 +264,27 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	_ik_weight_l = lerpf(_ik_weight_l, tw_l, blend)
 	_ik_weight_r = lerpf(_ik_weight_r, tw_r, blend)
 
-	# Pelvis adjustment
-	var target_pelvis := clampf(
-		minf(offset_l * _ik_weight_l, offset_r * _ik_weight_r),
-		-_tuning.foot_ik_max_pelvis_drop, 0.0)
+	# Pelvis adjustment — drop the whole body to the lowest *supported* foot so its
+	# leg doesn't overstretch. Feet over a gap (no ground hit) or a drop-off beyond
+	# pelvis reach are excluded (INF) so they can't pull the pelvis down onto the
+	# other, planted foot. If neither foot supports, the pelvis returns to neutral.
+	var drop_l: float = (offset_l * _ik_weight_l) if supported_l else INF
+	var drop_r: float = (offset_r * _ik_weight_r) if supported_r else INF
+	var deepest := minf(drop_l, drop_r)
+	var target_pelvis: float = clampf(deepest, -_tuning.foot_ik_max_pelvis_drop, 0.0) if deepest < INF else 0.0
 	_pelvis_offset = lerpf(_pelvis_offset, target_pelvis,
 		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
 	var ps := Vector3(0, _pelvis_offset, 0)
 
-	# Full-body shift
-	var overrides := {}
+	# Full-body shift. Reuse the persistent override buffer and the per-solve
+	# anim-global cache (hip/leg bones were already cached above).
+	var overrides := _overrides_buf
+	overrides.clear()
 	if absf(_pelvis_offset) > 0.001:
 		for rig_name: String in _spring.get_all_bone_names():
 			var bi: int = _spring.get_bone_idx(rig_name)
 			if bi >= 0:
-				var ba := sg * _spring.get_animation_bone_global(bi)
+				var ba := _anim_global(bi, sg)
 				overrides[rig_name] = Transform3D(ba.basis, ba.origin + ps)
 
 	# Solve left leg (use pinned XZ for foot target)
@@ -275,6 +304,18 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
 
 	_spring.set_target_overrides(overrides)
+
+
+## Returns the world-space animation global for a bone index, memoized per solve
+## in _anim_cache. get_animation_bone_global walks the parent chain, so caching
+## avoids re-walking shared ancestors across the hip/leg reads and the full-body
+## shift. Caller must clear _anim_cache at the start of each solve.
+func _anim_global(bone_idx: int, sg: Transform3D) -> Transform3D:
+	if _anim_cache.has(bone_idx):
+		return _anim_cache[bone_idx]
+	var g := sg * _spring.get_animation_bone_global(bone_idx)
+	_anim_cache[bone_idx] = g
+	return g
 
 
 # ── Two-bone IK solver (law of cosines) ───────────────────────────────────

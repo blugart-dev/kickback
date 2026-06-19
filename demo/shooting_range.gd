@@ -3,6 +3,8 @@
 ## physics ball (alt-fire). Characters stagger, ragdoll, and recover from hits.
 extends CharacterBody3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 const SPEED := 5.0
 const MOUSE_SENSITIVITY := 0.002
 
@@ -45,11 +47,7 @@ func _ready() -> void:
 		_setup_active(char_root)
 
 	# Debug gizmos
-	var debug_hud := StrengthDebugHUD.new()
-	debug_hud.name = "StrengthDebugHUD"
-	debug_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	debug_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	get_node("../HUD").add_child(debug_hud)
+	DemoHelpers.add_debug_hud(get_node("../HUD"))
 
 	_capture_mouse()
 	_update_weapon_label()
@@ -57,67 +55,7 @@ func _ready() -> void:
 
 
 func _setup_active(char_root: Node3D) -> void:
-	var ybot_name := _get_ybot_name(char_root)
-	if ybot_name.is_empty():
-		return
-
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rig_builder := PhysicsRigBuilder.new()
-	rig_builder.name = "PhysicsRigBuilder"
-	rig_builder.skeleton_path = skel_path
-
-	var rig_sync := PhysicsRigSync.new()
-	rig_sync.name = "PhysicsRigSync"
-	rig_sync.skeleton_path = skel_path
-	rig_sync.rig_builder_path = builder_path
-
-	var spring := SpringResolver.new()
-	spring.name = "SpringResolver"
-	spring.skeleton_path = skel_path
-	spring.rig_builder_path = builder_path
-
-	var active_ctrl := ActiveRagdollController.new()
-	active_ctrl.name = "ActiveRagdollController"
-	active_ctrl.spring_resolver_path = spring_path
-	active_ctrl.rig_builder_path = builder_path
-	active_ctrl.character_root_path = root_path
-
-	var tuning := RagdollTuning.create_default()
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = tuning
-
-	char_root.add_child(rig_builder)
-	char_root.add_child(rig_sync)
-	char_root.add_child(spring)
-	char_root.add_child(active_ctrl)
-	char_root.add_child(kc)
-
-
-func _get_ybot_name(char_root: Node3D) -> String:
-	for child in char_root.get_children():
-		if _find_child_of_type(child, "Skeleton3D"):
-			return child.name
-	push_error("ShootingRange: No Skeleton3D found in %s" % char_root.name)
-	return ""
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_child_of_type(child, type_name)
-		if found:
-			return found
-	return null
+	DemoHelpers.build_active_rig(char_root)
 
 
 func _capture_mouse() -> void:

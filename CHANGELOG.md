@@ -66,6 +66,10 @@
   skeleton/modifier subsystem unchanged; the modifier's per-frame roll-back is what preserves
   the spring's clean `get_bone_pose()` read target). The migration itself shipped — see
   *Changed* below. Cross-linked from `GODOT_CONSTRAINTS.md` and `ROADMAP.md`.
+- **`KickbackCharacter.get_active_controller()`** — facade accessor returning the sibling
+  `ActiveRagdollController` (or null). Makes the README's `active_controller.*` advanced-query
+  pattern (balance / fatigue / pain / hit-streak / per-bone injuries) first-class, instead of
+  requiring callers to reach for the sibling node themselves.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
@@ -101,6 +105,14 @@
   60 Hz reference (`_fr_weight`): **bit-identical at 60 Hz** (existing tuning unchanged) and
   convergence-stable at other tick rates. Stays velocity-based (not a PD rewrite). Resolves
   the last "Still open" item in [ROADMAP.md](docs/ROADMAP.md).
+- **Foot IK pelvis drop ignores feet over drop-offs** — the pelvis lowers to the lowest
+  *supported* foot, but a foot over a gap (no ground hit) or a drop-off deeper than
+  `foot_ik_max_pelvis_drop` no longer counts as support. Previously such a foot — whose ground
+  raycast could hit up to `foot_ik_max_adjustment` (0.5 m) below — pulled the whole pelvis down
+  to its limit, sinking the body and breaking the other, planted foot's contact. Now only feet
+  on ground the body can reach inform the drop (`foot_ik_solver.gd`). New regression test:
+  split ground (solid under one foot, a deep drop-off under the other) asserts the pelvis stays
+  near neutral. Suite is now 113 tests.
 
 ### Changed
 - **Budget hard cap** — `KickbackManager` (default 5 slots, discovered via the
@@ -148,6 +160,28 @@
   collision). The shooting-range player moved to its own layer (3) and the thrown ball's mask
   now references ground as layer 1. The setup-report dialog, `GODOT_CONSTRAINTS.md`, and
   `STEP_BY_STEP.md` were updated to the same layer-1-environment scheme.
+- **Demo wiring deduplicated into `demo/demo_helpers.gd`** — the active-rig assembly,
+  skeleton / AnimationPlayer lookup, orbit-camera math, and debug-HUD setup that all 8 demo
+  scripts hand-duplicated are now shared static helpers (`build_active_rig`,
+  `find_skeleton_owner` / `find_descendant_of_type`, `orbit_camera`, `add_debug_hud`) — about
+  490 fewer lines across the demos. It is demo-only (not shipped with the plugin) and mirrors
+  the demos' wiring, deliberately distinct from `test/helpers/rig_harness.gd`. `signal_showcase`
+  and `euphoria_showcase` also adopt the new `get_active_controller()` facade.
+
+### Performance
+- **Per-frame allocation & redundant-work cleanup** — `SpringResolver.get_all_bone_names()`
+  now returns a list cached at init instead of rebuilding a `PackedStringArray` from
+  `_bones.keys()` on every call (it is read each physics frame by the controller, HUD, and
+  foot-IK across ~12 call sites; the key set is fixed once the rig is built). The controller
+  computes `_compute_balance_state()` once per stagger frame and shares it between active
+  resistance and the tip/recovery checks — it sums center-of-mass over every body and was
+  being computed twice per frame. `StrengthDebugHUD` disables `_process` while the overlay is
+  off (F3), so it does no per-frame redraw work until it is toggled on.
+- **Foot IK solver per-frame allocations removed** — the target-override dictionary handed to
+  the `SpringResolver` each solve is now a reused buffer instead of a fresh `{}` (safe because
+  the solve and the spring's read never interleave within a physics frame), and animation bone
+  globals are memoized per solve so the hip/leg reads and the full-body shift no longer re-walk
+  the same parent chains.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5

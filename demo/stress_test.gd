@@ -1,5 +1,7 @@
 extends Node3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 const GRID_COLS := 5
 const GRID_ROWS := 4
 const SPACING := 2.5
@@ -62,51 +64,11 @@ func _ready() -> void:
 	_build_budget_slider()
 
 	# Debug gizmos
-	var debug_hud := StrengthDebugHUD.new()
-	debug_hud.name = "StrengthDebugHUD"
-	debug_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	debug_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(debug_hud)
+	DemoHelpers.add_debug_hud(self)
 
 
 func _setup_active(char_root: Node3D, ybot_name: String) -> KickbackCharacter:
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rb := PhysicsRigBuilder.new()
-	rb.name = "PhysicsRigBuilder"
-	rb.skeleton_path = skel_path
-	var rs := PhysicsRigSync.new()
-	rs.name = "PhysicsRigSync"
-	rs.skeleton_path = skel_path
-	rs.rig_builder_path = builder_path
-	var sp := SpringResolver.new()
-	sp.name = "SpringResolver"
-	sp.skeleton_path = skel_path
-	sp.rig_builder_path = builder_path
-	var ac := ActiveRagdollController.new()
-	ac.name = "ActiveRagdollController"
-	ac.spring_resolver_path = spring_path
-	ac.rig_builder_path = builder_path
-	ac.character_root_path = root_path
-
-	var tuning := RagdollTuning.create_default()
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = tuning
-
-	char_root.add_child(rb)
-	char_root.add_child(rs)
-	char_root.add_child(sp)
-	char_root.add_child(ac)
-	char_root.add_child(kc)
-	return kc
+	return DemoHelpers.build_active_rig(char_root, ybot_name)
 
 
 func _build_budget_slider() -> void:
@@ -176,16 +138,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	if not _cam:
 		return
-	var pivot := Vector3(0, 1.0, 0)
-	var yaw_rad := deg_to_rad(_cam_yaw)
-	var pitch_rad := deg_to_rad(_cam_pitch)
-	var offset := Vector3(
-		sin(yaw_rad) * cos(pitch_rad),
-		-sin(pitch_rad),
-		cos(yaw_rad) * cos(pitch_rad),
-	) * _cam_distance
-	_cam.global_position = pivot + offset
-	_cam.look_at(pivot)
+	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
 
 	# Update FPS
 	if _fps_label:
