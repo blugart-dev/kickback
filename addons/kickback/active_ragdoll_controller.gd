@@ -318,10 +318,13 @@ func _update_stagger(delta: float) -> void:
 	balance_changed.emit(balance)
 
 	if has_support:
-		# Too far off-balance → ragdoll (tipping over)
+		# Too far off-balance → ragdoll (tipping over). Hard cap: if the budget
+		# denies the slot, keep fighting in stagger instead of a full fall — and
+		# retry on later frames, so it ragdolls as soon as a slot frees up.
 		if balance > _tuning.balance_ragdoll_threshold:
-			_full_ragdoll()
-			return
+			if _try_acquire_ragdoll_slot():
+				_full_ragdoll()
+				return
 
 		# Regained balance → early recovery
 		if balance < _tuning.balance_recovery_threshold:
@@ -475,7 +478,9 @@ func _handle_stagger_hit(body: RigidBody3D, hit_dir: Vector3, effective_reductio
 	_reduce_strength(body.name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 	var boosted_prob := profile.ragdoll_probability * _tuning.stagger_ragdoll_bonus
-	if randf() < boosted_prob:
+	# Hard cap: if the budget denies the slot, fall through to extend the stagger
+	# (the cheaper reaction) rather than ragdoll.
+	if randf() < boosted_prob and _try_acquire_ragdoll_slot():
 		_full_ragdoll()
 	else:
 		_stagger_elapsed = 0.0  # Extend stagger
@@ -492,7 +497,10 @@ func _handle_normal_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction
 	if not should_ragdoll and _tuning.pain_ragdoll_threshold > 0.0:
 		should_ragdoll = _pain >= _tuning.pain_ragdoll_threshold
 	if should_ragdoll:
-		_full_ragdoll()
+		if _try_acquire_ragdoll_slot():
+			_full_ragdoll()
+		else:
+			_start_stagger(hit_dir)  # hard cap: downgrade to the cheaper reaction
 		return
 
 	# Stagger check: strength ratio + balance + pain-driven escalation
@@ -686,8 +694,12 @@ func _full_ragdoll() -> void:
 	state_changed.emit(_state)
 	ragdoll_started.emit()
 
-	# Request a budget slot if a KickbackManager is present. On denial the ragdoll
-	# still proceeds (soft cap); we simply don't hold a slot to release later.
+	# Budget slot bookkeeping. Spontaneous hit/balance ragdolls already reserved a
+	# slot via _try_acquire_ragdoll_slot() (so this is a no-op for them). Explicit
+	# trigger_ragdoll()/set_persistent() reach here WITHOUT a reservation and
+	# acquire opportunistically — they bypass the hard cap (a scripted or death
+	# ragdoll must always proceed) but still hold a slot for accurate accounting
+	# when one is free.
 	if not _holds_ragdoll_slot:
 		var mgr := _resolve_manager()
 		if mgr:
@@ -1042,6 +1054,23 @@ func _resolve_manager() -> Node:
 		if m and m.has_method("request_active_ragdoll"):
 			_manager = m
 	return _manager
+
+
+## Tries to reserve a budget slot for a NEW spontaneous full ragdoll. Returns
+## true (caller may ragdoll) when a slot is granted, when one is already held, or
+## when no KickbackManager is present (unbudgeted). Returns false ONLY when a
+## manager is present and at capacity — the hard cap, telling the caller to
+## substitute a cheaper reaction (stagger). Explicit trigger_ragdoll() and
+## set_persistent() do NOT gate on this: deliberate and death ragdolls always
+## proceed (a scripted death must not silently become a stagger).
+func _try_acquire_ragdoll_slot() -> bool:
+	if _holds_ragdoll_slot:
+		return true
+	var mgr := _resolve_manager()
+	if not mgr:
+		return true
+	_holds_ragdoll_slot = mgr.request_active_ragdoll()
+	return _holds_ragdoll_slot
 
 
 func _release_ragdoll_slot() -> void:
