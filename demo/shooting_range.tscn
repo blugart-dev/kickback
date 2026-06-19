@@ -147,16 +147,30 @@ theme_override_font_sizes/font_size = 16
 text = "Weapon: Bullet  [1-5]"
 horizontal_alignment = 2
 
+[node name="ThrowLabel" type="Label" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 35.0
+offset_right = -10.0
+offset_bottom = 60.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "Throw: 15  [scroll]"
+horizontal_alignment = 2
+
 [node name="ControlsLabel" type="Label" parent="HUD"]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 10.0
-offset_top = -120.0
-offset_right = 320.0
+offset_top = -140.0
+offset_right = 360.0
 offset_bottom = -10.0
 grow_vertical = 0
 theme_override_font_sizes/font_size = 13
-text = "WASD: Move    Mouse: Look    LMB: Shoot
-1-5: Switch weapon    ESC: Release mouse
-P: Toggle persistent on nearest    F3: Debug gizmos"
+text = "WASD: Move    Mouse: Look
+LMB: Shoot weapon    RMB: Throw ball    Scroll: Throw strength
+1-5: Switch weapon    P: Persistent on nearest
+ESC: Release mouse    F3: Debug gizmos"

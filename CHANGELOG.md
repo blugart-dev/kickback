@@ -34,6 +34,13 @@
   the `kickback_manager` group). Currently a soft cap — the ragdoll still proceeds when
   over budget; hard enforcement/eviction is a follow-up.
 - Moved `strip_root_motion.gd` from `demo/` to `addons/kickback/editor/`.
+- **Demos consolidated** (11 → 8). `ball_throw` folded into `shooting_range` as a
+  right-click ball-throw alt-fire (velocity-scaled impact, mouse-wheel throw strength).
+  `tuning_presets` and `protected_bones` folded into `tuning_playground`, now a "Tuning
+  Lab" with the five presets (Tank/Standard/Loose/Fragile/Protected) side-by-side plus a
+  Custom character driven by the live, now-scrollable slider panel. Preset tunings reuse
+  the `RagdollTuning.create_*` factory methods where available. The patrol/recover/resume
+  loop `ball_throw` demonstrated already lives in `animated_npc`.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5
@@ -41,6 +48,8 @@
   `spring_active_linear_damp`, `spring_passive_angular_damp_offset`,
   `spring_passive_linear_damp_offset`).
 - `demo/ik_research` research spike (superseded by the shipped `FootIKSolver`).
+- Demo scenes `ball_throw`, `tuning_presets`, and `protected_bones` (merged into
+  `shooting_range` and `tuning_playground` — see Changed above).
 - Stray debug `print()` output across setup/baking/HUD paths (meaningful notices kept as
   `push_warning`).
 

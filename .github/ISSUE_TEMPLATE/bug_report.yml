@@ -74,13 +74,11 @@ body:
         - N/A (custom scene)
         - demo.tscn
         - shooting_range.tscn
-        - signal_showcase.tscn
         - tuning_playground.tscn
+        - signal_showcase.tscn
         - stress_test.tscn
         - animated_npc.tscn
-        - ball_throw.tscn
-        - tuning_presets.tscn
-        - protected_bones.tscn
+        - foot_ik_demo.tscn
         - euphoria_showcase.tscn
 
   - type: textarea
