@@ -19,6 +19,8 @@ class_name ActiveRagdollController
 extends Node
 
 const _MOVEMENT_VELOCITY_THRESHOLD_SQ := 0.25  # (0.5 m/s)^2
+## Group used to discover the optional KickbackManager budget node.
+const _BUDGET_GROUP := "kickback_manager"
 
 @export_group("References")
 ## Path to the SpringResolver node that drives spring-based bone tracking.
@@ -71,6 +73,10 @@ var _hit_guard_bodies: Dictionary = {}
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 var _foot_ik: FootIKSolver
+
+# Budget manager (optional, discovered via group). Holds at most one ragdoll slot.
+var _manager: Node = null
+var _holds_ragdoll_slot: bool = false
 
 ## Emitted whenever the controller transitions between states.
 signal state_changed(new_state: int)
@@ -280,25 +286,28 @@ func _update_stagger(delta: float) -> void:
 	# Continuous sway force: fights springs to create visible wobble
 	_apply_stagger_sway(delta)
 
-	# Balance-informed stagger
-	var balance := _compute_balance_ratio()
+	# Balance-informed stagger (only when foot support can actually be measured)
+	var balance_state := _compute_balance_state()
+	var balance: float = balance_state.balance_ratio
+	var has_support: bool = balance_state.has_support
 	balance_changed.emit(balance)
 
-	# Too far off-balance → ragdoll (tipping over)
-	if balance > _tuning.balance_ragdoll_threshold:
-		_full_ragdoll()
-		return
-
-	# Regained balance → early recovery
-	if balance < _tuning.balance_recovery_threshold:
-		_balance_stable_timer += delta
-		if _balance_stable_timer >= _tuning.balance_recovery_hold_time:
-			_finish_stagger()
+	if has_support:
+		# Too far off-balance → ragdoll (tipping over)
+		if balance > _tuning.balance_ragdoll_threshold:
+			_full_ragdoll()
 			return
-	else:
-		_balance_stable_timer = 0.0
 
-	# Fallback: timer-based stagger end (safety net)
+		# Regained balance → early recovery
+		if balance < _tuning.balance_recovery_threshold:
+			_balance_stable_timer += delta
+			if _balance_stable_timer >= _tuning.balance_recovery_hold_time:
+				_finish_stagger()
+				return
+		else:
+			_balance_stable_timer = 0.0
+
+	# Fallback: timer-based stagger end (safety net, and the sole exit without support)
 	if _stagger_elapsed >= _tuning.stagger_duration:
 		_finish_stagger()
 
@@ -463,10 +472,10 @@ func _handle_normal_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction
 
 	# Stagger check: strength ratio + balance + pain-driven escalation
 	var avg_ratio := _compute_average_strength_ratio()
-	var balance := _compute_balance_ratio()
+	var balance_state := _compute_balance_state()
 	var should_stagger := avg_ratio < _tuning.stagger_threshold
-	if not should_stagger and _tuning.balance_stagger_threshold > 0.0:
-		should_stagger = balance > _tuning.balance_stagger_threshold
+	if not should_stagger and balance_state.has_support and _tuning.balance_stagger_threshold > 0.0:
+		should_stagger = balance_state.balance_ratio > _tuning.balance_stagger_threshold
 	if not should_stagger and _tuning.pain_stagger_threshold > 0.0:
 		should_stagger = _pain >= _tuning.pain_stagger_threshold
 
@@ -639,6 +648,13 @@ func _full_ragdoll() -> void:
 	state_changed.emit(_state)
 	ragdoll_started.emit()
 
+	# Request a budget slot if a KickbackManager is present. On denial the ragdoll
+	# still proceeds (soft cap); we simply don't hold a slot to release later.
+	if not _holds_ragdoll_slot:
+		var mgr := _resolve_manager()
+		if mgr:
+			_holds_ragdoll_slot = mgr.request_active_ragdoll()
+
 
 func _start_recovery() -> void:
 	_state = State.GETTING_UP
@@ -731,6 +747,7 @@ func _finish_recovery() -> void:
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 
+	_release_ragdoll_slot()
 	recovery_finished.emit()
 
 
@@ -843,7 +860,7 @@ func _compute_average_strength_ratio() -> float:
 
 
 func _compute_balance_state() -> Dictionary:
-	var empty := {"com": Vector3.ZERO, "support_center": Vector3.ZERO, "balance_ratio": 0.0, "imbalance_dir": Vector2.ZERO}
+	var empty := {"com": Vector3.ZERO, "support_center": Vector3.ZERO, "balance_ratio": 0.0, "imbalance_dir": Vector2.ZERO, "has_support": false}
 	var bodies := _rig_builder.get_bodies()
 	var foot_l: RigidBody3D = bodies.get("Foot_L")
 	var foot_r: RigidBody3D = bodies.get("Foot_R")
@@ -874,6 +891,7 @@ func _compute_balance_state() -> Dictionary:
 		"support_center": support_center,
 		"balance_ratio": clampf(offset / support_radius, 0.0, _tuning.balance_max_ratio),
 		"imbalance_dir": imbalance_dir,
+		"has_support": true,
 	}
 
 
@@ -954,6 +972,32 @@ func _get_character_velocity() -> Vector3:
 
 func _get_character_speed() -> float:
 	return _get_character_velocity().length()
+
+
+# ── Budget (optional KickbackManager) ───────────────────────────────────────
+
+func _exit_tree() -> void:
+	# Release any held budget slot if the character is removed mid-ragdoll.
+	_release_ragdoll_slot()
+
+
+## Resolves the optional budget manager via its group (works for autoload or
+## in-scene placement). Cached after first lookup; null if none present.
+func _resolve_manager() -> Node:
+	if _manager and is_instance_valid(_manager):
+		return _manager
+	if is_inside_tree():
+		var m: Node = get_tree().get_first_node_in_group(_BUDGET_GROUP)
+		if m and m.has_method("request_active_ragdoll"):
+			_manager = m
+	return _manager
+
+
+func _release_ragdoll_slot() -> void:
+	if _holds_ragdoll_slot:
+		if _manager and is_instance_valid(_manager):
+			_manager.release_active_ragdoll()
+		_holds_ragdoll_slot = false
 
 
 func _apply_directional_bracing(hit_dir: Vector3) -> void:

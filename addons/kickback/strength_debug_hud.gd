@@ -50,7 +50,6 @@ const DETAIL_LABELS := ["OFF", "DOTS", "WIREFRAME", "FULL"]
 func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	print("Kickback: Press F3 to cycle debug gizmos (Off → Dots → Wireframe → Full)")
 
 
 func _unhandled_input(event: InputEvent) -> void:

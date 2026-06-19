@@ -7,7 +7,15 @@ extends Node
 ## Maximum simultaneous active ragdolls allowed.
 @export var max_active_ragdolls: int = 5
 
+## Group name controllers use to discover this manager (works whether it is an
+## autoload or placed in the scene tree).
+const GROUP := "kickback_manager"
+
 var _active_ragdoll_count: int = 0
+
+
+func _enter_tree() -> void:
+	add_to_group(GROUP)
 
 
 ## Requests an active ragdoll slot. Returns true if granted, false if at capacity.

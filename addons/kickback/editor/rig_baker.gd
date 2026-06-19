@@ -127,7 +127,6 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		undo_redo.add_do_reference(joint)
 
 	undo_redo.commit_action()
-	print("RigBaker: Baked %d bodies + %d joints" % [body_nodes.size(), profile.joints.size()])
 	return true
 
 
@@ -150,7 +149,6 @@ static func unbake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoMana
 		undo_redo.add_undo_reference(node)
 
 	undo_redo.commit_action()
-	print("RigBaker: Unbaked %d nodes" % baked_nodes.size())
 
 
 ## Returns true if [param rig_builder] has any baked children.

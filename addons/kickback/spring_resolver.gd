@@ -90,19 +90,12 @@ func get_skeleton() -> Skeleton3D:
 	return _skeleton
 
 
-## Enables or disables hit-reactive mode. Springs ALWAYS run — when inactive,
-## they switch to passive tracking mode (high strength + high pin + high damping)
-## so bodies perfectly follow the animation with zero visual difference.
-## This eliminates visual snaps on tier transitions.
+## Enables or disables hit-reactive strength recovery. Springs ALWAYS run and
+## drive bodies toward the animation pose; this flag only gates the per-frame
+## strength recovery in [method _physics_process].
 func set_active(value: bool) -> void:
 	_ensure_tuning()
 	_active = value
-	# In passive mode, override all bones to max strength so they track animation perfectly
-	if not value:
-		for rig_name: String in _bones:
-			var state: Dictionary = _bones[rig_name]
-			state.strength = state.base_strength
-		_target_overrides.clear()
 
 
 ## Returns true if the spring resolver is currently active.
@@ -128,19 +121,10 @@ func _physics_process(delta: float) -> void:
 			state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
 		var ratio := _strength_ratio(state)
 
-		# Property updates — passive mode uses high damping for tight animation tracking
-		var new_gravity: float
-		var new_ang_damp: float
-		var new_lin_damp: float
-		if _active:
-			new_gravity = (1.0 - ratio) * _tuning.spring_gravity_multiplier
-			new_ang_damp = _tuning.spring_angular_damp_base + _tuning.spring_angular_damp_scale * ratio
-			new_lin_damp = _tuning.spring_linear_damp_base + _tuning.spring_linear_damp_scale * ratio
-		else:
-			# Passive tracking: high damping, no gravity — bodies follow animation tightly
-			new_gravity = 0.0
-			new_ang_damp = _tuning.spring_active_angular_damp + _tuning.spring_passive_angular_damp_offset
-			new_lin_damp = _tuning.spring_active_linear_damp + _tuning.spring_passive_linear_damp_offset
+		# Property updates: gravity + damping scale with strength ratio
+		var new_gravity := (1.0 - ratio) * _tuning.spring_gravity_multiplier
+		var new_ang_damp := _tuning.spring_angular_damp_base + _tuning.spring_angular_damp_scale * ratio
+		var new_lin_damp := _tuning.spring_linear_damp_base + _tuning.spring_linear_damp_scale * ratio
 		if absf(body.gravity_scale - new_gravity) > PROPERTY_THRESHOLD:
 			body.gravity_scale = new_gravity
 		if absf(body.angular_damp - new_ang_damp) > PROPERTY_THRESHOLD:
