@@ -414,6 +414,16 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		return
 	_hit_guard_bodies[body_rid] = true
 
+	# Resolve the rig name from the builder's body map rather than trusting
+	# body.name (Godot may suffix-rename on a node-name collision, and a baked rig
+	# keys bodies by metadata, not node name). A body that isn't a registered rig
+	# body is not part of this ragdoll — warn and ignore rather than silently no-op
+	# the strength logic.
+	var rig_name := _rig_name_for_body(body)
+	if rig_name.is_empty():
+		push_warning("ActiveRagdollController.apply_hit: '%s' is not a registered rig body — ignoring." % body.name)
+		return
+
 	# Hit streak: rapid consecutive hits escalate
 	var now := Time.get_ticks_msec() / 1000.0
 	if now - _last_hit_time < _tuning.rapid_fire_window:
@@ -470,13 +480,13 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 	pain_changed.emit(_pain)
 
 	if _state == State.STAGGER:
-		_handle_stagger_hit(body, hit_dir, effective_reduction, profile)
+		_handle_stagger_hit(rig_name, hit_dir, effective_reduction, profile)
 	else:
-		_handle_normal_hit(body, hit_dir, effective_reduction, profile)
+		_handle_normal_hit(rig_name, hit_dir, effective_reduction, profile)
 
 
-func _handle_stagger_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction: float, profile: ImpactProfile) -> void:
-	_reduce_strength(body.name, effective_reduction, profile.strength_spread)
+func _handle_stagger_hit(rig_name: String, hit_dir: Vector3, effective_reduction: float, profile: ImpactProfile) -> void:
+	_reduce_strength(rig_name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 	var boosted_prob := profile.ragdoll_probability * _tuning.stagger_ragdoll_bonus
 	# Hard cap: if the budget denies the slot, fall through to extend the stagger
@@ -486,11 +496,11 @@ func _handle_stagger_hit(body: RigidBody3D, hit_dir: Vector3, effective_reductio
 	else:
 		_stagger_elapsed = 0.0  # Extend stagger
 		_stagger_hit_dir = hit_dir
-		hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
+		hit_absorbed.emit(rig_name, _spring.get_bone_strength(rig_name))
 
 
-func _handle_normal_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction: float, profile: ImpactProfile) -> void:
-	_reduce_strength(body.name, effective_reduction, profile.strength_spread)
+func _handle_normal_hit(rig_name: String, hit_dir: Vector3, effective_reduction: float, profile: ImpactProfile) -> void:
+	_reduce_strength(rig_name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 
 	# Ragdoll check: dice roll + pain-driven deterministic escalation
@@ -519,8 +529,8 @@ func _handle_normal_hit(body: RigidBody3D, hit_dir: Vector3, effective_reduction
 		# Reaction pulse for sub-stagger hits (visible micro-wobble)
 		var pulse_intensity := effective_reduction * _tuning.reaction_pulse_strength
 		if pulse_intensity > 0.01:
-			_apply_reaction_pulse(body.name, pulse_intensity, profile.strength_spread)
-		hit_absorbed.emit(body.name, _spring.get_bone_strength(body.name))
+			_apply_reaction_pulse(rig_name, pulse_intensity, profile.strength_spread)
+		hit_absorbed.emit(rig_name, _spring.get_bone_strength(rig_name))
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
@@ -1079,6 +1089,17 @@ func _release_ragdoll_slot() -> void:
 		if _manager and is_instance_valid(_manager):
 			_manager.release_active_ragdoll()
 		_holds_ragdoll_slot = false
+
+
+## Resolves the rig name for a hit body via the builder's body map, rather than
+## trusting body.name (Godot may suffix-rename on a node-name collision; a baked
+## rig keys bodies by metadata). Returns "" if the body isn't a registered rig body.
+func _rig_name_for_body(body: RigidBody3D) -> String:
+	var bodies := _rig_builder.get_bodies()
+	for candidate: String in bodies:
+		if bodies[candidate] == body:
+			return candidate
+	return ""
 
 
 func _apply_directional_bracing(hit_dir: Vector3) -> void:
