@@ -59,8 +59,11 @@ the remainder is tracked here.
   `set_bone_global_pose_override`. The modifier's per-frame pose roll-back keeps the spring's
   `get_bone_pose()` read clean (no feedback loop), and the node self-promotes under the
   skeleton at runtime. See [SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).
+- ✅ **Spring math is frame-rate independent** — the velocity targets and per-tick blend
+  weights are normalized to a 60 Hz reference (`SpringResolver._fr_weight`), so reaction feel
+  no longer drifts with the physics tick rate. Bit-identical at 60 Hz; stable at 30/120.
 
 **Still open:**
 
-- **Spring math is implicitly 60 Hz-bound** — corrections are divided by `delta` with no
-  substepping awareness.
+- None currently tracked — the `0.3.x` hardening items are resolved. The next substantive
+  work is the `0.4.0` Self-Preservation layer (procedural stumble steps + arm bracing).
