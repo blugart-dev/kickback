@@ -230,6 +230,14 @@ func get_character_root() -> Node3D:
 	return _character_root
 
 
+## Returns the sibling [ActiveRagdollController], or null if none is present.
+## Use this for the advanced queries/controls not surfaced directly on the facade
+## (balance ratio, fatigue, pain, hit streak, per-bone injuries). The facade
+## covers the common cases (trigger/state/hit routing); this is the escape hatch.
+func get_active_controller() -> ActiveRagdollController:
+	return _active_controller
+
+
 ## Recursively finds all KickbackCharacter nodes under [param root].
 static func find_all(root: Node) -> Array[KickbackCharacter]:
 	var result: Array[KickbackCharacter] = []

@@ -3,6 +3,8 @@
 ## animations, gets up after ragdoll, walks injured, then resumes normal patrol.
 extends Node3D
 
+const DemoHelpers := preload("res://demo/demo_helpers.gd")
+
 const WALK_SPEED := 1.5
 const WAYPOINT_A := Vector3(-3, 0, 0)
 const WAYPOINT_B := Vector3(3, 0, 0)
@@ -55,7 +57,7 @@ func _ready() -> void:
 	_kickback = _setup_active(_char_root)
 
 	# Find AnimationPlayer and ActiveRagdollController
-	_anim = _find_child_of_type(_char_root, "AnimationPlayer")
+	_anim = DemoHelpers.find_descendant_of_type(_char_root, "AnimationPlayer")
 	for child in _char_root.get_children():
 		if child is ActiveRagdollController:
 			_active_ctrl = child
@@ -75,11 +77,7 @@ func _ready() -> void:
 		_anim.play.call_deferred("walk")
 
 	# Debug gizmos
-	var debug_hud := StrengthDebugHUD.new()
-	debug_hud.name = "StrengthDebugHUD"
-	debug_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	debug_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(debug_hud)
+	DemoHelpers.add_debug_hud(self)
 
 	_update_weapon_label()
 
@@ -183,15 +181,7 @@ func _update_camera() -> void:
 	if not _cam or not _char_root:
 		return
 	var pivot := _char_root.global_position + Vector3(0, 1.0, 0)
-	var yaw_rad := deg_to_rad(_cam_yaw)
-	var pitch_rad := deg_to_rad(_cam_pitch)
-	var offset := Vector3(
-		sin(yaw_rad) * cos(pitch_rad),
-		-sin(pitch_rad),
-		cos(yaw_rad) * cos(pitch_rad),
-	) * _cam_distance
-	_cam.global_position = pivot + offset
-	_cam.look_at(pivot)
+	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance, pivot)
 
 
 # --- Directional animation picker ---
@@ -210,61 +200,7 @@ func _pick_directional(prefix: String, hit_dir: Vector3) -> String:
 # --- Kickback setup (same pattern as other demos) ---
 
 func _setup_active(char_root: Node3D) -> KickbackCharacter:
-	var ybot_name := ""
-	for child in char_root.get_children():
-		if _find_child_of_type(child, "Skeleton3D"):
-			ybot_name = child.name
-			break
-	if ybot_name.is_empty():
-		return null
-
-	var skel_path := NodePath("../%s/Skeleton3D" % ybot_name)
-	var root_path := NodePath("..")
-	var builder_path := NodePath("../PhysicsRigBuilder")
-	var spring_path := NodePath("../SpringResolver")
-
-	var rb := PhysicsRigBuilder.new()
-	rb.name = "PhysicsRigBuilder"
-	rb.skeleton_path = skel_path
-	var rs := PhysicsRigSync.new()
-	rs.name = "PhysicsRigSync"
-	rs.skeleton_path = skel_path
-	rs.rig_builder_path = builder_path
-	var sp := SpringResolver.new()
-	sp.name = "SpringResolver"
-	sp.skeleton_path = skel_path
-	sp.rig_builder_path = builder_path
-	var ac := ActiveRagdollController.new()
-	ac.name = "ActiveRagdollController"
-	ac.spring_resolver_path = spring_path
-	ac.rig_builder_path = builder_path
-	ac.character_root_path = root_path
-
-	var tuning := RagdollTuning.create_default()
-
-	var kc := KickbackCharacter.new()
-	kc.name = "KickbackCharacter"
-	kc.skeleton_path = skel_path
-	kc.character_root_path = root_path
-	kc.ragdoll_profile = RagdollProfile.create_mixamo_default()
-	kc.ragdoll_tuning = tuning
-
-	char_root.add_child(rb)
-	char_root.add_child(rs)
-	char_root.add_child(sp)
-	char_root.add_child(ac)
-	char_root.add_child(kc)
-	return kc
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_child_of_type(child, type_name)
-		if found:
-			return found
-	return null
+	return DemoHelpers.build_active_rig(char_root)
 
 
 func _make_profile(pname: StringName, impulse: float, transfer: float, upward: float,

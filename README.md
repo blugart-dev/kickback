@@ -135,6 +135,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Persistent ragdoll (death):** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
 - **Protected bones:** set `ragdoll_tuning.protected_bones` to keep legs (or any bones) animated during hits
 - **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
+- **Advanced control:** `var active_controller = kickback_character.get_active_controller()` — the `ActiveRagdollController` (or `null`), for the queries below
 - **Query balance:** `active_controller.get_balance_ratio()` — 0.0 = balanced, 1.0+ = off-balance
 - **Query fatigue:** `active_controller.get_fatigue()` — 0.0 = fresh, 1.0 = exhausted
 - **Reset fatigue:** `active_controller.reset_fatigue()` — on healing or respawn
