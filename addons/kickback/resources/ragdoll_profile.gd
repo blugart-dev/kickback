@@ -34,7 +34,7 @@ extends Resource
 @export var right_leg_chain: PackedStringArray = ["UpperLeg_R", "LowerLeg_R", "Foot_R"]
 
 @export_group("Special Bones")
-## Skeleton bone name used as recursion guard in partial ragdoll chain traversal.
+## Skeleton bone name of the root body — recursion guard for bone-chain traversal.
 ## Leave empty to derive it from [member root_rig] — see [method get_root_skeleton_bone].
 @export var root_bone: String = ""
 
@@ -90,7 +90,7 @@ func get_leg_side(rig_name: String) -> String:
 		return "R"
 	return ""
 
-## Returns the skeleton bone name of the root body, used as the partial-ragdoll
+## Returns the skeleton bone name of the root body, used as a bone-chain-traversal
 ## recursion guard. Uses the explicit [member root_bone] if set, otherwise derives
 ## it from [member root_rig]'s BoneDefinition.
 func get_root_skeleton_bone() -> String:

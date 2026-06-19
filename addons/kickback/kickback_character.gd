@@ -1,15 +1,13 @@
-## Central coordinator for a Kickback-enabled character. Detects available
-## sibling controllers and routes incoming hits to the appropriate one.
-## If ActiveRagdollController is present, it takes priority over partial.
+## Central coordinator for a Kickback-enabled character. Resolves the sibling
+## ActiveRagdollController and routes incoming hits to it.
 @icon("res://addons/kickback/icons/kickback_character.svg")
 class_name KickbackCharacter
 extends Node
 
-## Which controller mode is active for this character.
+## Whether this character has a working active ragdoll.
 enum Mode {
-	ACTIVE,   ## Full physics rig with spring-driven joints.
-	PARTIAL,  ## PhysicalBoneSimulator3D on hit bones only.
-	NONE,     ## No controllers available.
+	ACTIVE,  ## Full physics rig with spring-driven joints.
+	NONE,    ## No active ragdoll controller available.
 }
 
 @export_group("References")
@@ -34,13 +32,11 @@ enum Mode {
 
 var _skeleton: Skeleton3D
 var _character_root: Node3D
-var _simulator: PhysicalBoneSimulator3D
 
 var _rig_builder: PhysicsRigBuilder
 var _rig_sync: PhysicsRigSync
 var _spring: SpringResolver
 var _active_controller: ActiveRagdollController
-var _partial_controller: PartialRagdollController
 
 var _mode: int = Mode.NONE
 var _ready_complete: bool = false
@@ -62,10 +58,7 @@ func _ready() -> void:
 	if not character_root_path.is_empty():
 		_character_root = get_node_or_null(character_root_path) as Node3D
 
-	# Find simulator and controllers in siblings
-	if _skeleton:
-		_simulator = _skeleton.get_node_or_null("PhysicalBoneSimulator3D")
-
+	# Resolve the active-ragdoll controllers among the siblings
 	for sibling in get_parent().get_children():
 		if sibling is PhysicsRigBuilder:
 			_rig_builder = sibling
@@ -75,8 +68,6 @@ func _ready() -> void:
 			_spring = sibling
 		elif sibling is ActiveRagdollController:
 			_active_controller = sibling
-		elif sibling is PartialRagdollController:
-			_partial_controller = sibling
 
 	# Distribute configuration to all controllers
 	if _rig_builder:
@@ -87,19 +78,15 @@ func _ready() -> void:
 		_spring.configure(ragdoll_tuning)
 	if _active_controller:
 		_active_controller.configure(ragdoll_profile, ragdoll_tuning)
-	if _partial_controller:
-		_partial_controller.configure(ragdoll_profile, ragdoll_tuning)
 
 	# Listen for tuning changes so cached values refresh at runtime
 	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
 	if not tuning.changed.is_connected(_on_tuning_changed):
 		tuning.changed.connect(_on_tuning_changed)
 
-	# Determine mode: active ragdoll takes priority if all its nodes are present
+	# Active ragdoll mode requires the full node set
 	if _rig_builder and _spring and _rig_sync and _active_controller:
 		_mode = Mode.ACTIVE
-	elif _partial_controller and _simulator:
-		_mode = Mode.PARTIAL
 
 	_validate_setup()
 
@@ -108,16 +95,11 @@ func _ready() -> void:
 		if _exiting:
 			return
 
-	# Enable the chosen mode
+	# Enable the active ragdoll
 	if _mode == Mode.ACTIVE:
 		_rig_builder.set_enabled(true)
 		_rig_sync.set_active(true)
 		_spring.set_active(true)
-		# Disable simulator so its PhysicalBone3D colliders don't intercept raycasts
-		if _simulator:
-			_simulator.active = false
-	elif _mode == Mode.PARTIAL:
-		_simulator.active = true
 
 	if not is_inside_tree():
 		return
@@ -138,23 +120,11 @@ func _exit_tree() -> void:
 	_exiting = true
 
 
-## Routes an incoming hit to the active controller.
-## [param body_or_bone] should be a RigidBody3D (active) or PhysicalBone3D (partial).
-func receive_hit(body_or_bone: CollisionObject3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
-	match _mode:
-		Mode.ACTIVE:
-			if _active_controller and body_or_bone is RigidBody3D:
-				_active_controller.apply_hit(body_or_bone, hit_dir, hit_pos, profile)
-		Mode.PARTIAL:
-			if _partial_controller and body_or_bone is PhysicalBone3D:
-				var event := HitEvent.new()
-				event.hit_position = hit_pos
-				event.hit_direction = hit_dir
-				event.hit_bone_name = body_or_bone.bone_name
-				event.impulse_magnitude = profile.base_impulse * profile.impulse_transfer_ratio
-				event.hit_bone = body_or_bone
-				event.hit_bone_region = HitEvent.classify_region(body_or_bone.bone_name)
-				_partial_controller.apply_hit(event)
+## Routes an incoming hit to the active ragdoll controller.
+## [param body] should be one of the active rig's RigidBody3D bodies.
+func receive_hit(body: CollisionObject3D, hit_dir: Vector3, hit_pos: Vector3, profile: ImpactProfile) -> void:
+	if _active_controller and body is RigidBody3D:
+		_active_controller.apply_hit(body, hit_dir, hit_pos, profile)
 
 
 ## Returns the current mode as a [enum Mode] value.
@@ -295,9 +265,6 @@ func _validate_setup() -> void:
 	if not JoltCheck.is_jolt_active():
 		warnings.append("Jolt Physics is not active — enable in Project Settings > Physics > 3D > Physics Engine")
 
-	if not _simulator and _partial_controller:
-		warnings.append("No PhysicalBoneSimulator3D on Skeleton3D — partial ragdoll disabled")
-
 	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
 	var profile := ragdoll_profile if ragdoll_profile else RagdollProfile.create_mixamo_default()
 	var tuning_warnings := tuning.validate_against_profile(profile)
@@ -305,7 +272,7 @@ func _validate_setup() -> void:
 		warnings.append(w)
 
 	if _mode == Mode.NONE:
-		warnings.append("No physics controllers found — add ActiveRagdollController or PartialRagdollController as siblings")
+		warnings.append("No active ragdoll found — add PhysicsRigBuilder + PhysicsRigSync + SpringResolver + ActiveRagdollController as siblings")
 
 	if not warnings.is_empty():
 		var msg := "Kickback [%s]: %d issue(s):" % [get_parent().name, warnings.size()]

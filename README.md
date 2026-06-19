@@ -71,7 +71,6 @@ and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 
   <img src="https://github.com/user-attachments/assets/55dddf2f-7df1-4c52-8e48-ef6077061cec" alt="Protected vs unprotected bones — same hit, different result" width="640">
-- **Partial ragdoll** (standalone alternative) — only the hit limb simulates via PhysicalBoneSimulator3D, blends back smoothly. Best for lightweight reactions on background NPCs.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
 - **Skeleton auto-detection** — `SkeletonDetector` identifies humanoid bones in Mixamo, Rigify, Unreal Mannequin, and custom skeletons.
 - **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. Controllers emit signals; animation is the user's responsibility.
@@ -99,11 +98,7 @@ Select your character node (must have a `Skeleton3D` child), then:
 
 **Project > Tools > "Add Kickback to Selected"**
 
-Choose a mode:
-- **Active Ragdoll** — full physics rig with springs. Stagger, ragdoll, recovery.
-- **Partial Ragdoll** — lightweight bone-level reactions using PhysicalBoneSimulator3D.
-
-Pick one per character. The plugin auto-detects humanoid bones and creates the controller nodes.
+This adds the active-ragdoll node set — the full physics rig with springs (stagger, ragdoll, and recovery). The plugin auto-detects humanoid bones and wires the controller nodes.
 
 ### 2. Send hits from your game
 
@@ -187,7 +182,7 @@ Run any scene from `demo/` to see the plugin in action:
 
 | Scene | What it shows |
 |-------|--------------|
-| `demo.tscn` | Active vs Partial side-by-side comparison |
+| `demo.tscn` | Kickback active ragdoll vs Godot's built-in PhysicalBoneSimulator3D |
 | `shooting_range.tscn` | FPS controller, 5 weapon profiles + ball-throw alt-fire (RMB) |
 | `tuning_playground.tscn` | Tuning Lab: Tank/Standard/Loose/Fragile/Protected presets + a Custom character with live sliders |
 | `signal_showcase.tscn` | Floating popups + log showing every signal |
@@ -202,9 +197,9 @@ Run any scene from `demo/` to see the plugin in action:
 |-------|---------|---------|
 | 2 | Environment | StaticBody3D (floors, walls) |
 | 4 | Active ragdoll bodies | PhysicsRigBuilder |
-| 5 | Partial ragdoll bones | PhysicalBone3D |
+| 5 | Godot built-in ragdoll bones (comparison demo only) | PhysicalBoneSimulator3D |
 
-Use `KickbackRaycast` which targets layers 4+5 automatically.
+Use `KickbackRaycast` which targets the active-ragdoll layer (4) automatically.
 
 ## Debug Tools
 

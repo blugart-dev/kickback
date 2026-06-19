@@ -1,7 +1,8 @@
-## Mid-range hit reaction using PhysicalBoneSimulator3D. On hit, selectively
-## simulates the struck bone and its neighbors, applies impulse, then blends
-## back to animation over a short duration.
-@icon("res://addons/kickback/icons/partial_ragdoll_controller.svg")
+## DEMO-ONLY illustration of Godot's built-in PhysicalBoneSimulator3D ragdoll —
+## the "what Godot offers" half of the comparison demo. On hit it selectively
+## simulates the struck bone + its neighbours, applies an impulse, then blends
+## back to animation. This is NOT part of the Kickback plugin (Kickback is the
+## active spring ragdoll); it lives in demo/ purely for the side-by-side contrast.
 class_name PartialRagdollController
 extends Node
 

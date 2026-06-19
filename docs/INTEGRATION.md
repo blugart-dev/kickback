@@ -109,7 +109,7 @@ to include it.
 | 2     | Projectiles / raycasts |
 | 3     | Player               |
 | 4     | Active ragdoll bodies |
-| 5     | Partial ragdoll bones |
+| 5     | Godot built-in ragdoll (comparison demo) |
 
 These are suggestions — adapt to your project's layer scheme. The important
 thing is that `collision_mask` on RagdollTuning overlaps with your environment's

@@ -33,16 +33,14 @@ kickback/
 │       ├── kickback_character.gd    # Coordinator (detects mode, routes hits)
 │       ├── kickback_manager.gd      # Global budget manager
 │       ├── kickback_raycast.gd      # Hit detection utility (one-liner)
-│       ├── kickback_layers.gd       # Collision-layer constants (active=4, partial=5)
+│       ├── kickback_layers.gd       # Collision-layer constants (active=4, demo godot-ragdoll=5)
 │       ├── skeleton_detector.gd     # Auto-detect humanoid bones in any skeleton
 │       ├── physics_rig_builder.gd   # Builds RigidBody3D ragdoll rig
 │       ├── physics_rig_sync.gd      # Syncs physics → visible skeleton
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
 │       ├── foot_ik_solver.gd        # Two-bone foot IK (direct math → spring targets)
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
-│       ├── partial_ragdoll_controller.gd # Standalone selective bone simulation
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
-│       ├── hit_event.gd             # Hit data object
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)
 │       ├── editor/                  # Editor-only tooling
@@ -61,7 +59,9 @@ kickback/
 │           ├── joint_definition.gd
 │           └── intermediate_bone_entry.gd
 ├── demo/                            # Demo scenes (not part of plugin) — 8 scenes
-│   ├── demo.tscn/gd                 # Side-by-side Active vs Partial comparison
+│   ├── partial_ragdoll_controller.gd # DEMO-ONLY: Godot PhysicalBoneSimulator3D ragdoll (the "built-in" side)
+│   ├── hit_event.gd                 # DEMO-ONLY: hit data for partial_ragdoll_controller
+│   ├── demo.tscn/gd                 # Kickback active ragdoll vs Godot's built-in PhysicalBoneSimulator3D
 │   ├── shooting_range.tscn/gd       # FPS: 5 weapon profiles + ball-throw alt-fire (RMB)
 │   ├── tuning_playground.tscn/gd    # Tuning Lab: 5 presets side-by-side + Custom char w/ live sliders
 │   ├── signal_showcase.tscn/gd      # Visualizes all signals with floating popups
@@ -81,8 +81,7 @@ kickback/
 - **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `stagger_started`, `recovery_started`, `recovery_finished`, `hit_absorbed`, `balance_changed`, `fatigue_changed`, `recovery_interrupted`, `pain_changed`, `threat_anticipated`, `region_injured` signals.
 - **Animation-agnostic.** The physics core reads `Skeleton3D.get_bone_pose()` — works with AnimationPlayer, AnimationTree, or custom animation systems.
 - **All configuration via Resources.** `RagdollProfile` (skeleton mapping) and `RagdollTuning` (physics feel) are assignable on `KickbackCharacter`. Null = auto-detected Mixamo defaults.
-- **Pick one mode per character.** Active Ragdoll or Partial Ragdoll — KickbackCharacter detects which controller is present and uses it. No runtime switching between modes.
-- **Always-simulated rig (Active Ragdoll).** Physics bodies never freeze. Springs are always active, driving bodies toward animation poses. Hit reactions reduce spring strength, letting physics take over temporarily.
+- **Always-simulated rig.** Physics bodies never freeze. Springs are always active, driving bodies toward animation poses. Hit reactions reduce spring strength, letting physics take over temporarily.
 
 ### Active Ragdoll
 - `PhysicsRigBuilder` creates 16 RigidBody3D + 15 Generic6DOFJoint3D
@@ -92,10 +91,10 @@ kickback/
 - `STAGGER` state: springs reduced to floor strength, continuous sway force fights springs for visible wobble, Active Resistance dynamically adjusts per-bone strengths based on balance/CoM
 - `PERSISTENT` state: stays ragdolled until `set_persistent(false)` is called
 
-### Partial Ragdoll (standalone alternative)
-- `PartialRagdollController` uses PhysicalBoneSimulator3D for selective bone simulation
-- Independent mode — not used alongside Active Ragdoll on the same character
-- Best for lightweight bone-level reactions on background NPCs
+### Godot's built-in ragdoll (comparison demo only)
+- `demo/partial_ragdoll_controller.gd` drives a `PhysicalBoneSimulator3D` for the
+  side-by-side `demo.tscn` that contrasts Godot's built-in ragdoll against Kickback's
+  active spring ragdoll. It is NOT part of the plugin — Kickback is the active ragdoll.
 
 ### Key technical decisions
 - **RigidBody3D + Generic6DOFJoint3D** for active ragdoll (NOT PhysicalBone3D — see GODOT_CONSTRAINTS.md for why)
@@ -110,8 +109,8 @@ kickback/
 - Resources use `create_*_default()` factory methods for zero-config usage
 - `SkeletonDetector.detect_humanoid_bones()` for auto-mapping any humanoid skeleton
 - `KickbackRaycast.shoot_from_camera()` for one-line hit detection
-- Collision: layer 4 (active ragdoll), layer 5 (partial ragdoll)
-- Setup tool offers presets: "Active Ragdoll" or "Partial Ragdoll"
+- Collision: layer 4 (active ragdoll bodies); layer 5 (Godot built-in ragdoll, comparison demo only)
+- Setup tool adds the active-ragdoll node set ("Add Kickback to Selected")
 
 ## character_root_path architecture
 - `character_root_path` on KickbackCharacter and ActiveRagdollController must point to the gameplay root (the node that represents the character's world position)
@@ -145,4 +144,3 @@ Kickback demos use Node3D roots. If your character uses CharacterBody3D:
 - Don't disable AnimationTree/AnimationPlayer during ragdoll (springs need target poses)
 - Don't play animations directly from physics controllers (use signals)
 - Don't move or rotate the character root in `_process` during active ragdoll — use `_physics_process`
-- Don't use Active Ragdoll and Partial Ragdoll on the same character simultaneously

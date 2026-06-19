@@ -40,9 +40,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 [node name="Label" type="Label3D" parent="ActiveChar" unique_id=1066399606]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
-text = "ACTIVE RAGDOLL
-Full physics rig + springs
-Stagger / Ragdoll / Recovery"
+text = "KICKBACK — ACTIVE RAGDOLL
+Spring-driven physics rig
+Stagger · Ragdoll · Recovery"
 outline_size = 8
 
 [node name="PartialChar" type="Node3D" parent="." unique_id=798756492]
@@ -53,9 +53,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 [node name="Label" type="Label3D" parent="PartialChar" unique_id=266495867]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
-text = "PARTIAL RAGDOLL
+text = "GODOT BUILT-IN RAGDOLL
 PhysicalBoneSimulator3D
-Lightweight bone reactions"
+(what the engine offers)"
 outline_size = 8
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1352574968]

@@ -154,6 +154,16 @@
   `animation_player_path` export, and the setup tool's `AnimationPlayer` detection that fed
   it. Nothing consumed it (the controllers are animation-agnostic by design). Also removed
   the unused `JoltCheck.warn_if_not_jolt()` and `KickbackCharacter.get_mode_name()`.
+- **Partial Ragdoll demoted from a plugin mode to a comparison demo.** It was a thin wrapper
+  over Godot's built-in `PhysicalBoneSimulator3D` — "what the engine already offers", not
+  Kickback's value (the active spring ragdoll). `partial_ragdoll_controller.gd` + `hit_event.gd`
+  moved to `demo/`; `KickbackCharacter` is now active-only (dropped `Mode.PARTIAL`, the
+  simulator/partial-controller detection, and the partial hit-routing branch); the setup tool
+  offers a single active-ragdoll flow; the debug HUD and inspector status panel drop their
+  partial paths; and `KickbackRaycast` now targets the active layer only. `demo.tscn` is
+  reframed as **Godot's built-in ragdoll vs Kickback's active ragdoll**, driving the built-in
+  `PhysicalBoneSimulator3D` side directly. (`SkeletonDetector.populate_physical_bones` and the
+  layer constants stay as general utilities the demo reuses.)
 
 ---
 

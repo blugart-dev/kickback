@@ -261,14 +261,15 @@ static func create_profile_from_skeleton(
 	return profile
 
 
-## Creates PhysicalBone3D nodes inside a PhysicalBoneSimulator3D for partial ragdoll.
+## Creates PhysicalBone3D nodes inside a PhysicalBoneSimulator3D (Godot's built-in
+## ragdoll). General utility — used by the comparison demo, not the Kickback core.
 static func populate_physical_bones(
 	skeleton: Skeleton3D,
 	simulator: PhysicalBoneSimulator3D,
 	bone_mapping: Dictionary,
 	owner: Node
 ) -> void:
-	# Reuse the active-rig pipeline so partial-ragdoll shapes scale to the character
+	# Reuse the active-rig pipeline so the physical-bone shapes scale to the character
 	# (instead of fixed 0.15m boxes / 0.05m capsules) and stay the single source of truth.
 	var profile := create_profile_from_skeleton(skeleton, bone_mapping)
 	for bone_def: BoneDefinition in profile.bones:
