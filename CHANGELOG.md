@@ -66,6 +66,10 @@
   skeleton/modifier subsystem unchanged; the modifier's per-frame roll-back is what preserves
   the spring's clean `get_bone_pose()` read target). The migration itself shipped — see
   *Changed* below. Cross-linked from `GODOT_CONSTRAINTS.md` and `ROADMAP.md`.
+- **`KickbackCharacter.get_active_controller()`** — facade accessor returning the sibling
+  `ActiveRagdollController` (or null). Makes the README's `active_controller.*` advanced-query
+  pattern (balance / fatigue / pain / hit-streak / per-bone injuries) first-class, instead of
+  requiring callers to reach for the sibling node themselves.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
@@ -147,6 +151,23 @@
   tool's node type changed (`Node` → `SkeletonModifier3D`). Validated headlessly (89 GUT tests
   incl. a signal-time multi-bone sync assertion that exercises the write ordering + clean
   scene-smoke on all 8 demos); mesh-tracking polish verified in-editor.
+- **Demo wiring deduplicated into `demo/demo_helpers.gd`** — the active-rig assembly,
+  skeleton / AnimationPlayer lookup, orbit-camera math, and debug-HUD setup that all 8 demo
+  scripts hand-duplicated are now shared static helpers (`build_active_rig`,
+  `find_skeleton_owner` / `find_descendant_of_type`, `orbit_camera`, `add_debug_hud`) — about
+  490 fewer lines across the demos. It is demo-only (not shipped with the plugin) and mirrors
+  the demos' wiring, deliberately distinct from `test/helpers/rig_harness.gd`. `signal_showcase`
+  and `euphoria_showcase` also adopt the new `get_active_controller()` facade.
+
+### Performance
+- **Per-frame allocation & redundant-work cleanup** — `SpringResolver.get_all_bone_names()`
+  now returns a list cached at init instead of rebuilding a `PackedStringArray` from
+  `_bones.keys()` on every call (it is read each physics frame by the controller, HUD, and
+  foot-IK across ~12 call sites; the key set is fixed once the rig is built). The controller
+  computes `_compute_balance_state()` once per stagger frame and shares it between active
+  resistance and the tip/recovery checks — it sums center-of-mass over every body and was
+  being computed twice per frame. `StrengthDebugHUD` disables `_process` while the overlay is
+  off (F3), so it does no per-frame redraw work until it is toggled on.
 
 ### Performance
 - **Foot IK solver per-frame allocations removed** — the target-override dictionary handed to
