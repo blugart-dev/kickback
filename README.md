@@ -78,7 +78,7 @@ and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
 - **Debug gizmos** — F3 cycles through 3 detail levels: bone dots → skeleton wireframe + state labels → full dashboard with status panels, center of mass, velocity vectors, and balance/fatigue bars.
-- **10 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, ball throwing, tuning presets, protected bones, euphoria showcase.
+- **8 demo scenes** — comparison, shooting range, signals, tuning playground, stress test, animated NPC, foot IK, euphoria showcase.
 
 ## Requirements
 
@@ -158,7 +158,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 Character (Node3D)
 ├── KickbackCharacter (coordinator — detects mode, routes hits)
 ├── PhysicsRigBuilder (creates 16 RigidBody3D + 15 joints)
-├── PhysicsRigSync (physics → skeleton bone overrides)
+├── PhysicsRigSync (SkeletonModifier3D: physics → skeleton)
 ├── SpringResolver (animation → physics velocity springs)
 └── ActiveRagdollController (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
 ```

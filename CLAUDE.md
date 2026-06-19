@@ -20,7 +20,12 @@ kickback/
 │   ├── STEP_BY_STEP.md              # Implementation history
 │   ├── GODOT_CONSTRAINTS.md         # Engine quirks and workarounds
 │   ├── REFERENCE.md                 # Technical reference: math, profiles, bone mapping
-│   └── INTEGRATION.md              # Integration guide: timing, layers, state machine, scoring
+│   ├── INTEGRATION.md               # Integration guide: timing, layers, state machine, scoring
+│   ├── FOOT_IK.md                   # Foot IK solver: planting, pelvis drop, anti-slide
+│   ├── EUPHORIA_COMPARISON.md       # Feature-gap analysis vs Euphoria (honest scorecard)
+│   ├── ROADMAP.md                   # Difficulty-weighted parity scorecard + milestones
+│   ├── VERSIONING.md                # What the version numbers mean
+│   └── SKELETON_MODIFIER_MIGRATION.md  # PhysicsRigSync → SkeletonModifier3D record
 ├── addons/
 │   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg
@@ -28,10 +33,12 @@ kickback/
 │       ├── kickback_character.gd    # Coordinator (detects mode, routes hits)
 │       ├── kickback_manager.gd      # Global budget manager
 │       ├── kickback_raycast.gd      # Hit detection utility (one-liner)
+│       ├── kickback_layers.gd       # Collision-layer constants (active=4, partial=5)
 │       ├── skeleton_detector.gd     # Auto-detect humanoid bones in any skeleton
 │       ├── physics_rig_builder.gd   # Builds RigidBody3D ragdoll rig
 │       ├── physics_rig_sync.gd      # Syncs physics → visible skeleton
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
+│       ├── foot_ik_solver.gd        # Two-bone foot IK (direct math → spring targets)
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
 │       ├── partial_ragdoll_controller.gd # Standalone selective bone simulation
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
@@ -41,6 +48,7 @@ kickback/
 │       ├── editor/                  # Editor-only tooling
 │       │   ├── kickback_inspector_plugin.gd
 │       │   ├── kickback_status_panel.gd
+│       │   ├── rig_baker.gd         # Bake persistent RigidBody3D + Joint nodes to scene
 │       │   └── strip_root_motion.gd # Tool to strip root motion from animations
 │       ├── icons/                   # Scene tree icons (SVG)
 │       ├── presets/                  # Starter ImpactProfile .tres files
@@ -78,7 +86,7 @@ kickback/
 
 ### Active Ragdoll
 - `PhysicsRigBuilder` creates 16 RigidBody3D + 15 Generic6DOFJoint3D
-- `PhysicsRigSync` writes physics transforms to skeleton as bone pose overrides
+- `PhysicsRigSync` (a `SkeletonModifier3D`) writes physics transforms onto the skeleton each frame; the engine rolls the write back after skinning, so the spring's `get_bone_pose()` animation target stays clean
 - `SpringResolver` drives physics bodies toward animation poses via velocity lerp
 - `ActiveRagdollController` manages NORMAL → STAGGER/RAGDOLL → GETTING_UP → NORMAL state machine
 - `STAGGER` state: springs reduced to floor strength, continuous sway force fights springs for visible wobble, Active Resistance dynamically adjusts per-bone strengths based on balance/CoM
