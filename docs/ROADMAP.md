@@ -39,19 +39,29 @@ figure is **~30%**.)
 
 Intermediate minor numbers are recomputed from the scorecard as milestones land.
 
-## Known hardening items (targeted for 0.3.x)
+## Known hardening items
 
-Robustness gaps surfaced by the 2026-06-19 audit — not blockers for using the plugin on
-Mixamo-style rigs, but prerequisites for "general-purpose":
+Robustness gaps surfaced by the 2026-06-19 audit. Most of the 0.3.x batch has since landed;
+the remainder is tracked here.
 
-- **Silent multi-rig degradation** — non-Mixamo skeletons that map fine can still lose
-  balance/IK/sway because rig bone names (`Hips`/`Chest`/`Foot_L`…) are hardcoded;
-  `_compute_balance_state` returns zeroed data read as "perfectly balanced," silently
-  disabling the balance→ragdoll path. Should warn or fail loudly.
-- **Budget manager is unwired** — `KickbackManager.request/release_active_ragdoll` is
-  never called by controllers; only the stress-test demo reads the counter.
+**Resolved in 0.3.x:**
+
+- ✅ **Silent multi-rig degradation** (PR #62) — bones resolve through `RagdollProfile`
+  semantic roles and `_compute_balance_state` reports `has_support`, so non-Mixamo rigs no
+  longer read zeroed balance as "perfectly balanced."
+- ✅ **Budget manager wired + hard cap** (PR #65) — controllers request/release slots and
+  over-budget *spontaneous* ragdolls downgrade to a stagger (explicit/death ragdolls bypass).
+- ✅ **Partial-ragdoll collision shapes scale** (PR #62) — the partial path reuses the active
+  shape pipeline.
+- ✅ **Runtime/physics tests** (PR #64) — the rig is built and stepped in a headless SceneTree
+  in CI (spring tracking, ragdoll, recovery, sync, foot IK, budget).
+
+**Still open:**
+
 - **Spring math is implicitly 60 Hz-bound** — corrections are divided by `delta` with no
   substepping awareness.
-- **Partial-ragdoll collision shapes don't scale** to character size (the active path does).
-- **No runtime/physics automated tests** — the rig is never built or stepped in CI; all
-  physics behavior is currently eyeballed in demos only.
+- **`PhysicsRigSync` uses a deprecated API** — `set_bone_global_pose_override()` has been
+  deprecated since Godot 4.3 (still functional in 4.7) and will be removed in a future major.
+  The supported fix is a `SkeletonModifier3D` migration, deferred to **0.9.0** because it is
+  structural and needs in-editor visual validation. Scoped in
+  [SKELETON_MODIFIER_MIGRATION.md](SKELETON_MODIFIER_MIGRATION.md).

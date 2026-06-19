@@ -43,6 +43,12 @@
   to drive the real controller/solver rather than re-implement their formulas. Shared
   builder: `test/helpers/rig_harness.gd`. Also covers the budget hard cap (downgrade vs
   bypass, slot accounting). Suite is now 89 tests.
+- **`SkeletonModifier3D` migration plan** — [docs/SKELETON_MODIFIER_MIGRATION.md](docs/SKELETON_MODIFIER_MIGRATION.md)
+  scopes the deferred (0.9.0) path to retire the deprecated `set_bone_global_pose_override`
+  in `PhysicsRigSync`, grounded in a Godot 4.7 investigation: 4.7 leaves the skeleton/modifier
+  subsystem unchanged, and the modifier's per-frame pose roll-back is what preserves the
+  spring's clean `get_bone_pose()` read target (so the migration is viable and localized).
+  Cross-linked from `GODOT_CONSTRAINTS.md` and `ROADMAP.md`.
 
 ### Fixed
 - **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
