@@ -1,20 +1,33 @@
+## Demo: FPS shooting range. Walk around with WASD + mouse. Left-click fires the
+## selected hitscan weapon (5 profiles); right-click throws a velocity-scaled
+## physics ball (alt-fire). Characters stagger, ragdoll, and recover from hits.
 extends CharacterBody3D
 
 const SPEED := 5.0
 const MOUSE_SENSITIVITY := 0.002
 
+# Ball alt-fire
+const BALL_RADIUS := 0.12
+const BALL_MASS := 2.0
+const BALL_LIFETIME := 6.0
+const THROW_MIN := 5.0
+const THROW_MAX := 30.0
+
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Arrow", "Shotgun", "Explosion"])
 var _weapon_idx: int = 0
+var _throw_strength: float = 15.0
 
 var _cam: Camera3D
 var _weapon_label: Label
+var _throw_label: Label
 var _mouse_captured: bool = false
 
 
 func _ready() -> void:
 	_cam = $Camera3D
 	_weapon_label = $"../HUD/WeaponLabel"
+	_throw_label = $"../HUD/ThrowLabel"
 
 	# Cranked profiles for the demo — big visible physics reactions
 	_profiles = [
@@ -40,6 +53,7 @@ func _ready() -> void:
 
 	_capture_mouse()
 	_update_weapon_label()
+	_update_throw_label()
 
 
 func _setup_active(char_root: Node3D) -> void:
@@ -125,13 +139,25 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			if _mouse_captured:
-				var screen_center := get_viewport().get_visible_rect().size / 2.0
-				KickbackRaycast.shoot_from_camera(
-					get_viewport(), screen_center, _profiles[_weapon_idx])
-			else:
-				_capture_mouse()
+		if not mb.pressed:
+			return
+		match mb.button_index:
+			MOUSE_BUTTON_LEFT:
+				if _mouse_captured:
+					var screen_center := get_viewport().get_visible_rect().size / 2.0
+					KickbackRaycast.shoot_from_camera(
+						get_viewport(), screen_center, _profiles[_weapon_idx])
+				else:
+					_capture_mouse()
+			MOUSE_BUTTON_RIGHT:
+				if _mouse_captured:
+					_throw_ball()
+			MOUSE_BUTTON_WHEEL_UP:
+				_throw_strength = minf(_throw_strength + 2.0, THROW_MAX)
+				_update_throw_label()
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_throw_strength = maxf(_throw_strength - 2.0, THROW_MIN)
+				_update_throw_label()
 
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
@@ -180,6 +206,70 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 
+# --- Ball alt-fire (velocity-scaled physics impact) ---
+
+func _throw_ball() -> void:
+	var ball := RigidBody3D.new()
+	ball.mass = BALL_MASS
+	ball.collision_layer = 2
+	ball.collision_mask = 10  # ground (layer 2) + active ragdoll (layer 4)
+	ball.contact_monitor = true
+	ball.max_contacts_reported = 4
+	ball.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+
+	var shape := CollisionShape3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = BALL_RADIUS
+	shape.shape = sphere
+	ball.add_child(shape)
+
+	var mesh := MeshInstance3D.new()
+	var sphere_mesh := SphereMesh.new()
+	sphere_mesh.radius = BALL_RADIUS
+	sphere_mesh.height = BALL_RADIUS * 2.0
+	mesh.mesh = sphere_mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.9, 0.4, 0.1)
+	mesh.material_override = mat
+	ball.add_child(mesh)
+
+	# Add to tree FIRST, then set world position
+	get_parent().add_child(ball)
+	ball.global_position = _cam.global_position - _cam.global_basis.z * 0.5
+	ball.linear_velocity = -_cam.global_basis.z * _throw_strength
+
+	ball.body_entered.connect(_on_ball_hit.bind(ball))
+	get_tree().create_timer(BALL_LIFETIME).timeout.connect(ball.queue_free)
+
+
+func _on_ball_hit(hit_body: Node, ball: RigidBody3D) -> void:
+	if not hit_body is RigidBody3D:
+		return
+	var character := KickbackRaycast.find_character_owner(hit_body)
+	if not character or character.is_ragdolled():
+		return
+
+	# Scale impact by ball kinetic energy — harder throw = bigger reaction
+	var speed := ball.linear_velocity.length()
+	var energy := 0.5 * ball.mass * speed * speed
+	var impact_scale := clampf(energy / 80.0, 0.3, 4.0)
+
+	var profile := ImpactProfile.new()
+	profile.profile_name = &"Ball"
+	profile.base_impulse = 25.0 * impact_scale
+	profile.impulse_transfer_ratio = clampf(0.6 * impact_scale, 0.3, 1.0)
+	profile.upward_bias = 0.1
+	profile.ragdoll_probability = clampf(0.05 * impact_scale, 0.0, 0.5)
+	profile.strength_reduction = clampf(0.85 * impact_scale, 0.4, 1.0)
+	profile.strength_spread = clampi(int(3 * impact_scale), 2, 10)
+	profile.recovery_rate = 0.25
+
+	var hit_dir := ball.linear_velocity.normalized()
+	character.receive_hit(hit_body as RigidBody3D, hit_dir, hit_body.global_position, profile)
+
+
+# --- Utility ---
+
 func _get_nearest_kickback() -> KickbackCharacter:
 	var characters := KickbackCharacter.find_all(get_node("../Targets"))
 	if characters.is_empty():
@@ -220,3 +310,8 @@ func _set_weapon(idx: int) -> void:
 func _update_weapon_label() -> void:
 	if _weapon_label:
 		_weapon_label.text = "Weapon: %s  [1-5]" % _weapon_names[_weapon_idx]
+
+
+func _update_throw_label() -> void:
+	if _throw_label:
+		_throw_label.text = "Throw: %.0f  [scroll]" % _throw_strength

@@ -52,17 +52,15 @@ kickback/
 │           ├── bone_definition.gd
 │           ├── joint_definition.gd
 │           └── intermediate_bone_entry.gd
-├── demo/                            # Demo scenes (not part of plugin)
+├── demo/                            # Demo scenes (not part of plugin) — 8 scenes
 │   ├── demo.tscn/gd                 # Side-by-side Active vs Partial comparison
-│   ├── shooting_range.tscn/gd       # FPS shooting range with 5 weapon profiles
+│   ├── shooting_range.tscn/gd       # FPS: 5 weapon profiles + ball-throw alt-fire (RMB)
+│   ├── tuning_playground.tscn/gd    # Tuning Lab: 5 presets side-by-side + Custom char w/ live sliders
 │   ├── signal_showcase.tscn/gd      # Visualizes all signals with floating popups
-│   ├── tuning_playground.tscn/gd    # Live sliders to tweak physics parameters
 │   ├── stress_test.tscn/gd          # 20 characters, budget system, mass ragdoll
-│   ├── animated_npc.tscn/gd         # Signal-driven NPC with full animation lifecycle
-│   ├── ball_throw.tscn/gd           # Throw physics balls, velocity-scaled impact
-│   ├── tuning_presets.tscn/gd       # 5 characters: Tank/Standard/Loose/Fragile/Protected
-│   ├── protected_bones.tscn/gd      # Protected vs unprotected legs comparison
-│   └── euphoria_showcase.tscn/gd   # All v0.7 features: active resistance, sway, pain, injuries
+│   ├── animated_npc.tscn/gd         # Signal-driven NPC: patrol, hit, recover, resume
+│   ├── foot_ik_demo.tscn/gd         # Foot IK on vs off over varied terrain
+│   └── euphoria_showcase.tscn/gd   # All euphoria features: active resistance, sway, pain, injuries
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)

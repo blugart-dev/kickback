@@ -12,8 +12,8 @@ Inspired by NaturalMotion's Euphoria engine (GTA IV/V, Red Dead Redemption). Cha
 
 Run any scene from `demo/` in the Godot editor to see the plugin live:
 - **`euphoria_showcase.tscn`** — Best overview: active resistance, stagger sway, pain escalation, injuries
-- **`shooting_range.tscn`** — FPS shooting with 5 weapon profiles
-- **`tuning_playground.tscn`** — 35+ live sliders to tweak every parameter in real-time
+- **`shooting_range.tscn`** — FPS shooting with 5 weapon profiles + ball-throw alt-fire
+- **`tuning_playground.tscn`** — Tuning Lab: 5 presets side-by-side + a Custom character with 35+ live sliders
 
 Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full dashboard).
 
@@ -31,7 +31,7 @@ Press **F3** in any demo to cycle debug gizmos (bone dots → wireframe → full
 <details>
 <summary><strong>Game integration</strong> — NPCs walk, get hit, recover, and keep going</summary>
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="Ball throw demo — NPCs patrol, react to hits, recover with injuries" width="640">
+  <img src="https://github.com/user-attachments/assets/795372f5-c704-4be7-ac0f-ef4de17ede73" alt="NPCs patrol, react to hits, recover with injuries, and resume" width="640">
 </p>
 </details>
 
@@ -186,14 +186,12 @@ Run any scene from `demo/` to see the plugin in action:
 | Scene | What it shows |
 |-------|--------------|
 | `demo.tscn` | Active vs Partial side-by-side comparison |
-| `shooting_range.tscn` | FPS controller, 5 targets, 5 weapon profiles |
+| `shooting_range.tscn` | FPS controller, 5 weapon profiles + ball-throw alt-fire (RMB) |
+| `tuning_playground.tscn` | Tuning Lab: Tank/Standard/Loose/Fragile/Protected presets + a Custom character with live sliders |
 | `signal_showcase.tscn` | Floating popups + log showing every signal |
-| `tuning_playground.tscn` | Live sliders to adjust physics parameters |
 | `stress_test.tscn` | 20 characters, mass ragdoll, budget system |
-| `animated_npc.tscn` | Signal-driven NPC with full animation integration |
-| `ball_throw.tscn` | Throw physics balls, velocity-scaled impact |
-| `tuning_presets.tscn` | 5 characters: Tank/Standard/Loose/Fragile/Protected side-by-side |
-| `protected_bones.tscn` | Protected vs unprotected legs — same hit, different result |
+| `animated_npc.tscn` | Signal-driven NPC: patrol, hit, recover, resume |
+| `foot_ik_demo.tscn` | Foot IK on vs off over varied terrain — planting + anti-slide |
 | `euphoria_showcase.tscn` | Active resistance, stagger sway, pain, momentum, injuries |
 
 ## Collision Layers
