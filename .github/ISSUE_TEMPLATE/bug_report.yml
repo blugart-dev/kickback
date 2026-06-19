@@ -35,17 +35,6 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: mode
-    attributes:
-      label: Kickback Mode
-      options:
-        - Active Ragdoll
-        - Partial Ragdoll
-        - Both / Not sure
-    validations:
-      required: true
-
   - type: textarea
     id: description
     attributes:

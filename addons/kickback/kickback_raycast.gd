@@ -8,9 +8,9 @@
 ## [/codeblock]
 class_name KickbackRaycast
 
-## Default collision mask targeting both ragdoll layers (active + partial).
+## Default collision mask targeting the active-ragdoll body layer.
 ## See [KickbackLayers] for the layer convention.
-const DEFAULT_MASK := KickbackLayers.BOTH_RAGDOLL_MASK
+const DEFAULT_MASK := KickbackLayers.ACTIVE_RAGDOLL_LAYER
 
 
 ## Performs a raycast from the viewport camera through [param screen_pos] and

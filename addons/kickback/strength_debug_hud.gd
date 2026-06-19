@@ -7,7 +7,6 @@ extends Control
 
 var _detail_level: int = 0  # 0=off, 1=dots, 2=wireframe+state, 3=full
 var _active_targets: Array[Dictionary] = []   # [{spring, rig_builder, active_ctrl, kickback_char}]
-var _partial_targets: Array[Dictionary] = []  # [{partial_ctrl, simulator}]
 var _discovered: bool = false
 
 const DOT_RADIUS_BASE := 5.0
@@ -25,8 +24,6 @@ const VEL_MAX_LEN := 1.5
 const WEAK_COLOR := Color(0.9, 0.2, 0.2)
 const MID_COLOR := Color(0.9, 0.8, 0.2)
 const FULL_COLOR := Color(0.2, 0.9, 0.3)
-const PARTIAL_IDLE_COLOR := Color(0.6, 0.8, 0.9, 0.7)
-const PARTIAL_REACT_COLOR := Color(1.0, 0.85, 0.2)
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.8)
 const VEL_COLOR := Color(1.0, 1.0, 1.0, 0.6)
 const COM_COLOR_GOOD := Color(0.3, 0.9, 0.4, 0.9)
@@ -63,7 +60,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _discover_targets() -> void:
 	_active_targets.clear()
-	_partial_targets.clear()
 	var root := get_tree().current_scene
 	if not root:
 		return
@@ -75,7 +71,6 @@ func _discover_targets() -> void:
 		var spring: SpringResolver = null
 		var builder: PhysicsRigBuilder = null
 		var active_ctrl: ActiveRagdollController = null
-		var partial: PartialRagdollController = null
 		for sibling in parent.get_children():
 			if sibling is SpringResolver:
 				spring = sibling
@@ -83,8 +78,6 @@ func _discover_targets() -> void:
 				builder = sibling
 			elif sibling is ActiveRagdollController:
 				active_ctrl = sibling
-			elif sibling is PartialRagdollController:
-				partial = sibling
 		if spring and builder:
 			_active_targets.append({
 				"spring": spring,
@@ -92,13 +85,6 @@ func _discover_targets() -> void:
 				"active_ctrl": active_ctrl,
 				"kickback_char": kc,
 			})
-		elif partial:
-			var skel_path: NodePath = kc.get("skeleton_path")
-			var skeleton := kc.get_node_or_null(skel_path) as Skeleton3D
-			if skeleton:
-				var sim := skeleton.get_node_or_null("PhysicalBoneSimulator3D") as PhysicalBoneSimulator3D
-				if sim:
-					_partial_targets.append({"partial_ctrl": partial, "simulator": sim})
 	_discovered = true
 
 
@@ -115,16 +101,13 @@ func _draw() -> void:
 	if not camera:
 		return
 
-	if _active_targets.is_empty() and _partial_targets.is_empty():
+	if _active_targets.is_empty():
 		_discover_targets()
 
 	var cam_pos := camera.global_position
 
 	for target: Dictionary in _active_targets:
 		_draw_active_target(target, camera, cam_pos)
-
-	for target: Dictionary in _partial_targets:
-		_draw_partial_target(target, camera, cam_pos)
 
 	# Legend (level 2+)
 	if _detail_level >= 2:
@@ -429,32 +412,6 @@ func _draw_velocity_vectors(bodies: Dictionary, camera: Camera3D, cam_pos: Vecto
 		draw_line(screen_from, screen_to, Color(VEL_COLOR.r, VEL_COLOR.g, VEL_COLOR.b, alpha), 1.5)
 
 
-# ── Partial Ragdoll ─────────────────────────────────────────────────────────
-
-func _draw_partial_target(target: Dictionary, camera: Camera3D, cam_pos: Vector3) -> void:
-	var partial: PartialRagdollController = target.partial_ctrl
-	var sim: PhysicalBoneSimulator3D = target.simulator
-	var reacting := partial.is_reacting()
-	var color := PARTIAL_REACT_COLOR if reacting else PARTIAL_IDLE_COLOR
-	for child in sim.get_children():
-		if not child is PhysicalBone3D:
-			continue
-		var pb: PhysicalBone3D = child
-		var world_pos := pb.global_position
-		if camera.is_position_behind(world_pos):
-			continue
-		var screen_pos := camera.unproject_position(world_pos)
-		var dist := cam_pos.distance_to(world_pos)
-		var alpha := _distance_alpha(dist)
-		var dot_radius := _scaled_radius(dist)
-		var c := Color(color.r, color.g, color.b, color.a * alpha)
-		draw_circle(screen_pos, dot_radius + 1.0, Color(OUTLINE_COLOR, OUTLINE_COLOR.a * alpha))
-		draw_circle(screen_pos, dot_radius, c)
-		if dist < LABEL_DIST:
-			_draw_text_shadowed(screen_pos + Vector2(dot_radius + 3, 4),
-				pb.bone_name, FONT_SIZE, c)
-
-
 # ── Legend ──────────────────────────────────────────────────────────────────
 
 func _draw_legend() -> void:
@@ -466,7 +423,7 @@ func _draw_legend() -> void:
 
 	# Background
 	var legend_w := 185.0
-	var legend_h := line_h * 3 + 14.0 if _detail_level < 3 else line_h * 6 + 14.0
+	var legend_h := line_h * 2 + 14.0 if _detail_level < 3 else line_h * 5 + 14.0
 	draw_rect(Rect2(x, y, legend_w, legend_h), Color(PANEL_BG.r, PANEL_BG.g, PANEL_BG.b, 0.5))
 	draw_rect(Rect2(x, y, legend_w, legend_h), Color(PANEL_BORDER.r, PANEL_BORDER.g, PANEL_BORDER.b, 0.4), false, 1.0)
 
@@ -485,11 +442,6 @@ func _draw_legend() -> void:
 	draw_string(font, Vector2(x + 12, y + 11), "Strong", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.7, 0.7, 0.7, 0.7))
 	draw_string(font, Vector2(x + 47, y + 11), "Mid", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.7, 0.7, 0.7, 0.7))
 	draw_string(font, Vector2(x + 82, y + 11), "Weak", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.7, 0.7, 0.7, 0.7))
-	y += line_h
-
-	# Partial ragdoll key
-	draw_circle(Vector2(x + 5, y + 7), 4.0, PARTIAL_IDLE_COLOR)
-	draw_string(font, Vector2(x + 12, y + 11), "Partial Ragdoll", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.7, 0.7, 0.7, 0.7))
 	y += line_h
 
 	if _detail_level >= 3:

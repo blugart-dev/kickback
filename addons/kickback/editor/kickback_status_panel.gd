@@ -23,10 +23,9 @@ func _build_ui() -> void:
 	# Detect which mode based on sibling controllers
 	var parent := _kc.get_parent()
 	var has_active := _has_sibling_of_type(parent, "ActiveRagdollController") if parent else false
-	var has_partial := _has_sibling_of_type(parent, "PartialRagdollController") if parent else false
 
 	# Mode + profile summary
-	var mode_name := "Active Ragdoll" if has_active else ("Partial Ragdoll" if has_partial else "None")
+	var mode_name := "Active Ragdoll" if has_active else "None"
 	var mode_label := Label.new()
 	mode_label.text = "Mode: %s" % mode_name
 	mode_label.add_theme_font_size_override("font_size", 12)
@@ -61,11 +60,8 @@ func _build_ui() -> void:
 		_add_check("PhysicsRigSync", _has_sibling_of_type(parent, "PhysicsRigSync"))
 		_add_check("SpringResolver", _has_sibling_of_type(parent, "SpringResolver"))
 		_add_check("ActiveRagdollController", true)
-	elif has_partial:
-		_add_check("PartialRagdollController", true)
-		_add_check("PhysicalBoneSimulator3D", _check_simulator())
 	else:
-		_add_check("No controller found", false)
+		_add_check("No active ragdoll controllers found", false)
 
 	# Physics Rig bake status (Active Ragdoll only)
 	if has_active and parent:
@@ -224,16 +220,6 @@ func _check_node_path(kc: KickbackCharacter, property: String, _expected_type: S
 		return false
 	var node := kc.get_node_or_null(path)
 	return node != null
-
-
-func _check_simulator() -> bool:
-	var skel_path: NodePath = _kc.get("skeleton_path")
-	if skel_path.is_empty():
-		return false
-	var skeleton := _kc.get_node_or_null(skel_path)
-	if not skeleton:
-		return false
-	return skeleton.get_node_or_null("PhysicalBoneSimulator3D") != null
 
 
 func _check_skeleton_callback_mode() -> bool:

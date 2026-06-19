@@ -62,17 +62,12 @@ func _show_preset_dialog() -> void:
 
 	var btn_group := ButtonGroup.new()
 
-	# Each preset: [radio_label, description, nodes_created]
+	# Kickback is the active spring ragdoll; the dialog previews what gets created.
 	var presets := [
 		[
 			"Active Ragdoll",
-			"Full physics rig with spring-driven joints.\nStagger, ragdoll, and physics-driven recovery.\nBest for main characters and close-range NPCs.",
+			"Full physics rig with spring-driven joints.\nStagger, ragdoll, and physics-driven recovery.",
 			"5 nodes — PhysicsRigBuilder, PhysicsRigSync, SpringResolver, ActiveRagdollController, KickbackCharacter",
-		],
-		[
-			"Partial Ragdoll",
-			"Lightweight bone-level reactions using PhysicalBoneSimulator3D.\nHit bones simulate briefly then blend back to animation.\nBest for background NPCs or when full ragdoll isn't needed.",
-			"2 nodes — PartialRagdollController, KickbackCharacter + PhysicalBoneSimulator3D",
 		],
 	]
 
@@ -104,7 +99,7 @@ func _show_preset_dialog() -> void:
 	vbox.add_child(HSeparator.new())
 
 	var note := Label.new()
-	note.text = "Active and Partial are independent modes — pick one per character.\nKickbackCharacter detects which controller is present."
+	note.text = "Adds the active-ragdoll node set under the selected character.\nThe character must contain a Skeleton3D."
 	note.add_theme_font_size_override("font_size", 10)
 	note.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	vbox.add_child(note)
@@ -128,7 +123,6 @@ func _execute_preset(preset_name: String) -> void:
 	var skeleton := _pending_skeleton
 
 	var skeleton_name := skeleton.name
-	var simulator_path := "../%s/PhysicalBoneSimulator3D" % skeleton_name
 	var scene_owner: Node = root.owner if root.owner else root
 
 	# Auto-detect humanoid bones
@@ -141,39 +135,14 @@ func _execute_preset(preset_name: String) -> void:
 		push_warning("Kickback: could not auto-detect humanoid bones — using Mixamo defaults")
 		auto_profile = RagdollProfile.create_mixamo_default()
 
-	# Determine which controllers to create based on preset
-	var include_active := false
-	var include_partial := false
-
-	match preset_name:
-		"Active Ragdoll":
-			include_active = true
-		"Partial Ragdoll":
-			include_partial = true
-
-	# Auto-create PhysicalBoneSimulator3D if partial ragdoll is included
-	if include_partial:
-		var has_simulator := false
-		for child in skeleton.get_children():
-			if child is PhysicalBoneSimulator3D:
-				has_simulator = true
-				break
-		if not has_simulator:
-			var sim := PhysicalBoneSimulator3D.new()
-			sim.name = "PhysicalBoneSimulator3D"
-			skeleton.add_child(sim)
-			sim.owner = scene_owner
-			if not bone_mapping.is_empty():
-				SkeletonDetector.populate_physical_bones(skeleton, sim, bone_mapping, scene_owner)
-			else:
-				push_warning("Kickback: created empty PhysicalBoneSimulator3D — add physical bones manually")
+	# Kickback is the active spring ragdoll — always create the active node set.
+	var include_active := true
 
 	# Preload scripts
 	var scripts: Dictionary = {}
 	var script_paths := [
 		"kickback_character", "physics_rig_builder", "physics_rig_sync",
 		"spring_resolver", "active_ragdoll_controller",
-		"partial_ragdoll_controller",
 	]
 	for script_name: String in script_paths:
 		var path := "res://addons/kickback/%s.gd" % script_name
@@ -227,14 +196,6 @@ func _execute_preset(preset_name: String) -> void:
 		active.set("rig_sync_path", NodePath("../PhysicsRigSync"))
 		nodes.append(active)
 
-	if include_partial:
-		var partial := Node.new()
-		partial.name = "PartialRagdollController"
-		partial.set_script(scripts["partial_ragdoll_controller"])
-		partial.set("simulator_path", NodePath(simulator_path))
-		partial.set("skeleton_path", NodePath("../%s" % skeleton_name))
-		nodes.append(partial)
-
 	# Add all nodes via undo/redo
 	var undo := get_undo_redo()
 	undo.create_action("Add Kickback to Character (%s)" % preset_name)
@@ -272,28 +233,21 @@ func _show_setup_report(character_name: String, bone_mapping: Dictionary, node_c
 		report += "Skeleton: Using Mixamo defaults (auto-detection failed)\n\n"
 
 	report += "Collision Layers:\n"
-	if preset_name == "Active Ragdoll":
-		report += "  Layer 2: Environment (ground raycasts during recovery)\n"
-		report += "  Layer 4: Active ragdoll bodies (RigidBody3D)\n"
-	elif preset_name == "Partial Ragdoll":
-		report += "  Layer 2: Environment\n"
-		report += "  Layer 5: Partial ragdoll bones (PhysicalBone3D)\n"
+	report += "  Layer 2: Environment (ground raycasts during recovery)\n"
+	report += "  Layer 4: Active ragdoll bodies (RigidBody3D)\n"
 
 	report += "\nSignals (connect in your code to handle animations):\n"
-	if preset_name == "Active Ragdoll":
-		report += "  stagger_started(hit_direction)  — character wobbles, stays on feet\n"
-		report += "  stagger_finished()              — recovered from stagger\n"
-		report += "  ragdoll_started()               — full ragdoll triggered\n"
-		report += "  recovery_started(face_up)       — getting up from ragdoll\n"
-		report += "  recovery_finished()             — fully recovered\n"
-		report += "  hit_absorbed(rig_name, strength) — light hit, no state change\n"
-	elif preset_name == "Partial Ragdoll":
-		report += "  state_changed(is_reacting)      — true on hit, false on blend-out\n"
+	report += "  stagger_started(hit_direction)  — character wobbles, stays on feet\n"
+	report += "  stagger_finished()              — recovered from stagger\n"
+	report += "  ragdoll_started()               — full ragdoll triggered\n"
+	report += "  recovery_started(face_up)       — getting up from ragdoll\n"
+	report += "  recovery_finished()             — fully recovered\n"
+	report += "  hit_absorbed(rig_name, strength) — light hit, no state change\n"
 
 	report += "\nQuick Start:\n"
 	report += "  KickbackRaycast.shoot_from_camera(get_viewport(), mouse_pos, profile)\n"
 	report += "  Preset profiles: res://addons/kickback/presets/\n"
-	report += "  F3 at runtime: debug overlay (Active Ragdoll only)\n"
+	report += "  F3 at runtime: debug overlay\n"
 
 	var dialog := AcceptDialog.new()
 	dialog.title = "Kickback Setup Complete"
