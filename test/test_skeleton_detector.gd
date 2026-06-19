@@ -1,5 +1,7 @@
 extends GutTest
 
+const RigHarness = preload("res://test/helpers/rig_harness.gd")
+
 
 var _mixamo_bones := PackedStringArray([
 	"mixamorig_Hips", "mixamorig_Spine", "mixamorig_Spine1", "mixamorig_Spine2",
@@ -111,3 +113,65 @@ func test_proportions_table_hands_have_depth_is_length():
 	var hand_r: Dictionary = SkeletonDetector.BONE_PROPORTIONS["Hand_R"]
 	assert_true(hand_l.get("depth_is_length", false), "Hand_L should have depth_is_length")
 	assert_true(hand_r.get("depth_is_length", false), "Hand_R should have depth_is_length")
+
+
+# --- create_collision_shape: single source of truth for box/capsule/sphere ---
+
+func test_create_collision_shape_box():
+	var bd := BoneDefinition.new()
+	bd.shape_type = "box"
+	bd.box_size = Vector3(0.3, 0.2, 0.25)
+	var col: CollisionShape3D = autofree(SkeletonDetector.create_collision_shape(bd))
+	assert_true(col.shape is BoxShape3D, "box shape_type yields a BoxShape3D")
+	assert_eq((col.shape as BoxShape3D).size, Vector3(0.3, 0.2, 0.25))
+
+
+func test_create_collision_shape_capsule():
+	var bd := BoneDefinition.new()
+	bd.shape_type = "capsule"
+	bd.capsule_radius = 0.08
+	bd.capsule_height = 0.4
+	var col: CollisionShape3D = autofree(SkeletonDetector.create_collision_shape(bd))
+	assert_true(col.shape is CapsuleShape3D, "capsule shape_type yields a CapsuleShape3D")
+	var cap := col.shape as CapsuleShape3D
+	assert_almost_eq(cap.radius, 0.08, 0.0001)
+	assert_almost_eq(cap.height, 0.4, 0.0001)
+
+
+func test_create_collision_shape_sphere():
+	var bd := BoneDefinition.new()
+	bd.shape_type = "sphere"
+	bd.sphere_radius = 0.12
+	var col: CollisionShape3D = autofree(SkeletonDetector.create_collision_shape(bd))
+	assert_true(col.shape is SphereShape3D, "sphere shape_type yields a SphereShape3D")
+	assert_almost_eq((col.shape as SphereShape3D).radius, 0.12, 0.0001)
+
+
+# --- create_profile_from_skeleton: full generation pipeline (round-trip) ---
+
+func test_create_profile_from_skeleton_round_trips():
+	var skel: Skeleton3D = autofree(RigHarness.build_mixamo_skeleton())
+	var mapping := SkeletonDetector.detect_humanoid_bones(skel)
+	assert_eq(mapping.size(), 16, "synthetic Mixamo skeleton detects all 16 slots")
+	var profile := SkeletonDetector.create_profile_from_skeleton(skel, mapping)
+	assert_eq(profile.bones.size(), 16, "generated profile has 16 bodies")
+	assert_eq(profile.joints.size(), 15, "generated profile has 15 joints")
+	assert_eq(profile.root_bone, "mixamorig_Hips", "root_bone set from the Hips mapping")
+	assert_true(profile.intermediate_bones.size() >= 1, "intermediate bones (Spine1/Neck) detected")
+	# Round-trip: a generated profile must validate clean against its own skeleton.
+	var w := profile.validate_against_skeleton(skel)
+	assert_eq(w.size(), 0, "generated profile validates clean against its skeleton; got %s" % str(w))
+
+
+func test_create_profile_foot_shape_is_box_with_depth():
+	var skel: Skeleton3D = autofree(RigHarness.build_mixamo_skeleton())
+	var mapping := SkeletonDetector.detect_humanoid_bones(skel)
+	var profile := SkeletonDetector.create_profile_from_skeleton(skel, mapping)
+	var checked := false
+	for bd: BoneDefinition in profile.bones:
+		if bd.rig_name == "Foot_L":
+			checked = true
+			assert_eq(bd.shape_type, "box", "foot uses a box shape")
+			var col: CollisionShape3D = autofree(SkeletonDetector.create_collision_shape(bd))
+			assert_true((col.shape as BoxShape3D).size.z > 0.0, "foot box has positive toe-depth")
+	assert_true(checked, "Foot_L should be present in the generated profile")

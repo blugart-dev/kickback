@@ -73,7 +73,7 @@ func setup(p_tuning: RagdollTuning = null, p_profile: RagdollProfile = null, wit
 		ground = _build_ground()
 		add_child(ground)
 
-	skeleton = _build_skeleton()
+	skeleton = build_mixamo_skeleton()
 	add_child(skeleton)
 
 	# Sibling controllers, pre-configured BEFORE entering the tree so their
@@ -146,7 +146,10 @@ func skeleton_bone_world_origin(skeleton_bone: String) -> Vector3:
 	return (skeleton.global_transform * skeleton.get_bone_global_pose(idx)).origin
 
 
-func _build_skeleton() -> Skeleton3D:
+## Builds the synthetic Mixamo-named skeleton (21 bones, rest = standing pose).
+## Static so resource/validation tests can reuse the canonical skeleton without
+## assembling the whole physics rig.
+static func build_mixamo_skeleton() -> Skeleton3D:
 	var skel := Skeleton3D.new()
 	skel.name = "Skeleton3D"
 	var name_to_idx: Dictionary = {}
