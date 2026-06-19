@@ -67,6 +67,17 @@
   `SkeletonDetector.populate_physical_bones` reuses the active-rig shape pipeline
   (`create_profile_from_skeleton` + `create_collision_shape`) instead of fixed 0.15 m
   boxes / 0.05 m capsules.
+- **Editor deprecation** — `EditorPlugin.get_editor_interface()` → the `EditorInterface`
+  singleton (4 sites in `kickback_plugin.gd`).
+- **Typed joint setup** — extracted the `Generic6DOFJoint3D` configuration into
+  `JointDefinition.apply_to()`, shared by the runtime `PhysicsRigBuilder` and the editor
+  `RigBaker`. Replaces the `joint.call("set_flag_" + axis, …)` / `set_param_` dynamic
+  dispatch with typed per-axis calls (and de-duplicates the two copies).
+- `PhysicsRigSync` now documents why it keeps the deprecated `set_bone_global_pose_override`:
+  the override is a *separate* layer that doesn't alter `get_bone_pose()` — which
+  `SpringResolver` reads as its animation target — so a naive swap to `set_bone_global_pose()`
+  would create a spring feedback loop. The supported `SkeletonModifier3D` migration is a
+  larger, visually-sensitive refactor deferred to a future milestone.
 
 ### Removed
 - Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5

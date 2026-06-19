@@ -97,28 +97,8 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		joint.node_a = NodePath("../%s" % joint_def.parent_rig)
 		joint.node_b = NodePath("../%s" % joint_def.child_rig)
 
-		# Lock linear axes
-		for axis in ["x", "y", "z"]:
-			joint.call("set_flag_" + axis, Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, true)
-			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_LINEAR_LOWER_LIMIT, 0.0)
-			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_LINEAR_UPPER_LIMIT, 0.0)
-
-		# Angular limits
-		for axis in ["x", "y", "z"]:
-			joint.call("set_flag_" + axis, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT, true)
-		joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_x.x))
-		joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_x.y))
-		joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_y.x))
-		joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_y.y))
-		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_z.x))
-		joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_z.y))
-
-		# Joint compliance
-		if joint_def.angular_softness > 0.0 or joint_def.angular_damping > 0.0 or joint_def.angular_restitution > 0.0:
-			for axis in ["x", "y", "z"]:
-				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_LIMIT_SOFTNESS, joint_def.angular_softness)
-				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_DAMPING, joint_def.angular_damping)
-				joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_RESTITUTION, joint_def.angular_restitution)
+		# Lock linear axes + apply angular limits/compliance (typed, shared with PhysicsRigBuilder)
+		joint_def.apply_to(joint)
 
 		undo_redo.add_do_method(rig_builder, "add_child", joint)
 		undo_redo.add_do_method(joint, "set_owner", scene_owner)

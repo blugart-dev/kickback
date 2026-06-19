@@ -22,7 +22,7 @@ func _exit_tree() -> void:
 
 
 func _on_add_kickback() -> void:
-	var selection := get_editor_interface().get_selection()
+	var selection := EditorInterface.get_selection()
 	var selected := selection.get_selected_nodes()
 	if selected.is_empty():
 		_show_error("No node selected. Select a character node with a Skeleton3D child.")
@@ -121,7 +121,7 @@ func _show_preset_dialog() -> void:
 	)
 	dialog.canceled.connect(dialog.queue_free)
 
-	get_editor_interface().get_base_control().add_child(dialog)
+	EditorInterface.get_base_control().add_child(dialog)
 	dialog.popup_centered()
 
 
@@ -303,7 +303,7 @@ func _show_setup_report(character_name: String, bone_mapping: Dictionary, node_c
 	dialog.title = "Kickback Setup Complete"
 	dialog.dialog_text = report
 	dialog.dialog_close_on_escape = true
-	get_editor_interface().get_base_control().add_child(dialog)
+	EditorInterface.get_base_control().add_child(dialog)
 	dialog.popup_centered(Vector2i(500, 450))
 	dialog.confirmed.connect(dialog.queue_free)
 	dialog.canceled.connect(dialog.queue_free)
@@ -330,7 +330,7 @@ func _show_error(msg: String) -> void:
 	dialog.title = "Kickback Setup"
 	dialog.dialog_text = msg
 	dialog.dialog_close_on_escape = true
-	get_editor_interface().get_base_control().add_child(dialog)
+	EditorInterface.get_base_control().add_child(dialog)
 	dialog.popup_centered()
 	dialog.confirmed.connect(dialog.queue_free)
 	dialog.canceled.connect(dialog.queue_free)

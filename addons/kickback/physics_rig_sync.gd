@@ -1,5 +1,14 @@
 ## Synchronizes physics ragdoll body transforms back to the visible Skeleton3D.
 ## Runs every frame when active, writing bone pose overrides from RigidBody3D positions.
+##
+## NOTE: this deliberately uses Skeleton3D.set_bone_global_pose_override (deprecated in
+## Godot 4.x, but functional in 4.7 with no runtime warning). The override is a SEPARATE
+## layer that does NOT change get_bone_pose() — which SpringResolver reads as its animation
+## target (see SpringResolver.get_animation_bone_global). Swapping to set_bone_global_pose()
+## would write the actual local pose, contaminating get_bone_pose() and feeding the spring
+## its own output (a feedback loop). The supported migration path is turning this node into a
+## SkeletonModifier3D — a larger, visually-sensitive refactor for a future milestone, NOT a
+## drop-in replacement. Do not naively swap the calls below.
 class_name PhysicsRigSync
 extends Node
 
@@ -114,4 +123,5 @@ func _safe_set_bone_override(bone_idx: int, xform: Transform3D) -> void:
 	var det := xform.basis.determinant()
 	if det < 0.001 and det > -0.001:
 		return
+	# Deprecated-but-load-bearing override layer (see class doc — do not swap to set_bone_global_pose).
 	_skeleton.set_bone_global_pose_override(bone_idx, xform, 1.0, true)

@@ -153,28 +153,8 @@ func _create_joint(joint_def: JointDefinition) -> void:
 	joint.node_a = joint.get_path_to(parent_body)
 	joint.node_b = joint.get_path_to(child_body)
 
-	# Lock linear axes
-	for axis in ["x", "y", "z"]:
-		joint.call("set_flag_" + axis, Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, true)
-		joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_LINEAR_LOWER_LIMIT, 0.0)
-		joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_LINEAR_UPPER_LIMIT, 0.0)
-
-	# Angular limits
-	for axis in ["x", "y", "z"]:
-		joint.call("set_flag_" + axis, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT, true)
-	joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_x.x))
-	joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_x.y))
-	joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_y.x))
-	joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_y.y))
-	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_LOWER_LIMIT, deg_to_rad(joint_def.limit_z.x))
-	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_UPPER_LIMIT, deg_to_rad(joint_def.limit_z.y))
-
-	# Joint compliance (softness, damping, restitution)
-	if joint_def.angular_softness > 0.0 or joint_def.angular_damping > 0.0 or joint_def.angular_restitution > 0.0:
-		for axis in ["x", "y", "z"]:
-			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_LIMIT_SOFTNESS, joint_def.angular_softness)
-			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_DAMPING, joint_def.angular_damping)
-			joint.call("set_param_" + axis, Generic6DOFJoint3D.PARAM_ANGULAR_RESTITUTION, joint_def.angular_restitution)
+	# Lock linear axes + apply angular limits/compliance (typed, shared with RigBaker)
+	joint_def.apply_to(joint)
 
 
 ## Enables the physics rig. On first enable, snaps bodies to skeleton and unfreezes
