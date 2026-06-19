@@ -218,10 +218,6 @@ extends Resource
 @export var spring_linear_damp_base: float = 0.5
 ## Linear damping scale factor per strength ratio.
 @export var spring_linear_damp_scale: float = 1.5
-## Extra angular damping added in passive tracking mode (springs inactive).
-@export var spring_passive_angular_damp_offset: float = 5.0
-## Extra linear damping added in passive tracking mode (springs inactive).
-@export var spring_passive_linear_damp_offset: float = 3.0
 
 # ── Advanced: Directional Bracing ───────────────────────────────────────────
 
@@ -260,12 +256,6 @@ extends Resource
 @export var angular_damp: float = 8.0
 ## Linear damping for ragdoll bodies when springs are inactive.
 @export var linear_damp: float = 2.0
-## Gravity scale for ragdoll bodies when springs are driving them.
-@export var spring_active_gravity: float = 0.0
-## Angular damping when springs are active (used for passive tracking base).
-@export var spring_active_angular_damp: float = 3.0
-## Linear damping when springs are active (used for passive tracking base).
-@export var spring_active_linear_damp: float = 2.0
 ## Maximum angular velocity for spring-driven bodies.
 @export var max_angular_velocity: float = 20.0
 ## Maximum linear velocity for spring-driven bodies.

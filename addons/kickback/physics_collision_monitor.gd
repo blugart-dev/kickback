@@ -86,7 +86,7 @@ func _connect_to_bodies() -> void:
 
 		var body: RigidBody3D = bodies[rig_name]
 		body.contact_monitor = true
-		body.max_contacts_reported = maxf(body.max_contacts_reported, 1)
+		body.max_contacts_reported = maxi(body.max_contacts_reported, 1)
 		_body_to_rig_name[body] = rig_name
 		body.body_entered.connect(_on_body_entered.bind(body))
 
@@ -124,5 +124,10 @@ func _exit_tree() -> void:
 		return
 	for body: RigidBody3D in _body_to_rig_name.keys():
 		if is_instance_valid(body):
+			var cb := _on_body_entered.bind(body)
+			if body.body_entered.is_connected(cb):
+				body.body_entered.disconnect(cb)
 			body.contact_monitor = false
 			body.max_contacts_reported = 0
+	_body_to_rig_name.clear()
+	_connected = false

@@ -19,6 +19,31 @@
   references, and CI bumped from 4.6.1 to 4.7. Validated: clean headless import +
   76/76 GUT tests pass.
 
+### Fixed
+- **Multi-rig safety** — balance-driven stagger/ragdoll no longer silently disables on
+  skeletons that don't expose `Foot_L`/`Foot_R` bodies. `_compute_balance_state` now
+  reports `has_support`; callers skip balance logic when it's unavailable instead of
+  reading `0.0` as "perfectly balanced".
+- **PhysicsCollisionMonitor** disconnects its `body_entered` signals on `_exit_tree`
+  (was leaking connections to bodies that outlive the monitor); `max_contacts_reported`
+  now uses `maxi` (was `maxf` assigned into an int property).
+
+### Changed
+- **Budget manager wired in** — `ActiveRagdollController` requests a slot from
+  `KickbackManager` on full ragdoll and releases it on recovery/removal (discovered via
+  the `kickback_manager` group). Currently a soft cap — the ragdoll still proceeds when
+  over budget; hard enforcement/eviction is a follow-up.
+- Moved `strip_root_motion.gd` from `demo/` to `addons/kickback/editor/`.
+
+### Removed
+- Dead passive-tracking path in `SpringResolver` (springs are always active) and its 5
+  unused tuning parameters (`spring_active_gravity`, `spring_active_angular_damp`,
+  `spring_active_linear_damp`, `spring_passive_angular_damp_offset`,
+  `spring_passive_linear_damp_offset`).
+- `demo/ik_research` research spike (superseded by the shipped `FootIKSolver`).
+- Stray debug `print()` output across setup/baking/HUD paths (meaningful notices kept as
+  `push_warning`).
+
 ---
 
 ## Legacy history (deprecated numbering — pre-recalibration)

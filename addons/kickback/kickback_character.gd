@@ -320,9 +320,7 @@ func _validate_setup() -> void:
 	if _mode == Mode.NONE:
 		warnings.append("No physics controllers found — add ActiveRagdollController or PartialRagdollController as siblings")
 
-	if warnings.is_empty():
-		print("Kickback [%s]: setup OK (mode: %s)" % [get_parent().name, get_mode_name()])
-	else:
+	if not warnings.is_empty():
 		var msg := "Kickback [%s]: %d issue(s):" % [get_parent().name, warnings.size()]
 		for w: String in warnings:
 			msg += "\n  - " + w

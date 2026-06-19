@@ -141,9 +141,8 @@ func _execute_preset(preset_name: String) -> void:
 
 	if not bone_mapping.is_empty():
 		auto_profile = SkeletonDetector.create_profile_from_skeleton(skeleton, bone_mapping)
-		print("Kickback: Auto-detected %d humanoid bones" % bone_mapping.size())
 	else:
-		print("Kickback: Could not auto-detect humanoid bones — using Mixamo defaults")
+		push_warning("Kickback: could not auto-detect humanoid bones — using Mixamo defaults")
 		auto_profile = RagdollProfile.create_mixamo_default()
 
 	# Determine which controllers to create based on preset
@@ -170,9 +169,8 @@ func _execute_preset(preset_name: String) -> void:
 			sim.owner = scene_owner
 			if not bone_mapping.is_empty():
 				SkeletonDetector.populate_physical_bones(skeleton, sim, bone_mapping, scene_owner)
-				print("Kickback: Created PhysicalBoneSimulator3D with %d physical bones" % bone_mapping.size())
 			else:
-				print("Kickback: Created empty PhysicalBoneSimulator3D — add physical bones manually")
+				push_warning("Kickback: created empty PhysicalBoneSimulator3D — add physical bones manually")
 
 	# Preload scripts
 	var scripts: Dictionary = {}
@@ -255,10 +253,10 @@ func _execute_preset(preset_name: String) -> void:
 	# Done outside undo/redo because the skeleton may belong to an instantiated sub-scene
 	skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 
-	_show_setup_report(root.name, anim_player, bone_mapping, nodes.size(), preset_name)
+	_show_setup_report(root.name, bone_mapping, nodes.size(), preset_name)
 
 
-func _show_setup_report(character_name: String, anim_player: AnimationPlayer, bone_mapping: Dictionary, node_count: int, preset_name: String) -> void:
+func _show_setup_report(character_name: String, bone_mapping: Dictionary, node_count: int, preset_name: String) -> void:
 	var report := "Mode: %s\nCreated %d nodes on '%s'.\n\n" % [preset_name, node_count, character_name]
 
 	if not bone_mapping.is_empty():
