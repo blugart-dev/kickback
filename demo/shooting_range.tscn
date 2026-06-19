@@ -22,7 +22,7 @@ transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.6
 shadow_enabled = true
 
 [node name="Ground" type="StaticBody3D" parent="."]
-collision_layer = 2
+collision_layer = 1
 collision_mask = 0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
@@ -34,8 +34,8 @@ shape = SubResource("WorldBoundary_1")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 8)
-collision_layer = 1
-collision_mask = 2
+collision_layer = 3
+collision_mask = 1
 script = ExtResource("1_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]

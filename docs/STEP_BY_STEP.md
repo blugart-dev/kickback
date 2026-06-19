@@ -159,7 +159,7 @@ No spring resolver yet — just verify the physics rig works as a passive ragdol
   - One RigidBody3D per major bone (~16 bodies)
   - Connected by Generic6DOFJoint3D with angular limits
   - CapsuleShape3D for limbs, BoxShape3D for torso, SphereShape3D for head
-- Place on collision layer 4 (not layer 1 where CharacterBody3D lives)
+- Place on collision layer 4 (not the default layer 1, which is environment)
 - Make all RigidBody3Ds invisible (no mesh attached)
 - Write sync script: each _process, read RigidBody3D global transforms → write to
   the visible Skeleton3D via `set_bone_global_pose_override(bone_idx, transform, 1.0, true)`

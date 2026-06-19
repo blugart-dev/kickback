@@ -18,6 +18,8 @@ const PARTIAL_RAGDOLL_LAYER := 1 << PARTIAL_RAGDOLL_BIT  # 16
 ## Combined mask matching either ragdoll layer (used by hit raycasts).
 const BOTH_RAGDOLL_MASK := ACTIVE_RAGDOLL_LAYER | PARTIAL_RAGDOLL_LAYER  # 24
 
-## Environment / world geometry that PhysicalBone3D bodies collide against. UI layer 2.
-const ENVIRONMENT_BIT := 1
-const ENVIRONMENT_LAYER := 1 << ENVIRONMENT_BIT          # 2
+## Environment / world geometry (floors, walls) that physics bodies collide
+## against and that foot-IK / recovery ground raycasts hit. UI layer 1 — Godot's
+## default body layer, matching foot_ik_collision_mask / ground_raycast_mask.
+const ENVIRONMENT_BIT := 0
+const ENVIRONMENT_LAYER := 1 << ENVIRONMENT_BIT          # 1

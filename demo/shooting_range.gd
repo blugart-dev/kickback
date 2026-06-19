@@ -212,7 +212,7 @@ func _throw_ball() -> void:
 	var ball := RigidBody3D.new()
 	ball.mass = BALL_MASS
 	ball.collision_layer = 2
-	ball.collision_mask = 10  # ground (layer 2) + active ragdoll (layer 4)
+	ball.collision_mask = 9  # ground (layer 1) + active ragdoll (layer 4)
 	ball.contact_monitor = true
 	ball.max_contacts_reported = 4
 	ball.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
