@@ -1,5 +1,31 @@
 # Changelog
 
+> **Versioning recalibrated 2026-06-19.** `1.0.0` now means full Euphoria parity
+> (see [VERSIONING.md](docs/VERSIONING.md)). The project was re-baselined from `0.8.5`
+> to `0.3.0` to honestly reflect difficulty-weighted progress (~30%). Entries under
+> **Legacy history** below use the old, inconsistent numbering and are **not comparable**
+> to current versions.
+
+## [0.3.0] - 2026-06-19
+
+### Changed
+- **Versioning recalibrated** — re-baselined `0.8.5` → `0.3.0`; `1.0.0` is now full
+  Euphoria parity. Deleted the old `v0.7.0` / `v0.8.0` / `v0.8.5` releases and tags.
+  Added [VERSIONING.md](docs/VERSIONING.md) and [ROADMAP.md](docs/ROADMAP.md) (with a
+  difficulty-weighted parity scorecard) and re-scored
+  [EUPHORIA_COMPARISON.md](docs/EUPHORIA_COMPARISON.md) with honest real/partial/nominal
+  classifications.
+- **Upgraded to Godot 4.7** — `project.godot` features, all documentation version
+  references, and CI bumped from 4.6.1 to 4.7. Validated: clean headless import +
+  76/76 GUT tests pass.
+
+---
+
+## Legacy history (deprecated numbering — pre-recalibration)
+
+These releases used a scheme where the version did **not** track Euphoria parity; the
+numbers below are preserved for reference only and are not comparable to current ones.
+
 ## [0.8.5] - 2026-03-26
 
 ### Added
