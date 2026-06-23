@@ -9,6 +9,14 @@
 ## [Unreleased]
 
 ### Added
+- **`RagdollProfile` arm-chain roles** (0.4.0 Self-Preservation groundwork) — `get_arm_chain`,
+  `get_all_arm_rigs`, `get_hand_rigs`, `is_arm_rig`, `get_arm_side`, backed by overridable
+  `left_arm_chain` / `right_arm_chain` / `hand_rigs` export fields (defaulting to the Mixamo
+  shoulder→elbow→hand convention), mirroring the existing leg-chain role API. Chains
+  filter to defined bones and return empty if incomplete, so non-Mixamo rigs work by
+  overriding the fields and missing arms degrade gracefully. `validate_against_skeleton`
+  now flags arm/hand role names that don't reference a defined rig bone. The upcoming
+  `ArmIKSolver` (windmill/reach bracing) resolves arms through these roles.
 - **Directed stumble** (0.4.0 Self-Preservation) — the first *active* survival reaction.
   A staggering hit now visibly **shoves the character**: the root drifts along the hit
   direction (`stumble_push_speed`/`stumble_push_decel`) so the reaction *displaces* it,

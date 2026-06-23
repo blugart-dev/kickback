@@ -32,6 +32,12 @@ extends Resource
 @export var left_leg_chain: PackedStringArray = ["UpperLeg_L", "LowerLeg_L", "Foot_L"]
 ## Ordered right leg chain, hip→knee→foot, used by foot IK.
 @export var right_leg_chain: PackedStringArray = ["UpperLeg_R", "LowerLeg_R", "Foot_R"]
+## Rig names of the hand bodies — arm IK end effectors (brace/reach contact points).
+@export var hand_rigs: PackedStringArray = ["Hand_L", "Hand_R"]
+## Ordered left arm chain, shoulder→elbow→hand, used by arm IK (brace/windmill/reach).
+@export var left_arm_chain: PackedStringArray = ["UpperArm_L", "LowerArm_L", "Hand_L"]
+## Ordered right arm chain, shoulder→elbow→hand, used by arm IK.
+@export var right_arm_chain: PackedStringArray = ["UpperArm_R", "LowerArm_R", "Hand_R"]
 
 @export_group("Special Bones")
 ## Skeleton bone name of the root body — recursion guard for bone-chain traversal.
@@ -87,6 +93,35 @@ func get_leg_side(rig_name: String) -> String:
 	if rig_name in left_leg_chain:
 		return "L"
 	if rig_name in right_leg_chain:
+		return "R"
+	return ""
+
+## Returns the ordered arm chain (shoulder→elbow→hand) for [param side] ("L" or "R"),
+## or an empty array if the chain is incomplete (arm IK needs all three links).
+func get_arm_chain(side: String) -> PackedStringArray:
+	var chain := left_arm_chain if side == "L" else right_arm_chain
+	var present := _filter_present(chain)
+	return present if present.size() == chain.size() else PackedStringArray()
+
+## Returns every arm rig name across both sides that maps to a defined bone.
+func get_all_arm_rigs() -> PackedStringArray:
+	var out := _filter_present(left_arm_chain)
+	out.append_array(_filter_present(right_arm_chain))
+	return out
+
+## Returns the hand rig names (arm IK end effectors) that map to defined bones.
+func get_hand_rigs() -> PackedStringArray:
+	return _filter_present(hand_rigs)
+
+## True if [param rig_name] belongs to either arm chain.
+func is_arm_rig(rig_name: String) -> bool:
+	return rig_name in left_arm_chain or rig_name in right_arm_chain
+
+## Returns "L"/"R" if [param rig_name] is in an arm chain, else "".
+func get_arm_side(rig_name: String) -> String:
+	if rig_name in left_arm_chain:
+		return "L"
+	if rig_name in right_arm_chain:
 		return "R"
 	return ""
 
@@ -243,6 +278,8 @@ func validate_against_skeleton(skeleton: Skeleton3D) -> PackedStringArray:
 	var list_roles := {
 		"torso_rigs": torso_rigs, "foot_rigs": foot_rigs,
 		"left_leg_chain": left_leg_chain, "right_leg_chain": right_leg_chain,
+		"hand_rigs": hand_rigs,
+		"left_arm_chain": left_arm_chain, "right_arm_chain": right_arm_chain,
 	}
 	for role_name: String in list_roles:
 		for rig: String in list_roles[role_name]:

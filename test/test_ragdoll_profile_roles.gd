@@ -37,6 +37,43 @@ func test_leg_membership_and_side():
 	assert_eq(p.get_leg_side("Head"), "")
 
 
+# ── Arm chains (mirror the leg-chain API, for arm IK / bracing) ──────────────
+
+func test_default_arm_roles():
+	var p := RagdollProfile.create_mixamo_default()
+	assert_eq(p.get_hand_rigs(), PackedStringArray(["Hand_L", "Hand_R"]))
+	assert_eq(p.get_arm_chain("L"), PackedStringArray(["UpperArm_L", "LowerArm_L", "Hand_L"]))
+	assert_eq(p.get_arm_chain("R"), PackedStringArray(["UpperArm_R", "LowerArm_R", "Hand_R"]))
+	assert_eq(p.get_all_arm_rigs().size(), 6)
+
+
+func test_arm_membership_and_side():
+	var p := RagdollProfile.create_mixamo_default()
+	assert_true(p.is_arm_rig("Hand_L"))
+	assert_true(p.is_arm_rig("UpperArm_R"))
+	assert_false(p.is_arm_rig("Foot_L"))
+	assert_eq(p.get_arm_side("Hand_L"), "L")
+	assert_eq(p.get_arm_side("LowerArm_R"), "R")
+	assert_eq(p.get_arm_side("Head"), "")
+
+
+func test_arm_chain_filters_incomplete():
+	# Only part of the left arm exists → the chain is dropped (arm IK needs all three).
+	var p := _profile_with_rigs(["UpperArm_L", "LowerArm_L"])  # no Hand_L
+	assert_eq(p.get_arm_chain("L"), PackedStringArray())
+	assert_eq(p.get_hand_rigs(), PackedStringArray())
+
+
+func test_custom_arm_overrides():
+	var p := _profile_with_rigs(["l_clavicle", "l_uparm", "l_forearm", "l_hand"])
+	p.left_arm_chain = PackedStringArray(["l_uparm", "l_forearm", "l_hand"])
+	p.hand_rigs = PackedStringArray(["l_hand"])
+	assert_eq(p.get_arm_chain("L"), PackedStringArray(["l_uparm", "l_forearm", "l_hand"]))
+	assert_eq(p.get_hand_rigs(), PackedStringArray(["l_hand"]))
+	assert_true(p.is_arm_rig("l_forearm"))
+	assert_eq(p.get_arm_side("l_hand"), "L")
+
+
 # ── Root skeleton bone derivation (replaces hardcoded "mixamorig_Hips") ──────
 
 func test_root_skeleton_bone_derived():
