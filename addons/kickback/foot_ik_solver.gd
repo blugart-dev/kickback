@@ -290,7 +290,7 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	# Solve left leg (use pinned XZ for foot target)
 	if _ik_weight_l > 0.01:
 		var ft := Vector3(foot_xz_l.x, gpos_l.y + _tuning.foot_ik_ankle_height, foot_xz_l.y)
-		var ik := _solve_two_bone_ik(upper_l.origin + ps, ft, lower_l.origin + ps, gnorm_l, foot_l)
+		var ik := _solve_two_bone_ik(upper_l, lower_l, foot_l, ft, gnorm_l, ps)
 		if not ik.is_empty():
 			_blend_leg(overrides, _upper_l, _lower_l, _foot_l,
 				upper_l, lower_l, foot_l, ik, _ik_weight_l, ps)
@@ -298,7 +298,7 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	# Solve right leg
 	if _ik_weight_r > 0.01:
 		var ft := Vector3(foot_xz_r.x, gpos_r.y + _tuning.foot_ik_ankle_height, foot_xz_r.y)
-		var ik := _solve_two_bone_ik(upper_r.origin + ps, ft, lower_r.origin + ps, gnorm_r, foot_r)
+		var ik := _solve_two_bone_ik(upper_r, lower_r, foot_r, ft, gnorm_r, ps)
 		if not ik.is_empty():
 			_blend_leg(overrides, _upper_r, _lower_r, _foot_r,
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
@@ -320,9 +320,20 @@ func _anim_global(bone_idx: int, sg: Transform3D) -> Transform3D:
 
 # ── Two-bone IK solver (law of cosines) ───────────────────────────────────
 
-func _solve_two_bone_ik(hip_pos: Vector3, foot_target: Vector3,
-		knee_hint: Vector3, ground_normal: Vector3,
-		foot_anim: Transform3D) -> Dictionary:
+## Solves the leg as a correction OF the animation pose: it computes where the
+## knee/foot should go (positions, via law of cosines) and then expresses each
+## segment's orientation as a SWING of that segment's animation basis onto the new
+## bone direction. This is convention-agnostic — when the IK direction equals the
+## animation direction (no adjustment needed), the swing is identity and the target
+## equals the animation pose, so there is no spurious rotation error for the spring
+## to chase. (Building bases from scratch with an assumed local-axis convention
+## produced ~130° steady orientation errors against Mixamo bones → idle leg buzz.)
+## [param upper_anim]/[param lower_anim]/[param foot_anim] are world-space animation
+## globals; [param ps] is the pelvis shift applied to the position chain.
+func _solve_two_bone_ik(upper_anim: Transform3D, lower_anim: Transform3D,
+		foot_anim: Transform3D, foot_target: Vector3, ground_normal: Vector3,
+		ps: Vector3) -> Dictionary:
+	var hip_pos := upper_anim.origin + ps
 	var cv := foot_target - hip_pos
 	var cl := cv.length()
 	var mx := _upper_leg_len + _lower_leg_len - 0.01
@@ -336,7 +347,9 @@ func _solve_two_bone_ik(hip_pos: Vector3, foot_target: Vector3,
 	ch = clampf(ch, -1.0, 1.0)
 	var ho := acos(ch)
 
-	# Knee direction from hint
+	# Bend plane from the animation knee direction (keeps the knee bending the way
+	# the animation already does).
+	var knee_hint := lower_anim.origin + ps
 	var cd := cv.normalized()
 	var kf := (knee_hint - hip_pos).normalized()
 	var side := cd.cross(kf).normalized()
@@ -346,17 +359,19 @@ func _solve_two_bone_ik(hip_pos: Vector3, foot_target: Vector3,
 		side = cd.cross(Vector3.RIGHT).normalized()
 	var bd := side.cross(cd).normalized()
 
-	# Upper and lower leg positions
+	# Upper/lower leg directions and the knee position between them.
 	var ud := (cd * cos(ho) + bd * sin(ho)).normalized()
 	var kp := hip_pos + ud * _upper_leg_len
 	var ld := (foot_target - kp).normalized()
 
-	# Build transforms
-	var ux := Transform3D(_basis_looking_along(ud, side), hip_pos)
-	var lx := Transform3D(_basis_looking_along(ld, side), kp)
+	# Orientation as a swing of the animation basis onto the new bone direction.
+	var anim_upper_dir := (lower_anim.origin - upper_anim.origin).normalized()
+	var anim_lower_dir := (foot_anim.origin - lower_anim.origin).normalized()
+	var ux := Transform3D(Basis(_swing(anim_upper_dir, ud)) * upper_anim.basis, hip_pos)
+	var lx := Transform3D(Basis(_swing(anim_lower_dir, ld)) * lower_anim.basis, kp)
 
-	# Foot rotation: apply slope delta to animation pose
-	# On flat ground (normal=UP) this is identity — no correction
+	# Foot rotation: apply slope delta to the animation pose.
+	# On flat ground (normal=UP) this is identity — no correction.
 	var slope_correction := Quaternion(Vector3.UP, ground_normal.normalized())
 	var fb := Basis(slope_correction) * foot_anim.basis
 	var fx := Transform3D(fb, foot_target)
@@ -364,13 +379,23 @@ func _solve_two_bone_ik(hip_pos: Vector3, foot_target: Vector3,
 	return {"upper": ux, "lower": lx, "foot": fx}
 
 
-func _basis_looking_along(dir: Vector3, hint_side: Vector3) -> Basis:
-	var d := dir.normalized()
-	var s := d.cross(Vector3.UP).normalized()
-	if s.length_squared() < 0.001:
-		s = hint_side.normalized()
-	var f := s.cross(d).normalized()
-	return Basis(s, -d, f)
+## Shortest-arc rotation from [param from] to [param to], hardened against the zero
+## and antiparallel degeneracies that the bare Quaternion(from, to) constructor
+## asserts on.
+func _swing(from: Vector3, to: Vector3) -> Quaternion:
+	if from.length_squared() < 0.0001 or to.length_squared() < 0.0001:
+		return Quaternion.IDENTITY
+	var f := from.normalized()
+	var t := to.normalized()
+	var d := f.dot(t)
+	if d > 0.9999:
+		return Quaternion.IDENTITY
+	if d < -0.9999:
+		var axis := f.cross(Vector3.UP)
+		if axis.length_squared() < 0.0001:
+			axis = f.cross(Vector3.RIGHT)
+		return Quaternion(axis.normalized(), PI)
+	return Quaternion(f, t)
 
 
 # ── Leg blend helper ───────────────────────────────────────────────────────
