@@ -6,6 +6,24 @@
 > **Legacy history** below use the old, inconsistent numbering and are **not comparable**
 > to current versions.
 
+## [Unreleased]
+
+### Fixed
+- **Foot-IK idle leg buzz** — the two-bone IK solver built each leg segment's
+  orientation target from scratch with an assumed local-axis convention
+  (`_basis_looking_along` → `Basis(s, -d, f)`), which sat ~130° off the actual Mixamo
+  bone bases. The velocity spring then perpetually tried to twist the legs to those
+  joint-unreachable orientations, producing a sustained idle vibration (measured ~130°
+  upper-leg / 33° lower-leg target error, ~1–2 rad/s leg angular velocity on the ybot
+  asset at rest). The solver now expresses each segment's orientation as a **swing of
+  the animation basis** onto the IK bone direction (the same delta-from-animation
+  approach the foot already used for slope), so when no adjustment is needed the target
+  equals the animation pose (zero error). Result: target error drops to <2.5° and idle
+  leg buzz to ~0.2–0.5 rad/s. Convention-agnostic — it no longer assumes a Mixamo local
+  axis, so non-Mixamo rigs benefit too. Foot planting, pelvis drop, and leg lengths are
+  unchanged (positions were never altered). Removes `_basis_looking_along`; adds a
+  degeneracy-hardened `_swing` helper.
+
 ## [0.3.0] - 2026-06-19
 
 ### Changed
