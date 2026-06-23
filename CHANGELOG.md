@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Added
+- **0.4.0 Self-Preservation design** — [SELF_PRESERVATION.md](docs/SELF_PRESERVATION.md)
+  documents the approach for procedural stumble stepping and arm bracing: trigger windows
+  within the existing `STAGGER`/`RAGDOLL` machine, foot/arm selection from the existing
+  balance sensing, reuse of `FootIKSolver` as the foot-targeting engine, the new
+  `RagdollProfile` arm-chain roles and `ArmIKSolver` to come, and the per-PR breakdown.
+  Marked `0.4.0` in progress in [ROADMAP.md](docs/ROADMAP.md). Docs/design only — no
+  behavior change yet.
+
 ### Fixed
 - **Foot-IK idle leg buzz** — the two-bone IK solver built each leg segment's
   orientation target from scratch with an assumed local-axis convention
