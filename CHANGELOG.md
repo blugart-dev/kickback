@@ -23,6 +23,20 @@
   axis, so non-Mixamo rigs benefit too. Foot planting, pelvis drop, and leg lengths are
   unchanged (positions were never altered). Removes `_basis_looking_along`; adds a
   degeneracy-hardened `_swing` helper.
+- **Spring steady-state buzz floor** — the velocity spring converts pose error to
+  corrective velocity via `error × 60 Hz`, so any tiny *irreducible* error (e.g. a
+  planted foot the joints can't perfectly satisfy, or any slightly-imperfect target a
+  future active behavior feeds) was amplified into sustained velocity every tick — a
+  residual buzz, worst on low-strength chain-end bodies like the foot. Added a **settle
+  deadband** (`spring_angular_settle_deadband` ≈ 2.3°, `spring_linear_settle_deadband`
+  ≈ 4 mm): the spring commands zero corrective velocity within the deadband and ramps in
+  proportionally above it, so near-equilibrium error settles instead of buzzing.
+  Negligible for the large errors of real motion / hit reactions. On the ybot asset this
+  drops idle foot angular velocity from ~1.2 to ~0.18 rad/s (whole leg ≤0.31). This
+  hardens the substrate generally — every spring-target-driven behavior (foot IK, and
+  the future stumble/brace work) tolerates imperfect targets without buzzing. The
+  velocity-spring model itself is unchanged and sound (it matches Jolt's own
+  `DriveToPoseUsingKinematics`); this only stops it amplifying sub-threshold error.
 
 ## [0.3.0] - 2026-06-19
 

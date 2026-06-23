@@ -220,6 +220,16 @@ extends Resource
 @export var spring_linear_damp_base: float = 0.5
 ## Linear damping scale factor per strength ratio.
 @export var spring_linear_damp_scale: float = 1.5
+## Angular settle deadband (radians). The spring commands NO corrective angular
+## velocity while a bone is within this much of its target orientation, then ramps
+## in proportionally above it. Kills the steady-state buzz where a tiny irreducible
+## error (e.g. a planted foot the joints can't perfectly satisfy) is otherwise
+## amplified into sustained velocity every tick. Negligible during real motion/hits
+## (errors are far larger). 0.0 = disabled. ~0.04 rad ≈ 2.3°.
+@export_range(0.0, 0.2) var spring_angular_settle_deadband: float = 0.04
+## Linear settle deadband (meters). Position-spring analogue of
+## [member spring_angular_settle_deadband]. 0.0 = disabled.
+@export_range(0.0, 0.05) var spring_linear_settle_deadband: float = 0.004
 
 # ── Advanced: Directional Bracing ───────────────────────────────────────────
 
