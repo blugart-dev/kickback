@@ -47,6 +47,19 @@ var _stagger_pinning: bool = false
 var _pin_pos_l: Vector3 = Vector3.ZERO
 var _pin_pos_r: Vector3 = Vector3.ZERO
 
+# Stumble stepping (0.4.0 Self-Preservation): animate a pinned foot's target from
+# its current position to a step goal over a duration, then hold (the foot is now
+# planted at the new spot). Only XZ matters — the solve ground-snaps Y by raycast.
+var _step_active_l: bool = false
+var _step_active_r: bool = false
+var _step_from_l: Vector3 = Vector3.ZERO
+var _step_from_r: Vector3 = Vector3.ZERO
+var _step_to_l: Vector3 = Vector3.ZERO
+var _step_to_r: Vector3 = Vector3.ZERO
+var _step_t_l: float = 0.0
+var _step_t_r: float = 0.0
+var _step_duration: float = 0.25
+
 # Per-solve scratch buffers, reused to avoid per-frame allocations.
 #   _anim_cache:   bone_idx → world-space animation global, rebuilt each solve so
 #                  no bone's parent chain is walked more than once per frame.
@@ -155,6 +168,7 @@ func process_stagger(delta: float) -> void:
 	if not _stagger_pinning:
 		_blend_out(delta)
 		return
+	_advance_steps(delta)
 	_disable_foot_collision()
 	_boost_leg_strength()
 	_solve_ik(delta, true)
@@ -162,6 +176,62 @@ func process_stagger(delta: float) -> void:
 
 func end_stagger() -> void:
 	_stagger_pinning = false
+	_clear_steps()
+
+
+# ── Stumble stepping (0.4.0 Self-Preservation) ─────────────────────────────
+
+## Starts a stumble recovery step: the foot named [param foot_rig] swings from its
+## current pinned position to [param target] (a world-space ground-plane goal) over
+## [param duration] seconds, then stays planted there. The controller decides when,
+## which foot, and where (see [StumblePlanner]); this just animates the foot pin.
+## Requires stagger pinning to be active (the foot must be pinned to move it).
+## Returns true if the step started, false if it can't (not pinning, or the foot
+## isn't one of this rig's two feet).
+func begin_stumble(foot_rig: String, target: Vector3, duration: float) -> bool:
+	if not _initialized or not _stagger_pinning:
+		return false
+	_step_duration = maxf(duration, 0.01)
+	if foot_rig == _foot_l:
+		_step_from_l = _pin_pos_l
+		_step_to_l = target
+		_step_t_l = 0.0
+		_step_active_l = true
+		return true
+	if foot_rig == _foot_r:
+		_step_from_r = _pin_pos_r
+		_step_to_r = target
+		_step_t_r = 0.0
+		_step_active_r = true
+		return true
+	return false
+
+
+## True while either foot is mid-step.
+func is_stepping() -> bool:
+	return _step_active_l or _step_active_r
+
+
+## Advances any active step, moving the foot's pin target from→to over the step
+## duration with a smoothstep ease, then planting it at the goal.
+func _advance_steps(delta: float) -> void:
+	if _step_active_l:
+		_step_t_l = minf(_step_t_l + delta / _step_duration, 1.0)
+		_pin_pos_l = _step_from_l.lerp(_step_to_l, smoothstep(0.0, 1.0, _step_t_l))
+		if _step_t_l >= 1.0:
+			_pin_pos_l = _step_to_l
+			_step_active_l = false
+	if _step_active_r:
+		_step_t_r = minf(_step_t_r + delta / _step_duration, 1.0)
+		_pin_pos_r = _step_from_r.lerp(_step_to_r, smoothstep(0.0, 1.0, _step_t_r))
+		if _step_t_r >= 1.0:
+			_pin_pos_r = _step_to_r
+			_step_active_r = false
+
+
+func _clear_steps() -> void:
+	_step_active_l = false
+	_step_active_r = false
 
 
 func _blend_out(delta: float) -> void:
@@ -182,6 +252,7 @@ func reset() -> void:
 	_ik_weight_r = 0.0
 	_pelvis_offset = 0.0
 	_stagger_pinning = false
+	_clear_steps()
 	_restore_foot_collision()
 
 

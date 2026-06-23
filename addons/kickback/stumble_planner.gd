@@ -53,3 +53,20 @@ static func compute_step_target(foot_pos: Vector3, imbalance_dir: Vector2,
 	var dir := imbalance_dir.normalized()
 	var dist := clampf(step_length * maxf(balance_ratio, 0.0), 0.0, maxf(reach_max, 0.0))
 	return foot_pos + Vector3(dir.x, 0.0, dir.y) * dist
+
+
+## Pure gate deciding whether a stumble step should be attempted this frame, given
+## the current [param balance_ratio] and gating state. A step fires only in the band
+## between "wobbling" ([param step_threshold]) and "tipping over"
+## ([param ragdoll_threshold] — past it the character ragdolls instead), while not in
+## the per-step cooldown ([param cooldown_remaining] <= 0) and under the
+## [param max_steps] cap. Kept pure so the gating is unit-testable without a live rig.
+static func can_step(balance_ratio: float, step_threshold: float, ragdoll_threshold: float,
+		cooldown_remaining: float, step_count: int, max_steps: int) -> bool:
+	if cooldown_remaining > 0.0:
+		return false
+	if step_count >= max_steps:
+		return false
+	if balance_ratio < step_threshold or balance_ratio > ragdoll_threshold:
+		return false
+	return true

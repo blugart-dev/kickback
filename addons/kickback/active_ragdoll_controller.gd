@@ -58,6 +58,8 @@ var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery star
 var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _balance_stable_timer: float = 0.0
+var _stumble_step_count: int = 0  # Catch-steps taken this stagger (vs stumble_max_steps).
+var _stumble_cooldown: float = 0.0  # Time remaining before the next step may fire.
 var _fatigue: float = 0.0
 var _pain: float = 0.0
 var _last_hit_time: float = 0.0
@@ -115,6 +117,10 @@ signal threat_anticipated(direction: Vector3, urgency: float)
 ## Emitted when a bone region sustains injury from a significant hit.
 ## Injuries persist longer than spring recovery and cause functional impairment.
 signal region_injured(rig_name: String, severity: float)
+## Emitted when a stumble recovery step begins during stagger. [param foot_rig] is
+## the stepping foot; [param target] is the world-space step goal. Connect for step
+## footstep SFX or a step animation hint. (0.4.0 Self-Preservation.)
+signal stumble_step_started(foot_rig: String, target: Vector3)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -323,6 +329,12 @@ func _update_stagger(delta: float) -> void:
 	balance_changed.emit(balance)
 
 	if has_support:
+		# Active self-preservation: try to take a recovery step before tipping over.
+		# A successful step shifts the support polygon under the falling CoM, dropping
+		# the balance ratio back below the ragdoll threshold (the catch worked). If it
+		# can't keep up, the tip-over check below still ragdolls (the catch failed).
+		_try_stumble_step(delta, balance_state)
+
 		# Too far off-balance → ragdoll (tipping over). Hard cap: if the budget
 		# denies the slot, keep fighting in stagger instead of a full fall — and
 		# retry on later frames, so it ragdolls as soon as a slot frees up.
@@ -343,6 +355,52 @@ func _update_stagger(delta: float) -> void:
 	# Fallback: timer-based stagger end (safety net, and the sole exit without support)
 	if _stagger_elapsed >= _tuning.stagger_duration:
 		_finish_stagger()
+
+
+## Attempts a stumble recovery step (0.4.0 Self-Preservation). Fires only in the
+## band between "wobbling" ([member RagdollTuning.stumble_step_threshold]) and
+## "tipping over" ([member RagdollTuning.balance_ragdoll_threshold]), gated by a
+## per-step cooldown and a max step count. The decision (which foot, where) is the
+## pure [StumblePlanner]; execution is the foot IK solver. Requires foot IK to be
+## pinning (the step moves a pinned foot), so it is a no-op without foot IK.
+func _try_stumble_step(delta: float, balance_state: Dictionary) -> void:
+	if not _tuning.stumble_enabled or not _foot_ik:
+		return
+	# Per-step cooldown ticks down so catch-steps are discrete, not a sliding foot.
+	if _stumble_cooldown > 0.0:
+		_stumble_cooldown = maxf(_stumble_cooldown - delta, 0.0)
+	# Pure gate: trigger band + cooldown + step cap (see StumblePlanner.can_step).
+	if not StumblePlanner.can_step(balance_state.balance_ratio, _tuning.stumble_step_threshold,
+			_tuning.balance_ragdoll_threshold, _stumble_cooldown, _stumble_step_count,
+			_tuning.stumble_max_steps):
+		return
+	var imbalance_dir: Vector2 = balance_state.imbalance_dir
+	if imbalance_dir.length_squared() < 0.0001:
+		return
+
+	# Collect current foot world positions (role-driven, multi-rig safe).
+	var bodies := _rig_builder.get_bodies()
+	var foot_positions: Dictionary = {}
+	for foot_rig: String in _foot_rigs:
+		var fb: RigidBody3D = bodies.get(foot_rig)
+		if fb:
+			foot_positions[foot_rig] = fb.global_position
+
+	var step_foot := StumblePlanner.select_step_foot(
+		imbalance_dir, foot_positions, balance_state.support_center)
+	if step_foot.is_empty():
+		return
+	var target := StumblePlanner.compute_step_target(
+		foot_positions[step_foot], imbalance_dir, balance_state.balance_ratio,
+		_tuning.stumble_step_length, _tuning.stumble_step_reach_max)
+
+	# Execution lives in the foot IK solver; it refuses (false) if it can't move the
+	# foot (e.g. not pinning), in which case we don't burn a step or the cooldown.
+	if not _foot_ik.begin_stumble(step_foot, target, _tuning.stumble_step_duration):
+		return
+	_stumble_step_count += 1
+	_stumble_cooldown = _tuning.stumble_step_cooldown
+	stumble_step_started.emit(step_foot, target)
 
 
 func _update_ragdoll(delta: float) -> void:
@@ -821,6 +879,8 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
 	_balance_stable_timer = 0.0
+	_stumble_step_count = 0
+	_stumble_cooldown = 0.0
 	_reaction_pulses.clear()
 
 	# Moving characters stagger in their movement direction, not just hit direction

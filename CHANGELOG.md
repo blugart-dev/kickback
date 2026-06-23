@@ -18,6 +18,17 @@
   `stumble_step_length`, `stumble_step_reach_max`, `stumble_step_duration`,
   `stumble_step_cooldown`, `stumble_max_steps`). Decision + tuning only — execution
   (driving the foot through the foot IK solver) and controller wiring land in the next PR.
+- **Stumble-step execution** (0.4.0 Self-Preservation) — the first *active* survival
+  behavior is now live. During `STAGGER`, when the centre-of-mass tips into the band
+  between wobbling (`stumble_step_threshold`) and tipping over
+  (`balance_ragdoll_threshold`), the controller drives the trailing foot to a recovery
+  step through the foot IK solver, shifting the support polygon under the falling CoM so
+  the character can catch itself before falling. `FootIKSolver.begin_stumble()` animates
+  the pinned foot to the step goal (smoothstep over `stumble_step_duration`) then plants
+  it; `StumblePlanner.can_step()` is the pure trigger/cooldown/cap gate. New
+  `stumble_step_started(foot_rig, target)` signal. Integration-tested end-to-end on a
+  live rig (`test/test_stumble_step.gd`); the gate is unit-tested in
+  `test/test_stumble_planner.gd`. Suite 113 → 131.
 
 ### Fixed
 - **Foot-IK idle leg buzz** — the two-bone IK solver built each leg segment's

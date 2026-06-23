@@ -85,3 +85,32 @@ func test_target_unchanged_without_imbalance():
 	var origin := Vector3(1, 0.5, 2)
 	var t := StumblePlanner.compute_step_target(origin, Vector2.ZERO, 1.0, 0.4, 0.6)
 	assert_eq(t, origin, "no fall direction → target is the foot's current position")
+
+
+# ── can_step (the pure trigger/cooldown/cap gate) ───────────────────────────
+# Args: (balance_ratio, step_threshold, ragdoll_threshold, cooldown_remaining,
+#        step_count, max_steps)
+
+func test_can_step_in_band():
+	assert_true(StumblePlanner.can_step(0.7, 0.6, 0.85, 0.0, 0, 2),
+		"in the band, off cooldown, under the cap → step")
+
+
+func test_no_step_below_threshold():
+	assert_false(StumblePlanner.can_step(0.5, 0.6, 0.85, 0.0, 0, 2),
+		"below the step threshold → merely wobbling, no step")
+
+
+func test_no_step_above_ragdoll_threshold():
+	assert_false(StumblePlanner.can_step(0.9, 0.6, 0.85, 0.0, 0, 2),
+		"past the tip-over point → ragdoll, not step")
+
+
+func test_no_step_during_cooldown():
+	assert_false(StumblePlanner.can_step(0.7, 0.6, 0.85, 0.1, 0, 2),
+		"cooldown still running → no step")
+
+
+func test_no_step_at_max_steps():
+	assert_false(StumblePlanner.can_step(0.7, 0.6, 0.85, 0.0, 2, 2),
+		"already at the step cap → no step")
