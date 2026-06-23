@@ -29,7 +29,7 @@ figure is **~30%**.)
 | Version | Theme | Delivers |
 |---------|-------|----------|
 | **0.3.x** | Re-baseline + hardening | Honest docs & scorecard, plus the hardening batch: fixed silent multi-rig degradation, wired the budget manager (hard cap), added runtime smoke tests, generalized beyond Mixamo, and migrated `PhysicsRigSync` to a `SkeletonModifier3D`. See *Known hardening items* for what's resolved vs still open. |
-| **0.4.0** | Self-Preservation | Procedural stumble steps + arm bracing — the first *active* survival behaviors. |
+| **0.4.0** 🚧 | Self-Preservation | Directed stumble (shipped) + arm bracing (next) — the first *active* survival behaviors. **In progress** — see [SELF_PRESERVATION.md](SELF_PRESERVATION.md). |
 | **0.5.0** | Environmental Awareness | Wall/surface bracing + ground crawling. |
 | **0.6.0** | World Interaction | Environmental grabbing (IK reach + physics pins to grab points). |
 | **0.7.0** | Procedural Poses (core) | Replace canned recovery blends with target-seeking generated poses. |

@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Added
+- **Directed stumble** (0.4.0 Self-Preservation) — the first *active* survival reaction.
+  A staggering hit now visibly **shoves the character**: the root drifts along the hit
+  direction (`stumble_push_speed`/`stumble_push_decel`) so the reaction *displaces* it,
+  the **trailing foot steps** to follow — placed ahead of the hips, kept in its own lane
+  (no crossing), and lifted along an arc (`stumble_step_lift`) so it steps rather than
+  slides — and the **lower body stiffens** (`stumble_brace_strength`) to stay upright
+  while the **upper body stays loose** and reacts to the momentum. The character commits
+  to the reaction (the tip-over→ragdoll transition is suspended while stumbling) and ends
+  up at a new position before recovering to idle; strong hits still ragdoll, light hits
+  just wobble. New `RagdollTuning` "Self-Preservation: Stumble Steps" group;
+  `FootIKSolver.begin_stumble()`/`is_stepping()` (reusing the stagger pin/IK plumbing);
+  `stumble_step_started(foot_rig, target)` signal. Design + the emergent→directed pivot
+  recorded in [docs/SELF_PRESERVATION.md](docs/SELF_PRESERVATION.md); `0.4.0` marked in
+  progress in [ROADMAP.md](docs/ROADMAP.md). Arm bracing (the upper-body active layer) is
+  next.
+
 ### Fixed
 - **Foot-IK idle leg buzz** — the two-bone IK solver built each leg segment's
   orientation target from scratch with an assumed local-axis convention
