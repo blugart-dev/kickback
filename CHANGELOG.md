@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+### Added
+- **Stumble-step decision logic** (0.4.0 Self-Preservation) — `StumblePlanner`, the
+  pure, stateless decision core for procedural stumble recovery: given the balance
+  imbalance direction and foot positions it selects the trailing foot to step and
+  computes a balance-scaled, reach-clamped step target. Side-effect-free and
+  unit-tested without a live rig (`test/test_stumble_planner.gd`). New `RagdollTuning`
+  "Self-Preservation: Stumble Steps" group (`stumble_enabled`, `stumble_step_threshold`,
+  `stumble_step_length`, `stumble_step_reach_max`, `stumble_step_duration`,
+  `stumble_step_cooldown`, `stumble_max_steps`). Decision + tuning only — execution
+  (driving the foot through the foot IK solver) and controller wiring land in the next PR.
+
 ### Fixed
 - **Foot-IK idle leg buzz** — the two-bone IK solver built each leg segment's
   orientation target from scratch with an assumed local-axis convention

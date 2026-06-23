@@ -358,6 +358,34 @@ extends Resource
 @export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
+# ── Self-Preservation: Stumble Steps ────────────────────────────────────────
+
+@export_group("Self-Preservation: Stumble Steps")
+## Enable procedural stumble stepping: during STAGGER, the trailing foot swings in
+## the fall direction to catch a loss of balance before it becomes a fall.
+## Requires foot IK (the step is executed through the foot IK solver). 0.4.0.
+@export var stumble_enabled: bool = true
+## Balance ratio above which a stumble step is attempted. Sits BETWEEN
+## [member balance_recovery_threshold] and [member balance_ragdoll_threshold]:
+## the character is past wobbling and heading toward a fall, but a well-placed step
+## could still save it. Above [member balance_ragdoll_threshold] it ragdolls instead.
+@export_range(0.0, 1.0) var stumble_step_threshold: float = 0.6
+## Base horizontal step distance (meters), scaled by balance ratio so a harder tip
+## takes a bigger step.
+@export_range(0.0, 1.0) var stumble_step_length: float = 0.35
+## Maximum horizontal reach of a step target from the foot's current position
+## (meters). Clamps the balance-scaled step so the leg never overstretches.
+@export_range(0.1, 1.5) var stumble_step_reach_max: float = 0.6
+## Time for the stepping foot to travel from its current position to the step
+## target (seconds).
+@export_range(0.05, 1.0) var stumble_step_duration: float = 0.25
+## Minimum time between consecutive stumble steps (seconds). Produces discrete
+## catch-steps rather than a foot sliding continuously.
+@export_range(0.0, 1.0) var stumble_step_cooldown: float = 0.3
+## Maximum number of catch-steps in one stagger before giving up and ragdolling.
+@export_range(1, 5) var stumble_max_steps: int = 2
+
+
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:
