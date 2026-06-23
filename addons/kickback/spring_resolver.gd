@@ -167,7 +167,13 @@ func _physics_process(delta: float) -> void:
 		if pin_injury > 0.0:
 			pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
 		var pos_error := target_xform.origin - current_xform.origin
-		body.linear_velocity = body.linear_velocity.lerp(pos_error * _REFERENCE_HZ, _fr_weight(pin, delta))
+		# Linear settle deadband (see _apply_angular_spring): zero corrective velocity
+		# within the deadband, ramping in above it, to kill the position-spring buzz floor.
+		var dist := pos_error.length()
+		var lin_target := Vector3.ZERO
+		if dist > 0.0001:
+			lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
+		body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
 
 		if body.angular_velocity.length_squared() > _max_angular_vel_sq:
 			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
@@ -194,7 +200,13 @@ func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Tran
 	if axis_raw.length_squared() < 0.0001 or angle < 0.001:
 		return
 
-	var target_vel := (axis_raw.normalized() * angle) * _REFERENCE_HZ
+	# Settle deadband: command NO correction within the deadband, then ramp in
+	# proportionally above it. A tiny irreducible steady-state error (e.g. a planted
+	# foot the joints can't perfectly satisfy) would otherwise be amplified by the
+	# ×_REFERENCE_HZ conversion into sustained velocity every tick — the idle buzz.
+	# Negligible for the large errors of real motion / hit reactions.
+	var eff_angle := maxf(angle - _tuning.spring_angular_settle_deadband, 0.0)
+	var target_vel := (axis_raw.normalized() * eff_angle) * _REFERENCE_HZ
 	body.angular_velocity = body.angular_velocity.lerp(target_vel, _fr_weight(strength, delta))
 
 
