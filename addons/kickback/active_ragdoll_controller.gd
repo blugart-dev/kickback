@@ -58,6 +58,11 @@ var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery star
 var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _balance_stable_timer: float = 0.0
+var _stumble_step_count: int = 0  # Steps taken this stumble (vs stumble_max_steps).
+var _stumbling: bool = false  # In an active directed stumble (suspends tip-over ragdoll).
+var _stumble_dir: Vector3 = Vector3.ZERO  # Horizontal knockback direction of the stumble.
+var _stumble_drift: float = 0.0  # Current knockback drift speed (m/s), decays to 0.
+var _stumble_dist_since_step: float = 0.0  # Drift distance accumulated toward the next step.
 var _fatigue: float = 0.0
 var _pain: float = 0.0
 var _last_hit_time: float = 0.0
@@ -115,6 +120,10 @@ signal threat_anticipated(direction: Vector3, urgency: float)
 ## Emitted when a bone region sustains injury from a significant hit.
 ## Injuries persist longer than spring recovery and cause functional impairment.
 signal region_injured(rig_name: String, severity: float)
+## Emitted when a stumble recovery step begins during stagger. [param foot_rig] is
+## the stepping foot; [param target] is the world-space step goal. Connect for step
+## footstep SFX or a step animation hint. (0.4.0 Self-Preservation.)
+signal stumble_step_started(foot_rig: String, target: Vector3)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -322,11 +331,18 @@ func _update_stagger(delta: float) -> void:
 	var has_support: bool = balance_state.has_support
 	balance_changed.emit(balance)
 
+	# Directed stumble: a staggering hit knocks the character along the hit direction
+	# (visible displacement) with the feet stepping to follow, while the body stiffens
+	# to stay upright. Runs regardless of measured support (it's hit-driven, not
+	# balance-driven) and COMMITS — the tip-over→ragdoll transition is suspended while
+	# stumbling so the reaction plays out instead of collapsing mid-step.
+	_update_directed_stumble(delta)
+
 	if has_support:
-		# Too far off-balance → ragdoll (tipping over). Hard cap: if the budget
-		# denies the slot, keep fighting in stagger instead of a full fall — and
-		# retry on later frames, so it ragdolls as soon as a slot frees up.
-		if balance > _tuning.balance_ragdoll_threshold:
+		# Too far off-balance → ragdoll (tipping over), unless mid-stumble. Hard cap: if
+		# the budget denies the slot, keep fighting in stagger instead of a full fall —
+		# and retry on later frames, so it ragdolls as soon as a slot frees up.
+		if balance > _tuning.balance_ragdoll_threshold and not _stumbling:
 			if _try_acquire_ragdoll_slot():
 				_full_ragdoll()
 				return
@@ -343,6 +359,100 @@ func _update_stagger(delta: float) -> void:
 	# Fallback: timer-based stagger end (safety net, and the sole exit without support)
 	if _stagger_elapsed >= _tuning.stagger_duration:
 		_finish_stagger()
+
+
+## Drives the directed stumble (0.4.0 Self-Preservation): a staggering hit knocks the
+## character root along the hit direction so the reaction visibly DISPLACES it, with
+## the feet stepping to follow and the body stiffening to stay upright. The drift
+## decays (momentum absorbed) over [member RagdollTuning.stumble_push_decel]; a step
+## fires every [member RagdollTuning.stumble_step_length] of travel (trailing foot,
+## up to [member RagdollTuning.stumble_max_steps]). Ends when the drift is spent and no
+## step is in flight. While stumbling ([member _stumbling]) the caller suspends the
+## tip-over→ragdoll transition so the reaction plays out. No-op without foot-IK pinning.
+func _update_directed_stumble(delta: float) -> void:
+	if not _stumbling:
+		return
+	if not _tuning.stumble_enabled or not _foot_ik or not _character_root:
+		_stumbling = false
+		return
+
+	# Drift the root along the hit direction (horizontal), decaying the speed.
+	if _stumble_drift > 0.01:
+		var step_move := _stumble_dir * _stumble_drift * delta
+		_character_root.global_position += step_move
+		_stumble_dist_since_step += step_move.length()
+		_stumble_drift = maxf(_stumble_drift - _tuning.stumble_push_decel * delta, 0.0)
+
+	# Pace a step every step_length of travel so the feet keep up with the body.
+	if _stumble_step_count < _tuning.stumble_max_steps \
+			and _stumble_dist_since_step >= _tuning.stumble_step_length \
+			and not _foot_ik.is_stepping():
+		_do_directed_step()
+		_stumble_dist_since_step = 0.0
+
+	# Stiffen the lower body so it stays upright as it lurches, while the upper body
+	# stays loose and reacts (differential stiffness — see _apply_stumble_brace).
+	_apply_stumble_brace()
+
+	# Stumble is over once the momentum is spent and the last step has planted.
+	if _stumble_drift <= 0.01 and not _foot_ik.is_stepping():
+		_stumbling = false
+
+
+## Steps the trailing foot (the one furthest back along the stumble direction) forward
+## in that direction, through the foot IK solver. Returns nothing; bumps the step count
+## and emits [signal stumble_step_started] when a step starts.
+func _do_directed_step() -> void:
+	var bodies := _rig_builder.get_bodies()
+	var step_foot := ""
+	var lowest := INF
+	var dir2 := Vector2(_stumble_dir.x, _stumble_dir.z)
+	for foot_rig: String in _foot_rigs:
+		var fb: RigidBody3D = bodies.get(foot_rig)
+		if not fb:
+			continue
+		var d := Vector2(fb.global_position.x, fb.global_position.z).dot(dir2)
+		if d < lowest:
+			lowest = d
+			step_foot = foot_rig
+	if step_foot.is_empty():
+		return
+	var fb: RigidBody3D = bodies[step_foot]
+
+	# Place the step ahead of the HIPS in the stumble direction, but PRESERVE the
+	# foot's lateral offset (its left/right side of the body) so the feet stay in their
+	# own lanes and don't cross. Plant a step ahead of the body so it catches the drift.
+	var hips: RigidBody3D = bodies.get(_root_rig)
+	var center: Vector3 = hips.global_position if hips else fb.global_position
+	var perp := Vector3(-_stumble_dir.z, 0.0, _stumble_dir.x)  # 90° in the ground plane
+	var lateral := (fb.global_position - center).dot(perp)  # signed offset onto this foot's side
+	var target := center + _stumble_dir * _tuning.stumble_step_length + perp * lateral
+	target.y = fb.global_position.y  # the foot IK ground-snaps + lifts this
+	if _foot_ik.begin_stumble(step_foot, target, _tuning.stumble_step_duration):
+		_stumble_step_count += 1
+		stumble_step_started.emit(step_foot, target)
+
+
+## Differential stiffening while stumbling. Braces only the LOWER body (leg chains +
+## pelvis) toward base so it steps and holds the character upright — but deliberately
+## leaves the upper body (torso, arms, head) at the stagger floor so it stays LOOSE and
+## reacts to the hit impulse and the stumble momentum. That contrast (purposeful legs,
+## flailing upper body) is what reads as a live body caught off guard, rather than a
+## rigid mannequin sliding on stepping feet. Transient — applied only while
+## [member _stumbling]; strengths relax to the floor when the stumble ends.
+func _apply_stumble_brace() -> void:
+	var brace: float = _tuning.stumble_brace_strength
+	if brace <= 0.0:
+		return
+	for rig_name: String in _spring.get_all_bone_names():
+		if _is_bone_protected(rig_name):
+			continue
+		# Lower body only — legs (stepping + support) and the pelvis (root upright).
+		if not (_is_leg_bone(rig_name) or rig_name == _root_rig):
+			continue
+		var target := _effective_base_strength(rig_name) * brace
+		if _spring.get_bone_strength(rig_name) < target:
+			_spring.set_bone_strength(rig_name, target)
 
 
 func _update_ragdoll(delta: float) -> void:
@@ -821,6 +931,8 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
 	_balance_stable_timer = 0.0
+	_stumble_step_count = 0
+	_stumbling = false
 	_reaction_pulses.clear()
 
 	# Moving characters stagger in their movement direction, not just hit direction
@@ -833,6 +945,20 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_com_initialized = false
 	_sway_phase = randf() * TAU
 	_spring.recovery_rate = _tuning.stagger_recovery_rate
+
+	# Begin a directed stumble: knock the character along the hit direction so the
+	# reaction visibly DISPLACES it, with the feet stepping to follow. The horizontal
+	# hit direction drives both the drift and the step direction.
+	_stumble_dir = Vector3(hit_dir.x, 0.0, hit_dir.z)
+	if _tuning.stumble_enabled and _foot_ik and _character_root and _stumble_dir.length() > 0.01:
+		_stumble_dir = _stumble_dir.normalized()
+		_stumble_drift = _tuning.stumble_push_speed
+		_stumble_dist_since_step = _tuning.stumble_step_length  # step on the first frame
+		_stumbling = true
+	else:
+		_stumble_dir = Vector3.ZERO
+		_stumble_drift = 0.0
+		_stumbling = false
 
 	if _tuning.brace_strength_bonus > 0.0:
 		_apply_directional_bracing(hit_dir)
@@ -852,6 +978,8 @@ func _finish_stagger() -> void:
 	_state = State.NORMAL
 	_balance_stable_timer = 0.0
 	_com_initialized = false
+	_stumbling = false
+	_stumble_drift = 0.0
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	_disable_normal_collisions()
 	state_changed.emit(_state)

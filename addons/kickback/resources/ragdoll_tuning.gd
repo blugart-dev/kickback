@@ -358,6 +358,55 @@ extends Resource
 @export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
+# ── Self-Preservation: Stumble Steps ────────────────────────────────────────
+
+@export_group("Self-Preservation: Stumble Steps")
+## Enable procedural stumble stepping: during STAGGER, the trailing foot swings in
+## the fall direction to catch a loss of balance before it becomes a fall.
+## Requires foot IK (the step is executed through the foot IK solver). 0.4.0.
+@export var stumble_enabled: bool = true
+## Balance ratio above which a stumble catch begins. Sits BETWEEN
+## [member balance_recovery_threshold] and [member balance_ragdoll_threshold]:
+## the character is past wobbling and heading toward a fall, but a step could still
+## save it. Set low enough that the catch STARTS before the centre-of-mass is already
+## lost — once a catch is in progress the tip-over→ragdoll transition is suspended
+## (the character commits to the attempt) until balance recovers or the step budget
+## ([member stumble_max_steps]) runs out.
+@export_range(0.0, 1.0) var stumble_step_threshold: float = 0.45
+## Base horizontal step distance (meters), scaled by balance ratio so a harder tip
+## takes a bigger step.
+@export_range(0.0, 1.0) var stumble_step_length: float = 0.35
+## Maximum horizontal reach of a step target from the foot's current position
+## (meters). Clamps the balance-scaled step so the leg never overstretches.
+@export_range(0.1, 1.5) var stumble_step_reach_max: float = 0.6
+## Time for the stepping foot to travel from its current position to the step
+## target (seconds).
+@export_range(0.05, 1.0) var stumble_step_duration: float = 0.25
+## Minimum time between consecutive stumble steps (seconds). Produces discrete
+## catch-steps rather than a foot sliding continuously.
+@export_range(0.0, 1.0) var stumble_step_cooldown: float = 0.3
+## Maximum number of catch-steps in one stagger before giving up and ragdolling.
+@export_range(1, 5) var stumble_max_steps: int = 2
+## Spring strength (as a fraction of each bone's base) applied WHILE stumbling. A
+## real stumble tenses the body and steps — not a foot reposition on a limp ragdoll —
+## so during the stumble the springs stiffen toward this level so the body stays
+## upright as it lurches. Transient (only while [member _stumbling]); relaxes to the
+## stagger floor when the stumble ends. Higher = stiffer/more upright; too high reads
+## as a snap. 0.0 = no stiffening.
+@export_range(0.0, 1.0) var stumble_brace_strength: float = 0.7
+## Initial knockback speed (m/s) of the directed stumble: on a staggering hit the
+## character root drifts in the hit direction at this speed, so the stumble visibly
+## DISPLACES the character (you stumble where you're shoved) rather than shuffling in
+## place. Decays via [member stumble_push_decel]. 0.0 = no displacement (in-place).
+@export_range(0.0, 6.0) var stumble_push_speed: float = 2.0
+## Deceleration (m/s²) of the knockback drift — how fast the stumble momentum is
+## absorbed. Total stumble distance ≈ speed² / (2·decel). Higher = shorter stumble.
+@export_range(0.5, 20.0) var stumble_push_decel: float = 7.0
+## Peak height (meters) the swinging foot lifts during a stumble step, so it steps
+## over the ground instead of sliding across it. 0.0 = no lift (slides).
+@export_range(0.0, 0.3) var stumble_step_lift: float = 0.1
+
+
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:
