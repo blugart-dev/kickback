@@ -1,6 +1,6 @@
 ## Two-bone foot IK solver for planting feet on uneven terrain.
-## Uses direct math (law of cosines) computed in _physics_process, feeding
-## results to SpringResolver.set_target_overrides(). Does NOT use TwoBoneIK3D
+## Uses direct math (law of cosines) computed in _physics_process, merging its
+## results into SpringResolver's target overrides. Does NOT use TwoBoneIK3D
 ## because PhysicsRigSync contaminates SkeletonModifier3D bone pose readings.
 ##
 ## Owned by ActiveRagdollController. Called during NORMAL state (full solve),
@@ -386,7 +386,10 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 			_blend_leg(overrides, _upper_r, _lower_r, _foot_r,
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
 
-	_spring.set_target_overrides(overrides)
+	# Merge (not replace): the controller clears the override set once per frame, then
+	# the foot and arm solvers each contribute their bones. Foot runs first; arm IK
+	# overwrites the (anim-pose) arm entries this may write during a pelvis shift.
+	_spring.merge_target_overrides(overrides)
 
 
 ## Returns the world-space animation global for a bone index, memoized per solve

@@ -11,10 +11,6 @@
 class_name ArmIKSolver
 extends RefCounted
 
-# Blend rate (per second) for ramping each arm's IK weight toward its target. A
-# local constant for now; the windmill/reach feel tuning lands with the visual pass.
-const ARM_BLEND_SPEED: float = 12.0
-
 var _spring: SpringResolver
 var _tuning: RagdollTuning
 var _character_root: Node3D
@@ -174,7 +170,7 @@ func _solve(delta: float) -> void:
 	overrides.clear()
 
 	# Ramp each arm's weight toward its target (frame-rate-independent blend).
-	var blend := 1.0 - exp(-ARM_BLEND_SPEED * delta)
+	var blend := 1.0 - exp(-_tuning.arm_brace_blend_speed * delta)
 	_weight_l = lerpf(_weight_l, _target_weight_l, blend)
 	_weight_r = lerpf(_weight_r, _target_weight_r, blend)
 
@@ -183,7 +179,9 @@ func _solve(delta: float) -> void:
 	if _weight_r > 0.001:
 		_solve_arm(overrides, _upper_r, _lower_r, _hand_r, _reach_target_r, _weight_r, sg)
 
-	_spring.set_target_overrides(overrides)
+	# Merge (not replace): the controller clears the override set once per frame and the
+	# foot solver contributes first; arm runs last so it wins on any shared bone.
+	_spring.merge_target_overrides(overrides)
 
 
 ## Solves one arm toward [param target] and writes weight-blended overrides for its

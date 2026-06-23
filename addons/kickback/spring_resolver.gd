@@ -306,6 +306,14 @@ func set_target_overrides(overrides: Dictionary) -> void:
 	_target_overrides = overrides
 
 
+## Merges target pose overrides into the current set (later keys win), so several IK
+## contributors (foot + arm) can write the same frame without clobbering each other.
+## The controller clears the set once per frame before the solvers run, so stale keys
+## don't accumulate.
+func merge_target_overrides(overrides: Dictionary) -> void:
+	_target_overrides.merge(overrides, true)
+
+
 ## Clears all target pose overrides, reverting to animation-driven targets.
 func clear_target_overrides() -> void:
 	_target_overrides.clear()

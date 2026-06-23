@@ -407,6 +407,30 @@ extends Resource
 @export_range(0.0, 0.3) var stumble_step_lift: float = 0.1
 
 
+# ── Self-Preservation: Arm Bracing ──────────────────────────────────────────
+
+@export_group("Self-Preservation: Arm Bracing")
+## Enable procedural arm bracing: during a directed stumble the arms windmill (sweep
+## in wide vertical circles) to fight for balance — the active upper-body layer on top
+## of the loose flailing. Requires the arm IK solver (arm-chain roles). 0.4.0.
+@export var arm_brace_enabled: bool = true
+## Radius (meters) of the windmill circle each hand sweeps. Larger = bigger, wilder
+## arcs. Kept within the arm's reach so the solve never overstretches.
+@export_range(0.0, 0.5) var arm_windmill_radius: float = 0.32
+## Outward offset (meters) of each windmill circle from the shoulder, along the body's
+## lateral axis, so the arms circle out to their own sides instead of across the chest.
+@export_range(0.0, 0.5) var arm_windmill_lateral: float = 0.16
+## Vertical offset (meters) of each windmill circle's center above the shoulder, so the
+## arms sweep up high (a raised, balancing flail) rather than down at the hips.
+@export_range(-0.3, 0.5) var arm_windmill_height: float = 0.12
+## Angular speed (rad/s) of the windmill sweep. Higher = faster spinning arms. The two
+## arms sweep in opposite phase, so this also sets how fast they alternate.
+@export_range(0.0, 30.0) var arm_windmill_speed: float = 9.0
+## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
+## into the brace faster; lower = they ease in.
+@export_range(1.0, 40.0) var arm_brace_blend_speed: float = 12.0
+
+
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:

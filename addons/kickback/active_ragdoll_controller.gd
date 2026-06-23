@@ -78,6 +78,13 @@ var _hit_guard_bodies: Dictionary = {}
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 var _foot_ik: FootIKSolver
+var _arm_ik: ArmIKSolver
+
+# Arm bracing (0.4.0 Self-Preservation): the windmill sweep phase advances while
+# stumbling; the cached shoulder rig-names anchor each arm's windmill circle.
+var _windmill_phase: float = 0.0
+var _arm_shoulder_l: String = ""
+var _arm_shoulder_r: String = ""
 
 # Cached semantic role rig-names, resolved from the profile (see RagdollProfile roles).
 # Consumers query these instead of hardcoding "Hips"/"Foot_L"/... so non-Mixamo rigs work.
@@ -165,6 +172,11 @@ func _resolve_roles() -> void:
 	_leg_rig_set.clear()
 	for leg: String in _profile.get_all_leg_rigs():
 		_leg_rig_set[leg] = true
+	# Shoulder rig-names anchor the windmill circles (chain[0] of each arm chain).
+	var arm_l := _profile.get_arm_chain("L")
+	var arm_r := _profile.get_arm_chain("R")
+	_arm_shoulder_l = arm_l[0] if arm_l.size() == 3 else ""
+	_arm_shoulder_r = arm_r[0] if arm_r.size() == 3 else ""
 
 
 func _rebuild_protected_set() -> void:
@@ -234,6 +246,14 @@ func _physics_process(delta: float) -> void:
 				push_warning("ActiveRagdollController: foot IK disabled (missing leg bones)")
 				_foot_ik = null
 
+	# Lazy arm IK init (arm bracing — same deferral as foot IK)
+	if not _arm_ik and _tuning and _tuning.arm_brace_enabled and _character_root:
+		if not _spring.get_all_bone_names().is_empty():
+			_arm_ik = ArmIKSolver.new()
+			if not _arm_ik.initialize(_spring, _tuning, _character_root, _rig_builder, _profile):
+				push_warning("ActiveRagdollController: arm bracing disabled (missing arm bones)")
+				_arm_ik = null
+
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
 	_sync_injuries_to_resolver()
@@ -246,6 +266,14 @@ func _physics_process(delta: float) -> void:
 		State.GETTING_UP:
 			_update_recovery(delta)
 
+	# IK solvers (foot + arm) share the spring's override channel and MERGE their
+	# contributions, so clear it once per frame before they run. Only in NORMAL/STAGGER
+	# (the IK-writing states); recovery in GETTING_UP owns the channel via its own
+	# set_target_overrides. Foot solves first; arm last so it wins on any shared bone.
+	match _state:
+		State.NORMAL, State.STAGGER:
+			_spring.clear_target_overrides()
+
 	# Foot IK: solve during NORMAL, pin during STAGGER, reset otherwise
 	if _foot_ik:
 		match _state:
@@ -255,6 +283,15 @@ func _physics_process(delta: float) -> void:
 				_foot_ik.process_stagger(delta)
 			_:
 				_foot_ik.reset()
+
+	# Arm IK: run during NORMAL/STAGGER (windmill is driven from the stumble update;
+	# NORMAL keeps processing so a released brace blends out gracefully), reset otherwise
+	if _arm_ik:
+		match _state:
+			State.NORMAL, State.STAGGER:
+				_arm_ik.process(delta)
+			_:
+				_arm_ik.reset()
 
 
 func _update_fatigue_decay(delta: float) -> void:
@@ -374,6 +411,7 @@ func _update_directed_stumble(delta: float) -> void:
 		return
 	if not _tuning.stumble_enabled or not _foot_ik or not _character_root:
 		_stumbling = false
+		_end_arm_brace()
 		return
 
 	# Drift the root along the hit direction (horizontal), decaying the speed.
@@ -394,9 +432,13 @@ func _update_directed_stumble(delta: float) -> void:
 	# stays loose and reacts (differential stiffness — see _apply_stumble_brace).
 	_apply_stumble_brace()
 
+	# Windmill the arms for balance — the active upper-body layer over the loose flail.
+	_update_arm_windmill(delta)
+
 	# Stumble is over once the momentum is spent and the last step has planted.
 	if _stumble_drift <= 0.01 and not _foot_ik.is_stepping():
 		_stumbling = false
+		_end_arm_brace()  # release the windmill; the arms blend back to animation
 
 
 ## Steps the trailing foot (the one furthest back along the stumble direction) forward
@@ -453,6 +495,56 @@ func _apply_stumble_brace() -> void:
 		var target := _effective_base_strength(rig_name) * brace
 		if _spring.get_bone_strength(rig_name) < target:
 			_spring.set_bone_strength(rig_name, target)
+
+
+## Drives the arm windmill while stumbling (0.4.0 Self-Preservation): each hand sweeps
+## a wide vertical circle out to its own side, the two arms in opposite phase, so the
+## upper body actively fights for balance instead of only flailing loosely. Targets are
+## recomputed in world space each frame so the circles follow the displacing body. The
+## arm IK blends these in by weight; an unreachable point just holds the animation pose.
+func _update_arm_windmill(delta: float) -> void:
+	if not _arm_ik or not _tuning.arm_brace_enabled:
+		return
+	_windmill_phase += _tuning.arm_windmill_speed * delta
+	_drive_windmill_arm("L", _arm_shoulder_l, _windmill_phase)
+	_drive_windmill_arm("R", _arm_shoulder_r, _windmill_phase + PI)
+
+
+## Points one arm's windmill target for this frame. [param shoulder_rig] is the chain's
+## shoulder body (the circle anchor); [param phase] is its position around the sweep.
+func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float) -> void:
+	if shoulder_rig == "":
+		return
+	var bodies := _rig_builder.get_bodies()
+	var shoulder_body: RigidBody3D = bodies.get(shoulder_rig)
+	if not shoulder_body:
+		return
+	var shoulder := shoulder_body.global_position
+
+	# Outward = the shoulder's horizontal offset from the body center, so each circle
+	# sits on its own side regardless of facing (falls back to the character's lateral
+	# axis if the shoulder sits on the centerline).
+	var center_body: RigidBody3D = bodies.get(_root_rig)
+	var outward := shoulder - (center_body.global_position if center_body else shoulder)
+	outward.y = 0.0
+	if outward.length_squared() < 0.0001:
+		outward = _character_root.global_basis.x * (1.0 if side == "L" else -1.0)
+	outward = outward.normalized()
+
+	# Circle in the forward/up plane, offset out to the side and raised.
+	var fwd := -_character_root.global_basis.z
+	var circle_center := shoulder + outward * _tuning.arm_windmill_lateral \
+		+ Vector3.UP * _tuning.arm_windmill_height
+	var sweep := (fwd * cos(phase) + Vector3.UP * sin(phase)) * _tuning.arm_windmill_radius
+	_arm_ik.begin_reach(side, circle_center + sweep)
+
+
+## Releases the arm windmill (blends the arms back toward the animation pose).
+func _end_arm_brace() -> void:
+	if not _arm_ik:
+		return
+	_arm_ik.end_reach("L")
+	_arm_ik.end_reach("R")
 
 
 func _update_ragdoll(delta: float) -> void:
@@ -955,6 +1047,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 		_stumble_drift = _tuning.stumble_push_speed
 		_stumble_dist_since_step = _tuning.stumble_step_length  # step on the first frame
 		_stumbling = true
+		_windmill_phase = 0.0  # arms windmill for balance for the duration of the stumble
 	else:
 		_stumble_dir = Vector3.ZERO
 		_stumble_drift = 0.0
@@ -973,6 +1066,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 func _finish_stagger() -> void:
 	if _foot_ik:
 		_foot_ik.end_stagger()
+	_end_arm_brace()
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 	_state = State.NORMAL
