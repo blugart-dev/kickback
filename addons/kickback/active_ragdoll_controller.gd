@@ -93,6 +93,8 @@ var _fall_brace_timer: float = 0.0
 var _fall_brace_side: String = ""
 var _fall_brace_dir: Vector3 = Vector3.ZERO
 var _fall_brace_arm_rigs: PackedStringArray = []
+var _fall_ground_y: float = 0.0  # actual ground height under the reach (for contact)
+var _fall_brace_target: Vector3 = Vector3.ZERO  # last reach target (cached for debug HUD)
 
 # Cached semantic role rig-names, resolved from the profile (see RagdollProfile roles).
 # Consumers query these instead of hardcoding "Hips"/"Foot_L"/... so non-Mixamo rigs work.
@@ -516,6 +518,7 @@ func _apply_stumble_brace() -> void:
 func _update_arm_windmill(delta: float) -> void:
 	if not _arm_ik or not _tuning.arm_brace_enabled:
 		return
+	_arm_ik.set_physics_anchored(false)  # windmill solves against the animation pose
 	_windmill_phase += _tuning.arm_windmill_speed * delta
 	# Couple the windmill to the body's momentum: full size right after the hit, winding
 	# down as the drift is spent, so the arms settle WITH the body rather than spinning on
@@ -593,6 +596,14 @@ func _setup_fall_brace() -> void:
 		return
 	dir = dir.normalized()
 
+	# A protective ground reach is the forward/side "catch yourself" reflex. A backward
+	# fall can't be broken by a hands-forward plant — forcing it reaches behind the
+	# shoulder and contorts the arm — so skip the reach when the fall runs clearly
+	# against the character's facing (it just collapses; the stumble windmill already
+	# gave the upper body life on the way down). The character faces +Z.
+	if dir.dot(_character_root.global_basis.z) < _tuning.arm_fall_reach_min_facing:
+		return
+
 	var bodies := _rig_builder.get_bodies()
 	var side := _leading_arm_side(bodies, dir)
 	if side == "":
@@ -606,6 +617,9 @@ func _setup_fall_brace() -> void:
 	_fall_brace_arm_rigs = chain
 	_fall_brace_timer = 0.0
 	_fall_bracing = true
+	# Anchor the reach to the PHYSICAL arm (the body has left the animation pose now that
+	# it's limp) so it reaches from where the arm actually is, not a phantom standing arm.
+	_arm_ik.set_physics_anchored(true)
 	# Keep the bracing arm's springs alive (the zeroing loop in _full_ragdoll just
 	# limped them); the per-frame update re-asserts this as long as the brace holds.
 	for rig: String in chain:
@@ -638,11 +652,18 @@ func _update_fall_brace(delta: float) -> void:
 	_fall_brace_timer += delta
 
 	var target := _fall_ground_target()
-	# Hand reached the ground (or the window expired) → release to a full limp ragdoll.
+	_fall_brace_target = target  # cache for the debug HUD (no raycast in _draw)
+	# Release to a full limp ragdoll when the window expires, or once the hand has
+	# planted — but only after holding at least half the window, so the catch visibly
+	# props the body instead of limping out the instant the hand grazes the ground.
 	var hand_rig: String = _fall_brace_arm_rigs[2]
 	var bodies := _rig_builder.get_bodies()
 	var hand_body: RigidBody3D = bodies.get(hand_rig)
-	var contacted := hand_body and hand_body.global_position.y <= target.y + 0.06
+	var min_hold: float = _tuning.arm_fall_reach_duration * 0.5
+	# Contact = the hand reached the ACTUAL ground (not the possibly-mid-air clamped
+	# target), and only after holding at least the minimum so the prop is visible.
+	var contacted := hand_body and hand_body.global_position.y <= _fall_ground_y + 0.06 \
+		and _fall_brace_timer >= min_hold
 	if _fall_brace_timer >= _tuning.arm_fall_reach_duration or contacted:
 		_end_fall_brace()
 		return
@@ -654,14 +675,18 @@ func _update_fall_brace(delta: float) -> void:
 	_arm_ik.begin_reach(_fall_brace_side, target, _tuning.arm_fall_reach_weight)
 
 
-## World-space ground point the bracing hand reaches for: ahead of the hips along the
-## fall direction, dropped to the ground by a downward raycast (falls back to the
-## character root's height if nothing is hit).
+## World-space point the bracing hand reaches for. It aims at the ground ahead of the
+## body in the fall direction (downward raycast for the height), but is pulled back to
+## within the arm's reach of the actual shoulder, so the hand always extends toward the
+## ground (and plants on it once the body has fallen close enough) rather than chasing
+## an out-of-reach point and floating.
 func _fall_ground_target() -> Vector3:
 	var bodies := _rig_builder.get_bodies()
 	var hips: RigidBody3D = bodies.get(_root_rig)
 	var origin := hips.global_position if hips else _character_root.global_position
 	var ahead := origin + _fall_brace_dir * _tuning.arm_fall_reach_distance
+
+	# Ground height under the reach point (raycast; fall back to the root's height).
 	var ground_y := _character_root.global_position.y
 	var world := _character_root.get_world_3d()
 	if world:
@@ -672,7 +697,19 @@ func _fall_ground_target() -> Vector3:
 		var hit := ss.intersect_ray(q)
 		if not hit.is_empty():
 			ground_y = hit["position"].y
-	return Vector3(ahead.x, ground_y + _tuning.foot_ik_ankle_height, ahead.z)
+	var ground_point := Vector3(ahead.x, ground_y + _tuning.foot_ik_ankle_height, ahead.z)
+	_fall_ground_y = ground_point.y  # the real ground height, for the contact test
+
+	# Clamp to within the arm's reach of the physical shoulder so the IK can hit it.
+	var shoulder_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[0])
+	if not shoulder_body:
+		return ground_point
+	var shoulder := shoulder_body.global_position
+	var to_ground := ground_point - shoulder
+	var max_reach := _arm_ik.get_reach() * 0.97
+	if to_ground.length() > max_reach:
+		return shoulder + to_ground.normalized() * max_reach
+	return ground_point
 
 
 ## Ends the protective fall reach: the bracing arm goes limp (springs zeroed) and joins
@@ -927,6 +964,23 @@ func get_balance_ratio() -> float:
 ## Returns the full balance state: {com, support_center, balance_ratio, imbalance_dir}.
 func get_balance_state() -> Dictionary:
 	return _compute_balance_state()
+
+
+## Debug snapshot of the protective fall reach for the debug HUD. Returns {} when not
+## bracing, else {target, shoulder, hand, side} world-space positions (cached from the
+## last solve — no physics query, safe to call from _draw).
+func get_fall_brace_debug() -> Dictionary:
+	if not _fall_bracing or _fall_brace_arm_rigs.size() != 3 or not _rig_builder:
+		return {}
+	var bodies := _rig_builder.get_bodies()
+	var shoulder_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[0])
+	var hand_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[2])
+	return {
+		"target": _fall_brace_target,
+		"shoulder": shoulder_body.global_position if shoulder_body else _fall_brace_target,
+		"hand": hand_body.global_position if hand_body else _fall_brace_target,
+		"side": _fall_brace_side,
+	}
 
 
 ## Returns the current fatigue level (0.0 = fresh, 1.0 = exhausted).

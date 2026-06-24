@@ -375,13 +375,13 @@ extends Resource
 @export_range(0.0, 1.0) var stumble_step_threshold: float = 0.45
 ## Base horizontal step distance (meters), scaled by balance ratio so a harder tip
 ## takes a bigger step.
-@export_range(0.0, 1.0) var stumble_step_length: float = 0.20
+@export_range(0.0, 1.0) var stumble_step_length: float = 0.24
 ## Maximum horizontal reach of a step target from the foot's current position
 ## (meters). Clamps the balance-scaled step so the leg never overstretches.
 @export_range(0.1, 1.5) var stumble_step_reach_max: float = 0.6
 ## Time for the stepping foot to travel from its current position to the step
 ## target (seconds).
-@export_range(0.05, 1.0) var stumble_step_duration: float = 0.18
+@export_range(0.05, 1.0) var stumble_step_duration: float = 0.24
 ## Minimum time between consecutive stumble steps (seconds). Produces discrete
 ## catch-steps rather than a foot sliding continuously.
 @export_range(0.0, 1.0) var stumble_step_cooldown: float = 0.3
@@ -393,7 +393,7 @@ extends Resource
 ## upright as it lurches. Transient (only while [member _stumbling]); relaxes to the
 ## stagger floor when the stumble ends. Higher = stiffer/more upright; too high reads
 ## as a snap. 0.0 = no stiffening.
-@export_range(0.0, 1.0) var stumble_brace_strength: float = 0.7
+@export_range(0.0, 1.0) var stumble_brace_strength: float = 0.6
 ## Initial knockback speed (m/s) of the directed stumble: on a staggering hit the
 ## character root drifts in the hit direction at this speed, so the stumble visibly
 ## DISPLACES the character (you stumble where you're shoved) rather than shuffling in
@@ -417,7 +417,7 @@ extends Resource
 ## How strongly the windmill drives the arms (0..1). This is a TENDENCY layered over
 ## the loose physics pose, not a takeover: lower keeps the arms reactive and organic
 ## (they only lean toward the windmill), 1.0 pins them rigidly to the geometric circle.
-@export_range(0.0, 1.0) var arm_brace_weight: float = 0.55
+@export_range(0.0, 1.0) var arm_brace_weight: float = 0.5
 ## Radius (meters) of the windmill circle each hand sweeps. Larger = bigger, wilder
 ## arcs. Kept within the arm's reach so the solve never overstretches.
 @export_range(0.0, 0.5) var arm_windmill_radius: float = 0.24
@@ -429,10 +429,10 @@ extends Resource
 @export_range(-0.3, 0.5) var arm_windmill_height: float = 0.1
 ## Angular speed (rad/s) of the windmill sweep. Higher = faster spinning arms. The two
 ## arms sweep in opposite phase, so this also sets how fast they alternate.
-@export_range(0.0, 30.0) var arm_windmill_speed: float = 6.0
+@export_range(0.0, 30.0) var arm_windmill_speed: float = 5.0
 ## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
 ## into the brace faster; lower = they ease in.
-@export_range(1.0, 40.0) var arm_brace_blend_speed: float = 10.0
+@export_range(1.0, 40.0) var arm_brace_blend_speed: float = 8.0
 ## Reach-for-ground: when a hit commits to a FALL (the character tips over to ragdoll),
 ## the leading arm extends toward the ground to break it — the protective half of arm
 ## bracing. The arm stays active for a short window while the rest of the body goes
@@ -440,16 +440,21 @@ extends Resource
 @export var arm_fall_reach_enabled: bool = true
 ## Seconds the bracing arm stays active into the fall before it goes fully limp — the
 ## window in which the arm protectively reaches. After it, the whole body ragdolls.
-@export_range(0.0, 1.5) var arm_fall_reach_duration: float = 0.5
+@export_range(0.0, 1.5) var arm_fall_reach_duration: float = 0.55
 ## Spring strength (fraction of base) held on the bracing arm during the fall window
 ## while the rest of the body goes limp. Higher = a stiffer, more committed catch.
-@export_range(0.0, 1.0) var arm_fall_reach_strength: float = 0.6
+@export_range(0.0, 1.0) var arm_fall_reach_strength: float = 0.8
 ## How far ahead of the body (along the fall direction) the ground reach target sits
 ## (meters). The hand reaches down and forward, into the fall.
-@export_range(0.0, 1.0) var arm_fall_reach_distance: float = 0.4
+@export_range(0.0, 1.0) var arm_fall_reach_distance: float = 0.5
 ## How strongly the IK drives the bracing arm toward the ground target (0..1). Higher
 ## than the windmill — a committed reach, not a tendency.
-@export_range(0.0, 1.0) var arm_fall_reach_weight: float = 0.9
+@export_range(0.0, 1.0) var arm_fall_reach_weight: float = 0.95
+## Minimum alignment between the fall direction and the character's facing for the
+## protective reach to fire (fall·forward). Forward fall = +1, sideways = 0, backward =
+## -1. Below this the fall runs too far backward for a hands-forward catch (the arm
+## would contort reaching behind), so the reach is skipped. -1 = always reach.
+@export_range(-1.0, 1.0) var arm_fall_reach_min_facing: float = -0.25
 
 
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()

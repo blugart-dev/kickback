@@ -45,6 +45,15 @@ var _target_weight_r: float = 0.0
 var _hand_body_l: RigidBody3D
 var _hand_body_r: RigidBody3D
 
+# The rig body map, so the solver can anchor to where the arm PHYSICALLY is (see
+# _physics_anchored). Stable reference, set once at init.
+var _rig_bodies: Dictionary = {}
+# When true, the solve anchors to the arm's physical body transforms instead of the
+# animation pose. The windmill runs against the animation (springs hold the body near
+# it during a stagger); the fall reach must anchor to the limp body, which has fallen
+# away from the animation pose, or the reach is computed from a phantom standing arm.
+var _physics_anchored: bool = false
+
 var _initialized: bool = false
 
 # Per-solve scratch buffers, reused to avoid per-frame allocations (see FootIKSolver
@@ -93,10 +102,10 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 	if _upper_arm_len < 0.01 or _lower_arm_len < 0.01:
 		return false
 
-	# Cache hand body refs (end-effectors) for the fall-reach contact pass.
-	var bodies := rig_builder.get_bodies()
-	_hand_body_l = bodies.get(_hand_l)
-	_hand_body_r = bodies.get(_hand_r)
+	# Cache the body map (physical anchoring) + hand refs (fall-reach contact pass).
+	_rig_bodies = rig_builder.get_bodies()
+	_hand_body_l = _rig_bodies.get(_hand_l)
+	_hand_body_r = _rig_bodies.get(_hand_r)
 
 	_initialized = true
 	return true
@@ -109,6 +118,19 @@ func is_initialized() -> bool:
 ## True while either arm's IK has any influence (mid-blend or fully reaching).
 func is_active() -> bool:
 	return _weight_l > 0.001 or _weight_r > 0.001
+
+
+## Full arm reach (upper + lower segment lengths). Lets the caller place a reach target
+## the arm can actually hit.
+func get_reach() -> float:
+	return _upper_arm_len + _lower_arm_len
+
+
+## Anchor the solve to the physical arm bodies (true) or the animation pose (false).
+## Use physical anchoring whenever the body has left the animation pose — e.g. a limp
+## fall — so the reach is computed from where the arm actually is.
+func set_physics_anchored(enabled: bool) -> void:
+	_physics_anchored = enabled
 
 
 ## True while either arm has an active reach target (regardless of blend progress).
@@ -187,25 +209,41 @@ func _solve(delta: float) -> void:
 
 
 ## Solves one arm toward [param target] and writes weight-blended overrides for its
-## three bones. The hand keeps its animation orientation (no slope concept for a
-## hand) and sits at the target; the shoulder/elbow swing to follow.
+## three bones. The hand keeps its source orientation (no slope concept for a hand) and
+## sits at the target; the shoulder/elbow swing to follow. The source pose is the arm's
+## animation pose, or its physical body pose when [member _physics_anchored] (so the
+## reach is computed from where the arm actually is, not a fallen-away animation pose).
 func _solve_arm(overrides: Dictionary, upper_name: String, lower_name: String,
 		hand_name: String, target: Vector3, weight: float, sg: Transform3D) -> void:
-	var upper_anim := _anim_global(_bone_idx[upper_name], sg)
-	var lower_anim := _anim_global(_bone_idx[lower_name], sg)
-	var hand_anim := _anim_global(_bone_idx[hand_name], sg)
+	var upper_src: Transform3D
+	var lower_src: Transform3D
+	var hand_src: Transform3D
+	if _physics_anchored:
+		upper_src = _body_global(upper_name)
+		lower_src = _body_global(lower_name)
+		hand_src = _body_global(hand_name)
+	else:
+		upper_src = _anim_global(_bone_idx[upper_name], sg)
+		lower_src = _anim_global(_bone_idx[lower_name], sg)
+		hand_src = _anim_global(_bone_idx[hand_name], sg)
 
-	var ik := TwoBoneIK.solve(_upper_arm_len, _lower_arm_len, upper_anim.origin,
-		target, lower_anim.origin, upper_anim, lower_anim, hand_anim,
+	var ik := TwoBoneIK.solve(_upper_arm_len, _lower_arm_len, upper_src.origin,
+		target, lower_src.origin, upper_src, lower_src, hand_src,
 		-_character_root.global_basis.z)
 	if ik.is_empty():
-		# Target unreachable — leave this arm at its animation pose (no override).
+		# Target unreachable — leave this arm at its source pose (no override).
 		return
 
-	var hand_ik := Transform3D(hand_anim.basis, target)
-	overrides[upper_name] = upper_anim.interpolate_with(ik["upper"], weight)
-	overrides[lower_name] = lower_anim.interpolate_with(ik["lower"], weight)
-	overrides[hand_name] = hand_anim.interpolate_with(hand_ik, weight)
+	var hand_ik := Transform3D(hand_src.basis, target)
+	overrides[upper_name] = upper_src.interpolate_with(ik["upper"], weight)
+	overrides[lower_name] = lower_src.interpolate_with(ik["lower"], weight)
+	overrides[hand_name] = hand_src.interpolate_with(hand_ik, weight)
+
+
+## World-space physical transform of a rig body (the physical-anchor source).
+func _body_global(rig_name: String) -> Transform3D:
+	var body: RigidBody3D = _rig_bodies.get(rig_name)
+	return body.global_transform if body else Transform3D.IDENTITY
 
 
 ## World-space animation global for a bone index, memoized per solve (see
@@ -227,3 +265,4 @@ func reset() -> void:
 	_target_weight_r = 0.0
 	_weight_l = 0.0
 	_weight_r = 0.0
+	_physics_anchored = false

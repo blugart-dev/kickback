@@ -166,6 +166,29 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "ik_foot_blend", 1.0, 30.0, _custom_tuning.foot_ik_foot_blend_speed)
 	_add_slider(panel, "ik_stagger_leg_str", 0.1, 1.0, _custom_tuning.foot_ik_stagger_leg_strength)
 
+	_add_section(panel, "STUMBLE (self-preservation)")
+	_add_slider(panel, "stumble_push_speed", 0.0, 6.0, _custom_tuning.stumble_push_speed)
+	_add_slider(panel, "stumble_push_decel", 0.5, 20.0, _custom_tuning.stumble_push_decel)
+	_add_slider(panel, "stumble_step_length", 0.0, 1.0, _custom_tuning.stumble_step_length)
+	_add_slider(panel, "stumble_step_duration", 0.05, 1.0, _custom_tuning.stumble_step_duration)
+	_add_slider(panel, "stumble_max_steps", 1, 5, _custom_tuning.stumble_max_steps)
+	_add_slider(panel, "stumble_brace_str", 0.0, 1.0, _custom_tuning.stumble_brace_strength)
+
+	_add_section(panel, "ARM WINDMILL")
+	_add_slider(panel, "arm_brace_weight", 0.0, 1.0, _custom_tuning.arm_brace_weight)
+	_add_slider(panel, "arm_windmill_radius", 0.0, 0.5, _custom_tuning.arm_windmill_radius)
+	_add_slider(panel, "arm_windmill_speed", 0.0, 30.0, _custom_tuning.arm_windmill_speed)
+	_add_slider(panel, "arm_windmill_lateral", 0.0, 0.5, _custom_tuning.arm_windmill_lateral)
+	_add_slider(panel, "arm_windmill_height", -0.3, 0.5, _custom_tuning.arm_windmill_height)
+	_add_slider(panel, "arm_brace_blend", 1.0, 40.0, _custom_tuning.arm_brace_blend_speed)
+
+	_add_section(panel, "ARM FALL REACH")
+	_add_slider(panel, "fall_reach_duration", 0.0, 1.5, _custom_tuning.arm_fall_reach_duration)
+	_add_slider(panel, "fall_reach_strength", 0.0, 1.0, _custom_tuning.arm_fall_reach_strength)
+	_add_slider(panel, "fall_reach_distance", 0.0, 1.0, _custom_tuning.arm_fall_reach_distance)
+	_add_slider(panel, "fall_reach_weight", 0.0, 1.0, _custom_tuning.arm_fall_reach_weight)
+	_add_slider(panel, "fall_reach_min_facing", -1.0, 1.0, _custom_tuning.arm_fall_reach_min_facing)
+
 
 func _add_section(parent: Control, title: String) -> void:
 	var spacer := Control.new()
@@ -254,6 +277,26 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 		"ik_pelvis_blend": _custom_tuning.foot_ik_pelvis_blend_speed = value
 		"ik_foot_blend": _custom_tuning.foot_ik_foot_blend_speed = value
 		"ik_stagger_leg_str": _custom_tuning.foot_ik_stagger_leg_strength = value
+		# Self-preservation: stumble
+		"stumble_push_speed": _custom_tuning.stumble_push_speed = value
+		"stumble_push_decel": _custom_tuning.stumble_push_decel = value
+		"stumble_step_length": _custom_tuning.stumble_step_length = value
+		"stumble_step_duration": _custom_tuning.stumble_step_duration = value
+		"stumble_max_steps": _custom_tuning.stumble_max_steps = int(value)
+		"stumble_brace_str": _custom_tuning.stumble_brace_strength = value
+		# Self-preservation: arm windmill
+		"arm_brace_weight": _custom_tuning.arm_brace_weight = value
+		"arm_windmill_radius": _custom_tuning.arm_windmill_radius = value
+		"arm_windmill_speed": _custom_tuning.arm_windmill_speed = value
+		"arm_windmill_lateral": _custom_tuning.arm_windmill_lateral = value
+		"arm_windmill_height": _custom_tuning.arm_windmill_height = value
+		"arm_brace_blend": _custom_tuning.arm_brace_blend_speed = value
+		# Self-preservation: arm fall reach
+		"fall_reach_duration": _custom_tuning.arm_fall_reach_duration = value
+		"fall_reach_strength": _custom_tuning.arm_fall_reach_strength = value
+		"fall_reach_distance": _custom_tuning.arm_fall_reach_distance = value
+		"fall_reach_weight": _custom_tuning.arm_fall_reach_weight = value
+		"fall_reach_min_facing": _custom_tuning.arm_fall_reach_min_facing = value
 
 
 # --- Shooting ---
