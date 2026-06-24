@@ -9,6 +9,17 @@
 ## [Unreleased]
 
 ### Added
+- **`ArmIKSolver` + shared `TwoBoneIK`** (0.4.0 Self-Preservation, arm-bracing groundwork) —
+  a two-bone arm IK solver (shoulder→elbow→hand) that drives an arm to reach a world-space
+  target, blending its IK influence in and out by weight (`begin_reach`/`update_reach`/
+  `end_reach`). It resolves arms through the `RagdollProfile` arm-chain roles and mirrors
+  `FootIKSolver`'s structure (direct math in `_physics_process` → `SpringResolver` target
+  overrides). The law-of-cosines + swing-of-animation-basis math is factored out of
+  `FootIKSolver` into a shared, stateless `TwoBoneIK` util that both solvers use — no
+  duplication. The foot IK refactor is behavior-preserving (idle foot angular velocity
+  unchanged: 0.0289 → 0.0291 rad/s on the ybot at rest, within physics noise). The
+  controller wiring that triggers windmill (balance) and reach-to-ground (committed fall)
+  lands with the next, visual pass.
 - **`RagdollProfile` arm-chain roles** (0.4.0 Self-Preservation groundwork) — `get_arm_chain`,
   `get_all_arm_rigs`, `get_hand_rigs`, `is_arm_rig`, `get_arm_side`, backed by overridable
   `left_arm_chain` / `right_arm_chain` / `hand_rigs` export fields (defaulting to the Mixamo

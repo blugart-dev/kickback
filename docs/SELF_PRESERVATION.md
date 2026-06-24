@@ -78,14 +78,23 @@ The stumble is the middle band — the visible "shoved and recovered" reaction.
 
 ## Arm bracing — next
 
-A new `ArmIKSolver` (mirroring `FootIKSolver`) will drive the arms:
-- **Windmill** — arms swing wide to fight for balance during a stumble (the active
-  upper-body layer; right now the arms only react passively because they're loose).
+The arms get an active layer (right now they only react passively because they're loose):
+- **Windmill** — arms swing wide to fight for balance during a stumble.
 - **Reach** — when a fall is committed, the leading arm reaches toward the ground to
   break the fall.
 
-This needs `RagdollProfile` arm-chain roles (`get_arm_chain`, mirroring the leg chains)
-and the two-bone solver factored out of `FootIKSolver` so it isn't duplicated.
+**Groundwork done.** `RagdollProfile` arm-chain roles (`get_arm_chain`, mirroring the leg
+chains) and the `ArmIKSolver` exist. The two-bone math (law of cosines + swing-of-animation
+basis) is factored out of `FootIKSolver` into a shared, stateless `TwoBoneIK` util that both
+solvers use, so there's no duplication; the foot IK refactor is behavior-preserving (idle
+foot buzz unchanged within physics noise). `ArmIKSolver` mirrors `FootIKSolver`: it drives an
+arm to reach a world-space target and blends its IK weight in/out (`begin_reach`/
+`update_reach`/`end_reach`), resolving arms through the arm-chain roles.
+
+**Still to come (the visual pass):** wiring the controller to *trigger* the windmill arc
+during the directed stumble and the ground reach on a committed fall, plus the feel tuning —
+and the override-channel coordination so arm IK and foot IK can write the spring at the same
+time (each currently replaces the whole override set, which is fine while only one runs).
 
 ## State-machine integration
 
