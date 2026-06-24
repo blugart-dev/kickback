@@ -88,6 +88,8 @@ func test_initializes_and_reads_arm_lengths():
 	# Lengths derived from the synthetic skeleton's rest poses (0.28 m + 0.25 m).
 	assert_almost_eq(solver._upper_arm_len, 0.28, 0.02, "upper arm length read from rest")
 	assert_almost_eq(solver._lower_arm_len, 0.25, 0.02, "lower arm length read from rest")
+	# Full reach = the two segments summed.
+	assert_almost_eq(solver.get_reach(), 0.53, 0.03, "reach sums the arm segments")
 
 
 func test_reach_drives_hand_to_target():
@@ -121,6 +123,25 @@ func test_unreachable_target_leaves_arm_at_anim():
 	assert_gt(solver._weight_r, 0.9, "weight still ramps even when unreachable")
 	assert_false(solver._overrides_buf.has("Hand_R"),
 		"unreachable target writes no override (arm stays at animation pose)")
+
+
+# Physics-anchored mode (used by the fall reach) solves from the arm's physical body
+# pose rather than the animation pose. At rest the bodies sit on the animation pose, so
+# the hand still reaches the target — but the solve now tracks the body, not the anim.
+func test_physics_anchored_reach_drives_hand():
+	var h = await _spawn()
+	var solver = _make_solver(h)
+	solver.set_physics_anchored(true)
+	var shoulder_body: RigidBody3D = h.rig_builder.get_bodies().get("UpperArm_R")
+	assert_not_null(shoulder_body)
+	var target := shoulder_body.global_position + Vector3(-0.2, -0.2, 0.15)
+	solver.begin_reach("R", target, 1.0)
+	_pump(solver, 50)
+	assert_gt(solver._weight_r, 0.9, "physics-anchored arm blended in")
+	assert_true(solver._overrides_buf.has("Hand_R"), "physics-anchored hand override written")
+	var hand_t: Transform3D = solver._overrides_buf["Hand_R"]
+	assert_almost_eq(hand_t.origin.distance_to(target), 0.0, 0.03,
+		"physics-anchored hand reaches the target")
 
 
 func test_end_reach_blends_weight_out():

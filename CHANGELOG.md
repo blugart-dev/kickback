@@ -9,6 +9,21 @@
 ## [Unreleased]
 
 ### Added
+- **Arm bracing** (0.4.0 Self-Preservation) — the upper-body active layer, so the whole
+  reaction reads together. During a directed stumble the arms **windmill** for balance:
+  each hand sweeps a wide vertical circle out to its own side (the two arms in opposite
+  phase), the arc coupled to the stumble's momentum and aligned to the fall direction so
+  it reads as a reaction to *this* hit rather than a canned loop, layered at partial weight
+  over the loose flail. When a hit commits to a **fall**, the leading arm **reaches for the
+  ground** to break it: a brief braced window keeps that arm's springs alive and drives its
+  hand toward the ground (anchored to the physical arm, since the body has left its
+  animation pose) while the rest goes limp, then releases into the full ragdoll. Gated to
+  forward/side falls (a backward fall can't be broken by a hands-forward plant). New
+  `RagdollTuning` "Self-Preservation: Arm Bracing" group (`arm_brace_enabled`,
+  `arm_brace_weight`, `arm_windmill_radius`/`lateral`/`height`/`speed`,
+  `arm_brace_blend_speed`, `arm_fall_reach_enabled`/`duration`/`strength`/`distance`/
+  `weight`/`min_facing`); the F3 debug HUD draws the fall-reach target; the Tuning Lab
+  gains live sliders for the stumble + arm-bracing knobs.
 - **`ArmIKSolver` + shared `TwoBoneIK`** (0.4.0 Self-Preservation, arm-bracing groundwork) —
   a two-bone arm IK solver (shoulder→elbow→hand) that drives an arm to reach a world-space
   target, blending its IK influence in and out by weight (`begin_reach`/`update_reach`/
