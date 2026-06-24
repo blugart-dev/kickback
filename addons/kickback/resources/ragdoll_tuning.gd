@@ -433,6 +433,23 @@ extends Resource
 ## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
 ## into the brace faster; lower = they ease in.
 @export_range(1.0, 40.0) var arm_brace_blend_speed: float = 10.0
+## Reach-for-ground: when a hit commits to a FALL (the character tips over to ragdoll),
+## the leading arm extends toward the ground to break it — the protective half of arm
+## bracing. The arm stays active for a short window while the rest of the body goes
+## limp, then releases. Requires the arm IK solver. 0.4.0.
+@export var arm_fall_reach_enabled: bool = true
+## Seconds the bracing arm stays active into the fall before it goes fully limp — the
+## window in which the arm protectively reaches. After it, the whole body ragdolls.
+@export_range(0.0, 1.5) var arm_fall_reach_duration: float = 0.5
+## Spring strength (fraction of base) held on the bracing arm during the fall window
+## while the rest of the body goes limp. Higher = a stiffer, more committed catch.
+@export_range(0.0, 1.0) var arm_fall_reach_strength: float = 0.6
+## How far ahead of the body (along the fall direction) the ground reach target sits
+## (meters). The hand reaches down and forward, into the fall.
+@export_range(0.0, 1.0) var arm_fall_reach_distance: float = 0.4
+## How strongly the IK drives the bracing arm toward the ground target (0..1). Higher
+## than the windmill — a committed reach, not a tendency.
+@export_range(0.0, 1.0) var arm_fall_reach_weight: float = 0.9
 
 
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
