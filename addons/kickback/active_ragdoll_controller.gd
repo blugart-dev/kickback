@@ -506,13 +506,19 @@ func _update_arm_windmill(delta: float) -> void:
 	if not _arm_ik or not _tuning.arm_brace_enabled:
 		return
 	_windmill_phase += _tuning.arm_windmill_speed * delta
-	_drive_windmill_arm("L", _arm_shoulder_l, _windmill_phase)
-	_drive_windmill_arm("R", _arm_shoulder_r, _windmill_phase + PI)
+	# Couple the windmill to the body's momentum: full size right after the hit, winding
+	# down as the drift is spent, so the arms settle WITH the body rather than spinning on
+	# after it has stopped (a constant-size circle reads as a detached, canned layer).
+	var push: float = maxf(_tuning.stumble_push_speed, 0.01)
+	var intensity := clampf(_stumble_drift / push, 0.0, 1.0)
+	_drive_windmill_arm("L", _arm_shoulder_l, _windmill_phase, intensity)
+	_drive_windmill_arm("R", _arm_shoulder_r, _windmill_phase + PI, intensity)
 
 
 ## Points one arm's windmill target for this frame. [param shoulder_rig] is the chain's
-## shoulder body (the circle anchor); [param phase] is its position around the sweep.
-func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float) -> void:
+## shoulder body (the circle anchor); [param phase] is its position around the sweep;
+## [param intensity] (0..1, the remaining stumble momentum) scales the arc and the lean.
+func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float, intensity: float) -> void:
 	if shoulder_rig == "":
 		return
 	var bodies := _rig_builder.get_bodies()
@@ -531,12 +537,23 @@ func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float) -> vo
 		outward = _character_root.global_basis.x * (1.0 if side == "L" else -1.0)
 	outward = outward.normalized()
 
-	# Circle in the forward/up plane, offset out to the side and raised.
-	var fwd := -_character_root.global_basis.z
-	var circle_center := shoulder + outward * _tuning.arm_windmill_lateral \
-		+ Vector3.UP * _tuning.arm_windmill_height
-	var sweep := (fwd * cos(phase) + Vector3.UP * sin(phase)) * _tuning.arm_windmill_radius
-	_arm_ik.begin_reach(side, circle_center + sweep)
+	# Sweep in the plane of the FALL (stumble direction × up), not the character's facing,
+	# so the arms throw the way the body is actually being shoved — and lean into it. This
+	# ties the windmill to THIS hit instead of being a facing-locked canned circle.
+	var sweep_axis := _stumble_dir
+	if sweep_axis.length_squared() < 0.0001:
+		sweep_axis = -_character_root.global_basis.z
+	sweep_axis = sweep_axis.normalized()
+
+	var radius: float = _tuning.arm_windmill_radius * (0.4 + 0.6 * intensity)
+	var circle_center := shoulder \
+		+ outward * _tuning.arm_windmill_lateral \
+		+ Vector3.UP * _tuning.arm_windmill_height \
+		+ sweep_axis * (_tuning.arm_windmill_radius * 0.5 * intensity)  # lean into the fall
+	var sweep := (sweep_axis * cos(phase) + Vector3.UP * sin(phase)) * radius
+	# Partial weight: the windmill is a balancing TENDENCY layered over the loose flail,
+	# not a takeover — keeps the upper body reactive rather than rigidly on the circle.
+	_arm_ik.begin_reach(side, circle_center + sweep, _tuning.arm_brace_weight)
 
 
 ## Releases the arm windmill (blends the arms back toward the animation pose).

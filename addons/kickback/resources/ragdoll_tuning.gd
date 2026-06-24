@@ -375,18 +375,18 @@ extends Resource
 @export_range(0.0, 1.0) var stumble_step_threshold: float = 0.45
 ## Base horizontal step distance (meters), scaled by balance ratio so a harder tip
 ## takes a bigger step.
-@export_range(0.0, 1.0) var stumble_step_length: float = 0.35
+@export_range(0.0, 1.0) var stumble_step_length: float = 0.20
 ## Maximum horizontal reach of a step target from the foot's current position
 ## (meters). Clamps the balance-scaled step so the leg never overstretches.
 @export_range(0.1, 1.5) var stumble_step_reach_max: float = 0.6
 ## Time for the stepping foot to travel from its current position to the step
 ## target (seconds).
-@export_range(0.05, 1.0) var stumble_step_duration: float = 0.25
+@export_range(0.05, 1.0) var stumble_step_duration: float = 0.18
 ## Minimum time between consecutive stumble steps (seconds). Produces discrete
 ## catch-steps rather than a foot sliding continuously.
 @export_range(0.0, 1.0) var stumble_step_cooldown: float = 0.3
 ## Maximum number of catch-steps in one stagger before giving up and ragdolling.
-@export_range(1, 5) var stumble_max_steps: int = 2
+@export_range(1, 5) var stumble_max_steps: int = 3
 ## Spring strength (as a fraction of each bone's base) applied WHILE stumbling. A
 ## real stumble tenses the body and steps — not a foot reposition on a limp ragdoll —
 ## so during the stumble the springs stiffen toward this level so the body stays
@@ -398,7 +398,7 @@ extends Resource
 ## character root drifts in the hit direction at this speed, so the stumble visibly
 ## DISPLACES the character (you stumble where you're shoved) rather than shuffling in
 ## place. Decays via [member stumble_push_decel]. 0.0 = no displacement (in-place).
-@export_range(0.0, 6.0) var stumble_push_speed: float = 2.0
+@export_range(0.0, 6.0) var stumble_push_speed: float = 2.3
 ## Deceleration (m/s²) of the knockback drift — how fast the stumble momentum is
 ## absorbed. Total stumble distance ≈ speed² / (2·decel). Higher = shorter stumble.
 @export_range(0.5, 20.0) var stumble_push_decel: float = 7.0
@@ -414,21 +414,25 @@ extends Resource
 ## in wide vertical circles) to fight for balance — the active upper-body layer on top
 ## of the loose flailing. Requires the arm IK solver (arm-chain roles). 0.4.0.
 @export var arm_brace_enabled: bool = true
+## How strongly the windmill drives the arms (0..1). This is a TENDENCY layered over
+## the loose physics pose, not a takeover: lower keeps the arms reactive and organic
+## (they only lean toward the windmill), 1.0 pins them rigidly to the geometric circle.
+@export_range(0.0, 1.0) var arm_brace_weight: float = 0.55
 ## Radius (meters) of the windmill circle each hand sweeps. Larger = bigger, wilder
 ## arcs. Kept within the arm's reach so the solve never overstretches.
-@export_range(0.0, 0.5) var arm_windmill_radius: float = 0.32
+@export_range(0.0, 0.5) var arm_windmill_radius: float = 0.24
 ## Outward offset (meters) of each windmill circle from the shoulder, along the body's
 ## lateral axis, so the arms circle out to their own sides instead of across the chest.
 @export_range(0.0, 0.5) var arm_windmill_lateral: float = 0.16
 ## Vertical offset (meters) of each windmill circle's center above the shoulder, so the
 ## arms sweep up high (a raised, balancing flail) rather than down at the hips.
-@export_range(-0.3, 0.5) var arm_windmill_height: float = 0.12
+@export_range(-0.3, 0.5) var arm_windmill_height: float = 0.1
 ## Angular speed (rad/s) of the windmill sweep. Higher = faster spinning arms. The two
 ## arms sweep in opposite phase, so this also sets how fast they alternate.
-@export_range(0.0, 30.0) var arm_windmill_speed: float = 9.0
+@export_range(0.0, 30.0) var arm_windmill_speed: float = 6.0
 ## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
 ## into the brace faster; lower = they ease in.
-@export_range(1.0, 40.0) var arm_brace_blend_speed: float = 12.0
+@export_range(1.0, 40.0) var arm_brace_blend_speed: float = 10.0
 
 
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()

@@ -119,17 +119,19 @@ func is_reaching() -> bool:
 # ── Reach control (driven by the controller) ───────────────────────────────
 
 ## Starts driving the arm on [param side] ("L"/"R") toward the world-space
-## [param target]. The IK weight blends in over the next frames. Call
-## [method update_reach] each frame to move a windmilling/tracking target.
-func begin_reach(side: String, target: Vector3) -> void:
+## [param target], blending the IK in to [param weight] (1.0 = fully on the IK
+## solution, lower = a tendency layered over the loose physics pose). Call
+## [method update_reach] each frame to move a windmilling/tracking target, or just call
+## this again — it re-asserts the target and weight, so it's safe to call per frame.
+func begin_reach(side: String, target: Vector3, weight: float = 1.0) -> void:
 	if side == "L":
 		_reach_target_l = target
 		_reach_active_l = true
-		_target_weight_l = 1.0
+		_target_weight_l = weight
 	elif side == "R":
 		_reach_target_r = target
 		_reach_active_r = true
-		_target_weight_r = 1.0
+		_target_weight_r = weight
 
 
 ## Moves an already-active reach target without changing its blend (use to animate a
