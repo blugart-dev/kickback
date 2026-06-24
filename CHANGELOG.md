@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-24
+
+**Self-Preservation** — the first *active* survival behaviors: a staggering hit now visibly
+shoves the character into a directed stumble (legs stepping to follow, lower body bracing
+upright, upper body reacting loose), and the arms actively brace — windmilling for balance
+during the stumble and reaching for the ground to break a committed fall. The springs are the
+muscles; this milestone is the first piece of the *brain* telling them what to do.
+
 ### Added
 - **Arm bracing** (0.4.0 Self-Preservation) — the upper-body active layer, so the whole
   reaction reads together. During a directed stumble the arms **windmill** for balance:
