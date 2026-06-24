@@ -137,12 +137,44 @@ func _draw_active_target(target: Dictionary, camera: Camera3D, cam_pos: Vector3)
 	if _detail_level >= 2 and active_ctrl:
 		_draw_state_label(bodies, active_ctrl, camera, cam_pos)
 
+	# Protective fall reach (level 2+): show where the bracing arm is reaching
+	if _detail_level >= 2 and active_ctrl:
+		_draw_fall_brace(active_ctrl, camera)
+
 	# Full panel + CoM + velocity (level 3)
 	if _detail_level >= 3:
 		if active_ctrl:
 			_draw_status_panel(bodies, spring, active_ctrl, camera, cam_pos)
 		_draw_com_and_support(bodies, active_ctrl, camera, cam_pos)
 		_draw_velocity_vectors(bodies, camera, cam_pos)
+
+
+## Visualizes the protective fall reach: the reach line from the bracing shoulder to its
+## ground target, the target marker, and the hand, so you can see what the arm is aiming
+## at during a fall (the motion alone can be hard to read).
+func _draw_fall_brace(ctrl: ActiveRagdollController, camera: Camera3D) -> void:
+	var dbg := ctrl.get_fall_brace_debug()
+	if dbg.is_empty():
+		return
+	var shoulder: Vector3 = dbg["shoulder"]
+	var target: Vector3 = dbg["target"]
+	var hand: Vector3 = dbg["hand"]
+	var col := Color(1.0, 0.45, 0.1, 0.95)  # orange — the protective reach
+
+	# Reach line: shoulder → target.
+	if not camera.is_position_behind(shoulder) and not camera.is_position_behind(target):
+		draw_line(camera.unproject_position(shoulder), camera.unproject_position(target), col, 2.5)
+
+	# Target marker + label.
+	if not camera.is_position_behind(target):
+		var ts := camera.unproject_position(target)
+		draw_circle(ts, 7.0, Color(col.r, col.g, col.b, 0.3))
+		draw_arc(ts, 9.0, 0.0, TAU, 18, col, 2.0)
+		_draw_text_shadowed(ts + Vector2(11, 4), "REACH %s" % str(dbg.get("side", "")), FONT_SIZE, col)
+
+	# Hand position (the end-effector being driven).
+	if not camera.is_position_behind(hand):
+		draw_circle(camera.unproject_position(hand), 5.0, col)
 
 
 func _draw_bone_dots(bodies: Dictionary, spring: SpringResolver, camera: Camera3D, cam_pos: Vector3) -> void:

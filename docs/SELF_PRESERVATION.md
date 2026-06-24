@@ -76,31 +76,46 @@ The stumble is the middle band — the visible "shoved and recovered" reaction.
   step animation (lerp + lift arc), reusing the existing stagger pin/IK/override plumbing.
 - Signal: `stumble_step_started(foot_rig, target)`.
 
-## Arm bracing — next
+## Arm bracing
 
-The arms get an active layer (right now they only react passively because they're loose):
-- **Windmill** — arms swing wide to fight for balance during a stumble.
-- **Reach** — when a fall is committed, the leading arm reaches toward the ground to
-  break the fall.
+The upper-body active layer, so the whole reaction reads together (before this, the arms
+only reacted passively because they're loose):
 
-**Groundwork done.** `RagdollProfile` arm-chain roles (`get_arm_chain`, mirroring the leg
-chains) and the `ArmIKSolver` exist. The two-bone math (law of cosines + swing-of-animation
-basis) is factored out of `FootIKSolver` into a shared, stateless `TwoBoneIK` util that both
-solvers use, so there's no duplication; the foot IK refactor is behavior-preserving (idle
-foot buzz unchanged within physics noise). `ArmIKSolver` mirrors `FootIKSolver`: it drives an
-arm to reach a world-space target and blends its IK weight in/out (`begin_reach`/
-`update_reach`/`end_reach`), resolving arms through the arm-chain roles.
+- **Windmill** — during a directed stumble the arms swing wide to fight for balance. Each
+  hand sweeps a wide vertical circle out to its own side, the two arms in opposite phase.
+  The arc is **coupled to the stumble's momentum** (full at impact, winding down as the
+  drift spends) and **aligned to the fall direction** (sweeps in the plane of the shove and
+  leans into it), so it reads as a reaction to *this* hit, not a canned loop. It's layered
+  at **partial weight** over the loose flail — a balancing tendency, not a rigid takeover.
+- **Reach for the ground** — when a hit commits to a fall, the **leading arm** (the shoulder
+  furthest along the fall direction) reaches toward the ground to break it. Because a limp
+  ragdoll has left its animation pose, this can't be solved from animation: a brief braced
+  window keeps that arm's springs alive and runs the IK **anchored to the physical arm**,
+  driving the hand toward a ground point within reach while the rest of the body goes limp,
+  then releases into the full ragdoll (on contact or when the window expires). It's gated to
+  **forward/side falls** — a backward fall can't be broken by a hands-forward plant, and
+  forcing it just contorts the arm.
 
-**Still to come (the visual pass):** wiring the controller to *trigger* the windmill arc
-during the directed stumble and the ground reach on a committed fall, plus the feel tuning —
-and the override-channel coordination so arm IK and foot IK can write the spring at the same
-time (each currently replaces the whole override set, which is fine while only one runs).
+**How it's built.** `RagdollProfile` arm-chain roles (`get_arm_chain`, mirroring the leg
+chains) + the `ArmIKSolver`, which mirrors `FootIKSolver`: it drives an arm to a world-space
+target and blends its IK weight in/out (`begin_reach`/`update_reach`/`end_reach`), with an
+animation-anchored mode (windmill) and a physics-anchored mode (fall reach). The two-bone
+math (law of cosines + swing-of-animation basis) is factored out of `FootIKSolver` into a
+shared, stateless `TwoBoneIK` util both solvers use — no duplication; the foot IK refactor is
+behavior-preserving (idle foot buzz unchanged within physics noise). Foot IK and arm IK share
+the spring's override channel by **merging** into a per-frame-cleared set (foot first, arm
+last), so both can write the same frame without clobbering. The controller triggers the
+windmill from the stumble update and the reach from the ragdoll commit; tuning lives in the
+`RagdollTuning` "Self-Preservation: Arm Bracing" group, with live sliders in the Tuning Lab
+and a fall-reach target gizmo in the F3 debug HUD.
 
 ## State-machine integration
 
 No new states. The directed stumble lives inside `STAGGER` (`_update_directed_stumble`,
-called from `_update_stagger`) and commits across the tip-over check. Arm bracing will
-span the `STAGGER`→`RAGDOLL` transition.
+called from `_update_stagger`) and commits across the tip-over check. Arm bracing spans the
+`STAGGER`→`RAGDOLL` transition: the windmill runs in `STAGGER` (driven from the stumble
+update), and the fall reach runs at the `RAGDOLL` commit (set up in `_full_ragdoll`, advanced
+in `_update_ragdoll`) — keeping the bracing arm's springs alive into the otherwise-limp fall.
 
 ## Testing
 
@@ -111,5 +126,14 @@ Following the project pattern (drive the *real* classes via `test/helpers/rig_ha
   the behavior suppresses both. The synthetic rig's emergent fall is too nonlinear to
   assert a *physical* catch outcome, so motion *quality* is validated visually on the
   real ybot, not asserted.
-- **Arm roles / `ArmIKSolver`** (to come) — pure-data accessor tests and a reach test,
-  as for the leg chains / foot IK.
+- **Arm roles** (`test/test_ragdoll_profile_roles.gd`) — pure-data accessor tests, as for
+  the leg chains.
+- **`TwoBoneIK`** (`test/test_two_bone_ik.gd`) — pure math: swing degeneracies, segment-
+  length invariants, identity when no adjustment is needed.
+- **`ArmIKSolver`** (`test/test_arm_ik.gd`) — the real solver on a live rig: reach drives the
+  hand to target, unreachable targets no-op, weight blends out on release, and the
+  physics-anchored mode reaches from the body pose.
+- **Fall reach** (`test/test_fall_brace.gd`) — drives the real controller: a forward fall
+  keeps the leading arm alive while the rest goes limp, a backward fall skips the reach (the
+  `min_facing` gate, which is configurable), and the brace releases after its window. The
+  reach *motion* is validated visually; the tests assert the state-machine wiring.

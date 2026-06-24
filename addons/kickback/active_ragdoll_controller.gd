@@ -78,6 +78,23 @@ var _hit_guard_bodies: Dictionary = {}
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
 var _foot_ik: FootIKSolver
+var _arm_ik: ArmIKSolver
+
+# Arm bracing (0.4.0 Self-Preservation): the windmill sweep phase advances while
+# stumbling; the cached shoulder rig-names anchor each arm's windmill circle.
+var _windmill_phase: float = 0.0
+var _arm_shoulder_l: String = ""
+var _arm_shoulder_r: String = ""
+
+# Reach-for-ground (protective fall break): when a fall commits, the leading arm stays
+# active and reaches for the ground for a short window while the rest goes limp.
+var _fall_bracing: bool = false
+var _fall_brace_timer: float = 0.0
+var _fall_brace_side: String = ""
+var _fall_brace_dir: Vector3 = Vector3.ZERO
+var _fall_brace_arm_rigs: PackedStringArray = []
+var _fall_ground_y: float = 0.0  # actual ground height under the reach (for contact)
+var _fall_brace_target: Vector3 = Vector3.ZERO  # last reach target (cached for debug HUD)
 
 # Cached semantic role rig-names, resolved from the profile (see RagdollProfile roles).
 # Consumers query these instead of hardcoding "Hips"/"Foot_L"/... so non-Mixamo rigs work.
@@ -165,6 +182,11 @@ func _resolve_roles() -> void:
 	_leg_rig_set.clear()
 	for leg: String in _profile.get_all_leg_rigs():
 		_leg_rig_set[leg] = true
+	# Shoulder rig-names anchor the windmill circles (chain[0] of each arm chain).
+	var arm_l := _profile.get_arm_chain("L")
+	var arm_r := _profile.get_arm_chain("R")
+	_arm_shoulder_l = arm_l[0] if arm_l.size() == 3 else ""
+	_arm_shoulder_r = arm_r[0] if arm_r.size() == 3 else ""
 
 
 func _rebuild_protected_set() -> void:
@@ -234,6 +256,14 @@ func _physics_process(delta: float) -> void:
 				push_warning("ActiveRagdollController: foot IK disabled (missing leg bones)")
 				_foot_ik = null
 
+	# Lazy arm IK init (arm bracing — same deferral as foot IK)
+	if not _arm_ik and _tuning and _tuning.arm_brace_enabled and _character_root:
+		if not _spring.get_all_bone_names().is_empty():
+			_arm_ik = ArmIKSolver.new()
+			if not _arm_ik.initialize(_spring, _tuning, _character_root, _rig_builder, _profile):
+				push_warning("ActiveRagdollController: arm bracing disabled (missing arm bones)")
+				_arm_ik = null
+
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
 	_sync_injuries_to_resolver()
@@ -246,6 +276,16 @@ func _physics_process(delta: float) -> void:
 		State.GETTING_UP:
 			_update_recovery(delta)
 
+	# IK solvers (foot + arm) share the spring's override channel and MERGE their
+	# contributions, so clear it once per frame before they run. In NORMAL/STAGGER (the
+	# IK-writing states) and during a braced fall (RAGDOLL while reaching for ground);
+	# recovery in GETTING_UP owns the channel via its own set_target_overrides. Foot
+	# solves first; arm last so it wins on any shared bone.
+	var ik_writing := _state == State.NORMAL or _state == State.STAGGER \
+		or (_state == State.RAGDOLL and _fall_bracing)
+	if ik_writing:
+		_spring.clear_target_overrides()
+
 	# Foot IK: solve during NORMAL, pin during STAGGER, reset otherwise
 	if _foot_ik:
 		match _state:
@@ -255,6 +295,16 @@ func _physics_process(delta: float) -> void:
 				_foot_ik.process_stagger(delta)
 			_:
 				_foot_ik.reset()
+
+	# Arm IK: run during NORMAL/STAGGER (windmill, driven from the stumble update; NORMAL
+	# keeps processing so a released brace blends out gracefully) and during a braced fall
+	# (reach-for-ground, driven from the ragdoll update); reset otherwise.
+	if _arm_ik:
+		if _state == State.NORMAL or _state == State.STAGGER \
+				or (_state == State.RAGDOLL and _fall_bracing):
+			_arm_ik.process(delta)
+		else:
+			_arm_ik.reset()
 
 
 func _update_fatigue_decay(delta: float) -> void:
@@ -374,6 +424,7 @@ func _update_directed_stumble(delta: float) -> void:
 		return
 	if not _tuning.stumble_enabled or not _foot_ik or not _character_root:
 		_stumbling = false
+		_end_arm_brace()
 		return
 
 	# Drift the root along the hit direction (horizontal), decaying the speed.
@@ -394,9 +445,13 @@ func _update_directed_stumble(delta: float) -> void:
 	# stays loose and reacts (differential stiffness — see _apply_stumble_brace).
 	_apply_stumble_brace()
 
+	# Windmill the arms for balance — the active upper-body layer over the loose flail.
+	_update_arm_windmill(delta)
+
 	# Stumble is over once the momentum is spent and the last step has planted.
 	if _stumble_drift <= 0.01 and not _foot_ik.is_stepping():
 		_stumbling = false
+		_end_arm_brace()  # release the windmill; the arms blend back to animation
 
 
 ## Steps the trailing foot (the one furthest back along the stumble direction) forward
@@ -455,7 +510,224 @@ func _apply_stumble_brace() -> void:
 			_spring.set_bone_strength(rig_name, target)
 
 
+## Drives the arm windmill while stumbling (0.4.0 Self-Preservation): each hand sweeps
+## a wide vertical circle out to its own side, the two arms in opposite phase, so the
+## upper body actively fights for balance instead of only flailing loosely. Targets are
+## recomputed in world space each frame so the circles follow the displacing body. The
+## arm IK blends these in by weight; an unreachable point just holds the animation pose.
+func _update_arm_windmill(delta: float) -> void:
+	if not _arm_ik or not _tuning.arm_brace_enabled:
+		return
+	_arm_ik.set_physics_anchored(false)  # windmill solves against the animation pose
+	_windmill_phase += _tuning.arm_windmill_speed * delta
+	# Couple the windmill to the body's momentum: full size right after the hit, winding
+	# down as the drift is spent, so the arms settle WITH the body rather than spinning on
+	# after it has stopped (a constant-size circle reads as a detached, canned layer).
+	var push: float = maxf(_tuning.stumble_push_speed, 0.01)
+	var intensity := clampf(_stumble_drift / push, 0.0, 1.0)
+	_drive_windmill_arm("L", _arm_shoulder_l, _windmill_phase, intensity)
+	_drive_windmill_arm("R", _arm_shoulder_r, _windmill_phase + PI, intensity)
+
+
+## Points one arm's windmill target for this frame. [param shoulder_rig] is the chain's
+## shoulder body (the circle anchor); [param phase] is its position around the sweep;
+## [param intensity] (0..1, the remaining stumble momentum) scales the arc and the lean.
+func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float, intensity: float) -> void:
+	if shoulder_rig == "":
+		return
+	var bodies := _rig_builder.get_bodies()
+	var shoulder_body: RigidBody3D = bodies.get(shoulder_rig)
+	if not shoulder_body:
+		return
+	var shoulder := shoulder_body.global_position
+
+	# Outward = the shoulder's horizontal offset from the body center, so each circle
+	# sits on its own side regardless of facing (falls back to the character's lateral
+	# axis if the shoulder sits on the centerline).
+	var center_body: RigidBody3D = bodies.get(_root_rig)
+	var outward := shoulder - (center_body.global_position if center_body else shoulder)
+	outward.y = 0.0
+	if outward.length_squared() < 0.0001:
+		outward = _character_root.global_basis.x * (1.0 if side == "L" else -1.0)
+	outward = outward.normalized()
+
+	# Sweep in the plane of the FALL (stumble direction × up), not the character's facing,
+	# so the arms throw the way the body is actually being shoved — and lean into it. This
+	# ties the windmill to THIS hit instead of being a facing-locked canned circle.
+	var sweep_axis := _stumble_dir
+	if sweep_axis.length_squared() < 0.0001:
+		sweep_axis = -_character_root.global_basis.z
+	sweep_axis = sweep_axis.normalized()
+
+	var radius: float = _tuning.arm_windmill_radius * (0.4 + 0.6 * intensity)
+	var circle_center := shoulder \
+		+ outward * _tuning.arm_windmill_lateral \
+		+ Vector3.UP * _tuning.arm_windmill_height \
+		+ sweep_axis * (_tuning.arm_windmill_radius * 0.5 * intensity)  # lean into the fall
+	var sweep := (sweep_axis * cos(phase) + Vector3.UP * sin(phase)) * radius
+	# Partial weight: the windmill is a balancing TENDENCY layered over the loose flail,
+	# not a takeover — keeps the upper body reactive rather than rigidly on the circle.
+	_arm_ik.begin_reach(side, circle_center + sweep, _tuning.arm_brace_weight)
+
+
+## Releases the arm windmill (blends the arms back toward the animation pose).
+func _end_arm_brace() -> void:
+	if not _arm_ik:
+		return
+	_arm_ik.end_reach("L")
+	_arm_ik.end_reach("R")
+
+
+## Sets up the protective fall break at ragdoll commit (called from _full_ragdoll after
+## the springs are zeroed): picks the leading arm (the one furthest along the fall
+## direction) and keeps its springs alive so the reach can drive it while the rest of
+## the body goes limp. No-op without a clear fall direction or the arm IK solver.
+func _setup_fall_brace() -> void:
+	_fall_bracing = false
+	_fall_brace_arm_rigs = PackedStringArray()
+	if not _arm_ik or not _tuning.arm_fall_reach_enabled or not _rig_builder:
+		return
+
+	# Fall direction: the directed-stumble drift if there was one, else the hit direction.
+	var dir := _stumble_dir
+	if dir.length_squared() < 0.01:
+		dir = Vector3(_stagger_hit_dir.x, 0.0, _stagger_hit_dir.z)
+	if dir.length_squared() < 0.01:
+		return
+	dir = dir.normalized()
+
+	# A protective ground reach is the forward/side "catch yourself" reflex. A backward
+	# fall can't be broken by a hands-forward plant — forcing it reaches behind the
+	# shoulder and contorts the arm — so skip the reach when the fall runs clearly
+	# against the character's facing (it just collapses; the stumble windmill already
+	# gave the upper body life on the way down). The character faces +Z.
+	if dir.dot(_character_root.global_basis.z) < _tuning.arm_fall_reach_min_facing:
+		return
+
+	var bodies := _rig_builder.get_bodies()
+	var side := _leading_arm_side(bodies, dir)
+	if side == "":
+		return
+	var chain := _profile.get_arm_chain(side)
+	if chain.size() != 3:
+		return
+
+	_fall_brace_side = side
+	_fall_brace_dir = dir
+	_fall_brace_arm_rigs = chain
+	_fall_brace_timer = 0.0
+	_fall_bracing = true
+	# Anchor the reach to the PHYSICAL arm (the body has left the animation pose now that
+	# it's limp) so it reaches from where the arm actually is, not a phantom standing arm.
+	_arm_ik.set_physics_anchored(true)
+	# Keep the bracing arm's springs alive (the zeroing loop in _full_ragdoll just
+	# limped them); the per-frame update re-asserts this as long as the brace holds.
+	for rig: String in chain:
+		_spring.set_bone_strength(rig, _effective_base_strength(rig) * _tuning.arm_fall_reach_strength)
+
+
+## Returns "L"/"R" for the arm whose shoulder is furthest along the fall direction (the
+## one that leads into the ground), or "" if neither shoulder body is available.
+func _leading_arm_side(bodies: Dictionary, dir: Vector3) -> String:
+	var best := ""
+	var best_d := -INF
+	for entry: Array in [["L", _arm_shoulder_l], ["R", _arm_shoulder_r]]:
+		var rig: String = entry[1]
+		if rig == "":
+			continue
+		var body: RigidBody3D = bodies.get(rig)
+		if not body:
+			continue
+		var d := body.global_position.dot(dir)
+		if d > best_d:
+			best_d = d
+			best = entry[0]
+	return best
+
+
+## Advances the protective fall reach: holds the bracing arm's springs, reaches its hand
+## toward the ground ahead in the fall direction, and ends the brace (limping the arm)
+## when the window expires or the hand reaches the ground.
+func _update_fall_brace(delta: float) -> void:
+	_fall_brace_timer += delta
+
+	var target := _fall_ground_target()
+	_fall_brace_target = target  # cache for the debug HUD (no raycast in _draw)
+	# Release to a full limp ragdoll when the window expires, or once the hand has
+	# planted — but only after holding at least half the window, so the catch visibly
+	# props the body instead of limping out the instant the hand grazes the ground.
+	var hand_rig: String = _fall_brace_arm_rigs[2]
+	var bodies := _rig_builder.get_bodies()
+	var hand_body: RigidBody3D = bodies.get(hand_rig)
+	var min_hold: float = _tuning.arm_fall_reach_duration * 0.5
+	# Contact = the hand reached the ACTUAL ground (not the possibly-mid-air clamped
+	# target), and only after holding at least the minimum so the prop is visible.
+	var contacted := hand_body and hand_body.global_position.y <= _fall_ground_y + 0.06 \
+		and _fall_brace_timer >= min_hold
+	if _fall_brace_timer >= _tuning.arm_fall_reach_duration or contacted:
+		_end_fall_brace()
+		return
+
+	# Re-assert the arm's springs (nothing else should be reviving them in ragdoll) and
+	# drive the committed reach toward the ground.
+	for rig: String in _fall_brace_arm_rigs:
+		_spring.set_bone_strength(rig, _effective_base_strength(rig) * _tuning.arm_fall_reach_strength)
+	_arm_ik.begin_reach(_fall_brace_side, target, _tuning.arm_fall_reach_weight)
+
+
+## World-space point the bracing hand reaches for. It aims at the ground ahead of the
+## body in the fall direction (downward raycast for the height), but is pulled back to
+## within the arm's reach of the actual shoulder, so the hand always extends toward the
+## ground (and plants on it once the body has fallen close enough) rather than chasing
+## an out-of-reach point and floating.
+func _fall_ground_target() -> Vector3:
+	var bodies := _rig_builder.get_bodies()
+	var hips: RigidBody3D = bodies.get(_root_rig)
+	var origin := hips.global_position if hips else _character_root.global_position
+	var ahead := origin + _fall_brace_dir * _tuning.arm_fall_reach_distance
+
+	# Ground height under the reach point (raycast; fall back to the root's height).
+	var ground_y := _character_root.global_position.y
+	var world := _character_root.get_world_3d()
+	if world:
+		var ss := world.direct_space_state
+		var from := Vector3(ahead.x, origin.y + 0.3, ahead.z)
+		var q := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 3.0)
+		q.collision_mask = _tuning.foot_ik_collision_mask
+		var hit := ss.intersect_ray(q)
+		if not hit.is_empty():
+			ground_y = hit["position"].y
+	var ground_point := Vector3(ahead.x, ground_y + _tuning.foot_ik_ankle_height, ahead.z)
+	_fall_ground_y = ground_point.y  # the real ground height, for the contact test
+
+	# Clamp to within the arm's reach of the physical shoulder so the IK can hit it.
+	var shoulder_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[0])
+	if not shoulder_body:
+		return ground_point
+	var shoulder := shoulder_body.global_position
+	var to_ground := ground_point - shoulder
+	var max_reach := _arm_ik.get_reach() * 0.97
+	if to_ground.length() > max_reach:
+		return shoulder + to_ground.normalized() * max_reach
+	return ground_point
+
+
+## Ends the protective fall reach: the bracing arm goes limp (springs zeroed) and joins
+## the rest of the body in a full ragdoll.
+func _end_fall_brace() -> void:
+	if not _fall_bracing:
+		return
+	_fall_bracing = false
+	for rig: String in _fall_brace_arm_rigs:
+		_spring.set_bone_strength(rig, 0.0)
+	_fall_brace_arm_rigs = PackedStringArray()
+	if _arm_ik:
+		_arm_ik.reset()
+
+
 func _update_ragdoll(delta: float) -> void:
+	if _fall_bracing:
+		_update_fall_brace(delta)
 	_ragdoll_elapsed += delta
 	if _spring.is_settled(delta) or _ragdoll_elapsed > _tuning.ragdoll_force_recovery_time:
 		_start_recovery()
@@ -623,6 +895,10 @@ func _handle_normal_hit(rig_name: String, hit_dir: Vector3, effective_reduction:
 		should_ragdoll = _pain >= _tuning.pain_ragdoll_threshold
 	if should_ragdoll:
 		if _try_acquire_ragdoll_slot():
+			# No stumble preceded this direct fall — give the protective reach the fresh
+			# hit direction (and clear any stale stumble drift) so it aims correctly.
+			_stumble_dir = Vector3.ZERO
+			_stagger_hit_dir = hit_dir
 			_full_ragdoll()
 		else:
 			_start_stagger(hit_dir)  # hard cap: downgrade to the cheaper reaction
@@ -688,6 +964,23 @@ func get_balance_ratio() -> float:
 ## Returns the full balance state: {com, support_center, balance_ratio, imbalance_dir}.
 func get_balance_state() -> Dictionary:
 	return _compute_balance_state()
+
+
+## Debug snapshot of the protective fall reach for the debug HUD. Returns {} when not
+## bracing, else {target, shoulder, hand, side} world-space positions (cached from the
+## last solve — no physics query, safe to call from _draw).
+func get_fall_brace_debug() -> Dictionary:
+	if not _fall_bracing or _fall_brace_arm_rigs.size() != 3 or not _rig_builder:
+		return {}
+	var bodies := _rig_builder.get_bodies()
+	var shoulder_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[0])
+	var hand_body: RigidBody3D = bodies.get(_fall_brace_arm_rigs[2])
+	return {
+		"target": _fall_brace_target,
+		"shoulder": shoulder_body.global_position if shoulder_body else _fall_brace_target,
+		"hand": hand_body.global_position if hand_body else _fall_brace_target,
+		"side": _fall_brace_side,
+	}
 
 
 ## Returns the current fatigue level (0.0 = fresh, 1.0 = exhausted).
@@ -816,6 +1109,12 @@ func _full_ragdoll() -> void:
 	_spring.reset_settle_timer()
 	_spring.clear_target_overrides()
 	_ragdoll_poses.clear()
+
+	# Protective fall break: keep the leading arm active and reaching for the ground for
+	# a short window, while the rest of the body goes limp (the catch before the
+	# collapse). Re-boosts that arm's springs after the zeroing above.
+	_setup_fall_brace()
+
 	state_changed.emit(_state)
 	ragdoll_started.emit()
 
@@ -832,6 +1131,7 @@ func _full_ragdoll() -> void:
 
 
 func _start_recovery() -> void:
+	_end_fall_brace()  # release any in-flight protective reach before the get-up blend
 	_state = State.GETTING_UP
 	_recovery_elapsed = 0.0
 	state_changed.emit(_state)
@@ -955,6 +1255,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 		_stumble_drift = _tuning.stumble_push_speed
 		_stumble_dist_since_step = _tuning.stumble_step_length  # step on the first frame
 		_stumbling = true
+		_windmill_phase = 0.0  # arms windmill for balance for the duration of the stumble
 	else:
 		_stumble_dir = Vector3.ZERO
 		_stumble_drift = 0.0
@@ -973,6 +1274,7 @@ func _start_stagger(hit_dir: Vector3) -> void:
 func _finish_stagger() -> void:
 	if _foot_ik:
 		_foot_ik.end_stagger()
+	_end_arm_brace()
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 	_state = State.NORMAL
