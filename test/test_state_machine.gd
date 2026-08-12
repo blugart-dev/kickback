@@ -96,6 +96,30 @@ func test_persistent_holds_until_released():
 	assert_eq(h.controller.get_state(), ActiveRagdollController.State.NORMAL)
 
 
+func test_persistent_survives_hits():
+	var h = await _spawn(_fast_tuning())
+	h.controller.set_persistent(true)
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT)
+
+	# Worst-case profile: guaranteed ragdoll dice + full-body strength wipe.
+	# A hit on a held-down body must stay pure impulse — transitioning back
+	# to RAGDOLL lets settle→recovery stand a corpse up (regression:
+	# shooting a persistent ragdoll resurrected it).
+	var smash := ImpactProfile.new()
+	smash.ragdoll_probability = 1.0
+	smash.strength_reduction = 1.0
+	smash.strength_spread = 99
+	var chest := h.get_body("Chest")
+	h.controller.apply_hit(chest, Vector3.FORWARD, chest.global_position, smash)
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"hit does not knock a persistent body out of PERSISTENT")
+
+	# ...and the hit must not have armed a recovery either.
+	await wait_physics_frames(30)
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"persistent body stays down after being hit")
+
+
 # ── Enum / tuning invariants (not re-implemented formulas) ──────────────────
 
 func test_state_enum():

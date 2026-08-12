@@ -836,11 +836,15 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 	body.apply_impulse(direction * final_impulse, body.to_local(hit_pos))
 
 	# Micro hit reactions: brief angular kicks for immediate impact feel
-	if _tuning.micro_reaction_strength > 0.0 and _state != State.RAGDOLL:
+	if _tuning.micro_reaction_strength > 0.0 \
+			and _state != State.RAGDOLL and _state != State.PERSISTENT:
 		_apply_micro_reaction(hit_dir, profile)
 
-	# During ragdoll, just reset settle timer
-	if _state == State.RAGDOLL:
+	# During ragdoll — including persistent (death/knockdown) — a hit is pure
+	# impulse. Falling through to the stagger/ragdoll logic would transition
+	# PERSISTENT back to RAGDOLL, whose settle→recovery cycle then stands a
+	# held-down body back up (shooting a corpse resurrected it).
+	if _state == State.RAGDOLL or _state == State.PERSISTENT:
 		_spring.reset_settle_timer()
 		return
 
