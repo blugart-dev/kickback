@@ -99,6 +99,38 @@ func test_springs_hold_pose_against_gravity():
 		"hips stay upright — springs track the animation orientation")
 
 
+func test_rig_survives_moving_character_root():
+	# Regression: a character root that writes its transform every physics
+	# frame (CharacterBody3D.move_and_slide, nav-driven NPCs) used to
+	# re-teleport every rig body to parent_xform * local each frame,
+	# silently discarding that frame's integration — the rig froze solid
+	# while springs pumped clamp-level velocities into it, which released
+	# as an explosive ragdoll the moment the root stopped (e.g. on death).
+	# Bodies are top_level now, so ancestor writes must not touch them.
+	var h = await _spawn()
+	var leg: RigidBody3D = h.get_body("UpperLeg_L")
+	assert_true(leg.top_level, "rig bodies are top_level (world-space)")
+
+	# Drive the root like a nav NPC (one transform write per physics frame)
+	# while commanding a constant angular velocity, as the spring does. The
+	# body must actually integrate it: pre-fix this measures ~0.000 rad.
+	var travelled := 0.0
+	var prev := leg.global_basis.get_rotation_quaternion()
+	for i in 30:
+		h.global_position.x += 0.002
+		leg.angular_velocity = Vector3(0, 0, 4.0)
+		await wait_physics_frames(1)
+		var q := leg.global_basis.get_rotation_quaternion()
+		travelled += q.angle_to(prev)
+		prev = q
+	# The active spring immediately lerps the commanded velocity back toward
+	# its own (near-zero-error) target, so only a fraction of it integrates —
+	# ~0.17 rad measured. The regression pins ~0.000 rad exactly, so any
+	# clearly-nonzero travel discriminates.
+	assert_gt(travelled, 0.05,
+		"body orientation integrates while the root moves every frame")
+
+
 # ── Hit handling (apply_hit) ────────────────────────────────────────────────
 
 func test_apply_hit_reduces_bone_strength():

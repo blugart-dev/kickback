@@ -96,6 +96,11 @@ func _adopt_baked_rig() -> bool:
 		push_warning("PhysicsRigBuilder: Baked rig is missing %d bones (%s) — falling back to runtime generation" % [missing.size(), ", ".join(missing)])
 		return false
 
+	# Baked rigs predate (or may have been saved without) the world-space
+	# flag — enforce it on adopt, same rationale as _create_body.
+	for body: RigidBody3D in baked_bodies.values():
+		body.top_level = true
+
 	_bodies = baked_bodies
 	_rig_to_bone = baked_bones
 	return true
@@ -118,6 +123,16 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	body.gravity_scale = _tuning.gravity_scale
 	body.angular_damp = _tuning.angular_damp
 	body.linear_damp = _tuning.linear_damp
+	# World-space, immune to ancestor transform writes. Without this, a
+	# character root that moves every physics frame (CharacterBody3D
+	# move_and_slide, nav-driven NPCs) re-teleports each body to
+	# parent_xform * local every frame, silently discarding that frame's
+	# integration: the rig visibly freezes while springs pump clamp-level
+	# velocities into it — which then release all at once the moment the
+	# root stops (death), as an explosive ragdoll. The springs are what
+	# carry the rig along with the character (their targets already move
+	# with the skeleton); parent inheritance was never load-bearing.
+	body.top_level = true
 
 	# Shape is offset locally along the bone direction (toward child bone)
 	var col_shape := SkeletonDetector.create_collision_shape(bone_def)
