@@ -275,14 +275,22 @@ func _physics_process(delta: float) -> void:
 			_update_ragdoll(delta)
 		State.GETTING_UP:
 			_update_recovery(delta)
+		State.PERSISTENT:
+			# A death can arrive mid-catch (set_persistent → _full_ragdoll arms the
+			# fall brace): let the reach play out and release on its own timer /
+			# ground contact, exactly as in RAGDOLL — otherwise the braced arm's
+			# springs stay strong forever and hold the corpse suspended in the air.
+			# No settle → recovery here: persistent bodies stay down.
+			if _fall_bracing:
+				_update_fall_brace(delta)
 
 	# IK solvers (foot + arm) share the spring's override channel and MERGE their
 	# contributions, so clear it once per frame before they run. In NORMAL/STAGGER (the
-	# IK-writing states) and during a braced fall (RAGDOLL while reaching for ground);
-	# recovery in GETTING_UP owns the channel via its own set_target_overrides. Foot
-	# solves first; arm last so it wins on any shared bone.
+	# IK-writing states) and during a braced fall (RAGDOLL/PERSISTENT while reaching
+	# for ground); recovery in GETTING_UP owns the channel via its own
+	# set_target_overrides. Foot solves first; arm last so it wins on any shared bone.
 	var ik_writing := _state == State.NORMAL or _state == State.STAGGER \
-		or (_state == State.RAGDOLL and _fall_bracing)
+		or ((_state == State.RAGDOLL or _state == State.PERSISTENT) and _fall_bracing)
 	if ik_writing:
 		_spring.clear_target_overrides()
 
@@ -298,10 +306,10 @@ func _physics_process(delta: float) -> void:
 
 	# Arm IK: run during NORMAL/STAGGER (windmill, driven from the stumble update; NORMAL
 	# keeps processing so a released brace blends out gracefully) and during a braced fall
-	# (reach-for-ground, driven from the ragdoll update); reset otherwise.
+	# (reach-for-ground, driven from the ragdoll/persistent update); reset otherwise.
 	if _arm_ik:
 		if _state == State.NORMAL or _state == State.STAGGER \
-				or (_state == State.RAGDOLL and _fall_bracing):
+				or ((_state == State.RAGDOLL or _state == State.PERSISTENT) and _fall_bracing):
 			_arm_ik.process(delta)
 		else:
 			_arm_ik.reset()

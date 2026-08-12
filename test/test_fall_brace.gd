@@ -87,3 +87,31 @@ func test_fall_brace_releases_after_window():
 	# Well past arm_fall_reach_duration (0.55 s ≈ 33 frames).
 	await wait_physics_frames(70)
 	assert_false(ctrl._fall_bracing, "brace releases after its window")
+
+
+# ── Persistent-death regression ─────────────────────────────────────────────
+# The exact kill flow FPS games use: stagger first (records the stumble/hit
+# direction), then set_persistent(true) for the death. _full_ragdoll arms the
+# protective reach from the recorded direction, and set_persistent immediately
+# moves the state to PERSISTENT — which used to skip _update_fall_brace
+# entirely, leaving the braced arm's springs strong forever and holding the
+# corpse suspended mid-air (near-zero gravity_scale on the braced bodies).
+func test_persistent_death_releases_fall_brace():
+	var h = await _spawn()
+	var ctrl = h.controller
+	ctrl.trigger_stagger(Vector3(0, 0, 1))  # forward stumble: records the direction
+	await wait_physics_frames(2)
+	ctrl.set_persistent(true)
+
+	assert_eq(ctrl.get_state(), ActiveRagdollController.State.PERSISTENT, "death is persistent")
+	assert_true(ctrl._fall_bracing, "death mid-stumble arms the protective reach")
+	var arm_rigs: PackedStringArray = ctrl._fall_brace_arm_rigs
+
+	# Well past arm_fall_reach_duration (0.55 s ≈ 33 frames).
+	await wait_physics_frames(70)
+	assert_false(ctrl._fall_bracing, "brace releases in PERSISTENT (timer/contact)")
+	for rig in arm_rigs:
+		assert_lt(h.spring.get_bone_strength(rig), 0.01,
+			"braced arm goes limp after the reach: %s" % rig)
+	assert_eq(ctrl.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"corpse stays down — the brace release must not wake recovery")

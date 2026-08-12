@@ -9,6 +9,16 @@
 ## [Unreleased]
 
 ### Fixed
+- **PERSISTENT no longer strands the protective fall-brace** — `set_persistent(true)`
+  runs `_full_ragdoll()`, which arms the fall-catch reach when a stumble/hit direction
+  is on record, but the brace was only advanced in `State.RAGDOLL`; the immediate
+  switch to `State.PERSISTENT` skipped `_update_fall_brace()` forever. The braced arm
+  kept near-full spring strength, the resolver held those bodies at ~zero
+  `gravity_scale`, and the corpse hung suspended mid-air pinned to its last animation
+  pose. PERSISTENT now advances the brace exactly like RAGDOLL (release on timer or
+  ground contact — the dying body visibly tries to catch itself, then collapses), and
+  the IK override-channel gates include the persistent braced fall. Found in an FPS
+  where staggered-then-killed enemies sometimes froze in the air.
 - **Rig bodies are now `top_level` (world-space)** — a character root that writes its
   transform every physics frame (`CharacterBody3D.move_and_slide()`, nav-driven NPCs)
   re-teleported every rig body to `parent_xform * local` each frame, silently discarding
