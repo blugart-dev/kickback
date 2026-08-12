@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Hits no longer knock a PERSISTENT ragdoll back to RAGDOLL** — `apply_hit()` only
+  guarded `State.RAGDOLL`, so a hit on a held-down body (a corpse, a knockdown) fell
+  through to the stagger/ragdoll logic; the resulting RAGDOLL state's settle→recovery
+  cycle then stood the body back up. Persistent bodies now absorb hits as pure impulse
+  (with a settle-timer reset), same as plain ragdoll. Found integrating Kickback into
+  an FPS where shooting a corpse resurrected it.
+
 ## [0.4.0] - 2026-06-24
 
 **Self-Preservation** — the first *active* survival behaviors: a staggering hit now visibly
