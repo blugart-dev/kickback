@@ -9,6 +9,16 @@
 ## [Unreleased]
 
 ### Fixed
+- **Rig bodies are now `top_level` (world-space)** — a character root that writes its
+  transform every physics frame (`CharacterBody3D.move_and_slide()`, nav-driven NPCs)
+  re-teleported every rig body to `parent_xform * local` each frame, silently discarding
+  that frame's physics integration. The visible result: the rig froze solid while the
+  character moved (no animation showing through, no visible hit reactions) and the
+  springs pumped clamp-level velocities into the locked bodies — which released all at
+  once the moment the root stopped moving (e.g. on death), as an explosive ragdoll.
+  Position springs already carry the rig along with the character (their targets move
+  with the skeleton), so parent transform inheritance was never load-bearing. Applies
+  to both runtime-built and baked (RigBaker) rigs.
 - **Hits no longer knock a PERSISTENT ragdoll back to RAGDOLL** — `apply_hit()` only
   guarded `State.RAGDOLL`, so a hit on a held-down body (a corpse, a knockdown) fell
   through to the stagger/ragdoll logic; the resulting RAGDOLL state's settle→recovery
