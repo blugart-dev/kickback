@@ -559,7 +559,9 @@ func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float, inten
 	var outward := shoulder - (center_body.global_position if center_body else shoulder)
 	outward.y = 0.0
 	if outward.length_squared() < 0.0001:
-		outward = _character_root.global_basis.x * (1.0 if side == "L" else -1.0)
+		# Left = up × forward, which is +X for a +Z-facing model and -X for -Z.
+		outward = _character_root.global_basis.x * float(_tuning.character_forward_sign) \
+			* (1.0 if side == "L" else -1.0)
 	outward = outward.normalized()
 
 	# Sweep in the plane of the FALL (stumble direction × up), not the character's facing,
@@ -567,7 +569,7 @@ func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float, inten
 	# ties the windmill to THIS hit instead of being a facing-locked canned circle.
 	var sweep_axis := _stumble_dir
 	if sweep_axis.length_squared() < 0.0001:
-		sweep_axis = -_character_root.global_basis.z
+		sweep_axis = _character_forward()
 	sweep_axis = sweep_axis.normalized()
 
 	var radius: float = _tuning.arm_windmill_radius * (0.4 + 0.6 * intensity)
@@ -611,8 +613,8 @@ func _setup_fall_brace() -> void:
 	# fall can't be broken by a hands-forward plant — forcing it reaches behind the
 	# shoulder and contorts the arm — so skip the reach when the fall runs clearly
 	# against the character's facing (it just collapses; the stumble windmill already
-	# gave the upper body life on the way down). The character faces +Z.
-	if dir.dot(_character_root.global_basis.z) < _tuning.arm_fall_reach_min_facing:
+	# gave the upper body life on the way down).
+	if dir.dot(_character_forward()) < _tuning.arm_fall_reach_min_facing:
 		return
 
 	var bodies := _rig_builder.get_bodies()
@@ -1202,16 +1204,22 @@ func _start_recovery() -> void:
 			if face_up:
 				facing = -facing
 
-		# Set character root orientation
+		# Set character root orientation. atan2(f.x, f.z) yaws the root's local +Z
+		# onto f — a -Z-forward model (Godot convention) needs the 180° flip, which
+		# negating the vector provides (see RagdollTuning.character_forward_sign).
 		if facing.length_squared() > 0.01:
+			var fwd := facing * float(_tuning.character_forward_sign)
 			if _tuning.align_to_slope and ground_normal.dot(Vector3.UP) > _tuning.slope_alignment_threshold:
 				var slope_forward := facing.slide(ground_normal).normalized()
 				if slope_forward.length_squared() > 0.001:
-					_character_root.global_basis = Basis.looking_at(slope_forward, ground_normal)
+					# looking_at points -Z at the target, so hand it the OPPOSITE of
+					# where the model's forward axis should end up.
+					_character_root.global_basis = Basis.looking_at(
+						-slope_forward * float(_tuning.character_forward_sign), ground_normal)
 				else:
-					_character_root.global_rotation.y = atan2(facing.x, facing.z)
+					_character_root.global_rotation.y = atan2(fwd.x, fwd.z)
 			else:
-				_character_root.global_rotation.y = atan2(facing.x, facing.z)
+				_character_root.global_rotation.y = atan2(fwd.x, fwd.z)
 
 	# Restore body world transforms — bodies stay where they were
 	for rig_name: String in saved_transforms:
@@ -1480,6 +1488,12 @@ func _sync_injuries_to_resolver() -> void:
 		return
 	for rig_name: String in _injuries:
 		_spring.set_pin_injury(rig_name, _injuries[rig_name])
+
+
+## World-space forward direction of the character root, honoring the model's
+## authoring convention ([member RagdollTuning.character_forward_sign]).
+func _character_forward() -> Vector3:
+	return _character_root.global_basis.z * float(_tuning.character_forward_sign)
 
 
 ## Returns the character root's movement velocity for ragdoll momentum transfer.

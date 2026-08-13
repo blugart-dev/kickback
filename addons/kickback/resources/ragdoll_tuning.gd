@@ -301,6 +301,13 @@ extends Resource
 # ── Advanced: Ground & Root Motion ──────────────────────────────────────────
 
 @export_group("Advanced: Ground & Root Motion")
+## Which way the character model faces along the root's local Z axis. Mixamo
+## characters (and the Kickback demos) face +Z, the default. Godot's own forward
+## convention is -Z — set -Z for characters authored that way, or get-up recovery
+## stands them up facing backwards (and the protective fall reach misjudges
+## forward vs backward falls).
+@export_enum("+Z (Mixamo / Kickback demos):1", "-Z (Godot forward):-1")
+var character_forward_sign: int = 1
 ## Collision mask for ground raycasts during get-up recovery.
 ## Defaults to layer 1 (world geometry in standard Godot projects).
 @export_flags_3d_physics var ground_raycast_mask: int = 1

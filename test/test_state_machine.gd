@@ -144,6 +144,34 @@ func test_knockdown_disabled_downgrades_ragdoll_to_stagger():
 		"death ragdoll bypasses knockdown_enabled")
 
 
+func test_recovery_facing_honors_forward_sign():
+	# The get-up teleport yaws the root so the MODEL faces the way the body lies:
+	# the same landing pose under a flipped forward convention must yaw 180° apart
+	# (a -Z-forward Godot character otherwise stands up facing backwards).
+	var t := _fast_tuning()
+	t.ragdoll_force_recovery_time = 10.0  # recovery is driven manually below
+	t.settle_duration = 10.0
+	var h = await _spawn(t)
+	h.controller.trigger_ragdoll()
+	await wait_physics_frames(2)
+
+	# Lay the head a clear metre forward (+Z) of the hips so the landing pose has
+	# an unambiguous facing for the head-hip computation.
+	var hips: RigidBody3D = h.get_body("Hips")
+	h.get_body("Head").global_position = hips.global_position + Vector3(0.0, -0.4, 1.0)
+
+	t.character_forward_sign = 1
+	h.controller._start_recovery()
+	var yaw_plus_z: float = h.global_rotation.y
+
+	t.character_forward_sign = -1
+	h.controller._start_recovery()
+	var yaw_minus_z: float = h.global_rotation.y
+
+	assert_almost_eq(absf(wrapf(yaw_plus_z - yaw_minus_z, -PI, PI)), PI, 0.01,
+		"flipping the forward convention flips the recovered yaw 180 degrees")
+
+
 # ── Enum / tuning invariants (not re-implemented formulas) ──────────────────
 
 func test_state_enum():
