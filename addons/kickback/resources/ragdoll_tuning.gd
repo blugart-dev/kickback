@@ -10,6 +10,14 @@ extends Resource
 # ── Hit Reactions (most-tweaked) ────────────────────────────────────────────
 
 @export_group("Hit Reactions")
+## Whether hits can knock the character into a full ragdoll while it is alive.
+## When false, every spontaneous ragdoll path — the per-hit dice roll
+## (ImpactProfile.ragdoll_probability), pain escalation (pain_ragdoll_threshold)
+## and the stagger tip-over (balance_ragdoll_threshold) — downgrades to stagger,
+## so hits stay visible as reactions without a knockdown. Explicit calls
+## (trigger_ragdoll, set_persistent — i.e. deaths and scripted falls) still
+## ragdoll. Use for death-only-ragdoll games.
+@export var knockdown_enabled: bool = true
 ## Average strength ratio below which a non-ragdoll hit triggers stagger.
 ## Set to 0.0 to disable stagger entirely.
 @export_range(0.0, 1.0) var stagger_threshold: float = 0.70
@@ -293,6 +301,13 @@ extends Resource
 # ── Advanced: Ground & Root Motion ──────────────────────────────────────────
 
 @export_group("Advanced: Ground & Root Motion")
+## Which way the character model faces along the root's local Z axis. Mixamo
+## characters (and the Kickback demos) face +Z, the default. Godot's own forward
+## convention is -Z — set -Z for characters authored that way, or get-up recovery
+## stands them up facing backwards (and the protective fall reach misjudges
+## forward vs backward falls).
+@export_enum("+Z (Mixamo / Kickback demos):1", "-Z (Godot forward):-1")
+var character_forward_sign: int = 1
 ## Collision mask for ground raycasts during get-up recovery.
 ## Defaults to layer 1 (world geometry in standard Godot projects).
 @export_flags_3d_physics var ground_raycast_mask: int = 1
