@@ -267,3 +267,9 @@ Characters flop dramatically.
 **Boss enemies:** Use `create_tank()` as a base. High `stagger_threshold`
 (0.2–0.3) so most hits are absorbed. High `protected_bones` to keep legs
 locked. Slow `fatigue_decay` so sustained fire eventually overwhelms.
+
+**Death-only ragdoll:** Set `knockdown_enabled = false`. Hits keep all
+their in-animation life (micro-reactions, pulses, stagger, stumble) but a
+would-be knockdown downgrades to stagger — enemies never leave their feet
+until an explicit `trigger_ragdoll()` / `set_persistent(true)` (the death).
+No need to zero `ragdoll_probability` across every ImpactProfile.

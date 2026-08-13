@@ -397,10 +397,13 @@ func _update_stagger(delta: float) -> void:
 	_update_directed_stumble(delta)
 
 	if has_support:
-		# Too far off-balance → ragdoll (tipping over), unless mid-stumble. Hard cap: if
-		# the budget denies the slot, keep fighting in stagger instead of a full fall —
-		# and retry on later frames, so it ragdolls as soon as a slot frees up.
-		if balance > _tuning.balance_ragdoll_threshold and not _stumbling:
+		# Too far off-balance → ragdoll (tipping over), unless mid-stumble or
+		# knockdowns are disabled (death-only ragdoll: keep fighting in stagger).
+		# Hard cap: if the budget denies the slot, keep fighting in stagger instead
+		# of a full fall — and retry on later frames, so it ragdolls as soon as a
+		# slot frees up.
+		if _tuning.knockdown_enabled and balance > _tuning.balance_ragdoll_threshold \
+				and not _stumbling:
 			if _try_acquire_ragdoll_slot():
 				_full_ragdoll()
 				return
@@ -887,9 +890,10 @@ func _handle_stagger_hit(rig_name: String, hit_dir: Vector3, effective_reduction
 	_reduce_strength(rig_name, effective_reduction, profile.strength_spread)
 	_spring.recovery_rate = profile.recovery_rate
 	var boosted_prob := profile.ragdoll_probability * _tuning.stagger_ragdoll_bonus
-	# Hard cap: if the budget denies the slot, fall through to extend the stagger
+	# Knockdowns disabled → the hit extends the stagger instead of felling. Hard
+	# cap: if the budget denies the slot, fall through to extend the stagger
 	# (the cheaper reaction) rather than ragdoll.
-	if randf() < boosted_prob and _try_acquire_ragdoll_slot():
+	if _tuning.knockdown_enabled and randf() < boosted_prob and _try_acquire_ragdoll_slot():
 		_full_ragdoll()
 	else:
 		_stagger_elapsed = 0.0  # Extend stagger
@@ -906,14 +910,16 @@ func _handle_normal_hit(rig_name: String, hit_dir: Vector3, effective_reduction:
 	if not should_ragdoll and _tuning.pain_ragdoll_threshold > 0.0:
 		should_ragdoll = _pain >= _tuning.pain_ragdoll_threshold
 	if should_ragdoll:
-		if _try_acquire_ragdoll_slot():
+		if _tuning.knockdown_enabled and _try_acquire_ragdoll_slot():
 			# No stumble preceded this direct fall — give the protective reach the fresh
 			# hit direction (and clear any stale stumble drift) so it aims correctly.
 			_stumble_dir = Vector3.ZERO
 			_stagger_hit_dir = hit_dir
 			_full_ragdoll()
 		else:
-			_start_stagger(hit_dir)  # hard cap: downgrade to the cheaper reaction
+			# Knockdowns disabled (death-only ragdoll) or budget hard cap:
+			# downgrade to the cheaper reaction.
+			_start_stagger(hit_dir)
 		return
 
 	# Stagger check: strength ratio + balance + pain-driven escalation

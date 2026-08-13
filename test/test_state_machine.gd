@@ -120,6 +120,30 @@ func test_persistent_survives_hits():
 		"persistent body stays down after being hit")
 
 
+func test_knockdown_disabled_downgrades_ragdoll_to_stagger():
+	# Death-only-ragdoll games: with knockdown_enabled=false a hit that WOULD
+	# fell the character (guaranteed dice roll) staggers it instead, and only
+	# explicit calls (deaths, scripts) still ragdoll.
+	var t := _fast_tuning()
+	t.knockdown_enabled = false
+	var h = await _spawn(t)
+	watch_signals(h.controller)
+
+	var smash := ImpactProfile.new()
+	smash.ragdoll_probability = 1.0
+	smash.strength_reduction = 0.5
+	var chest := h.get_body("Chest")
+	h.controller.apply_hit(chest, Vector3.FORWARD, chest.global_position, smash)
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.STAGGER,
+		"guaranteed-ragdoll hit downgrades to stagger")
+	assert_signal_not_emitted(h.controller, "ragdoll_started")
+
+	# Explicit persistent ragdoll (death) bypasses the gate.
+	h.controller.set_persistent(true)
+	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
+		"death ragdoll bypasses knockdown_enabled")
+
+
 # ── Enum / tuning invariants (not re-implemented formulas) ──────────────────
 
 func test_state_enum():
