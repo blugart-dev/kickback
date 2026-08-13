@@ -1227,6 +1227,15 @@ func _start_recovery() -> void:
 		body.global_transform = saved_transforms[rig_name]
 		body.linear_velocity = Vector3.ZERO
 		body.angular_velocity = Vector3.ZERO
+		body.reset_physics_interpolation()
+
+	# The root teleport above is exactly the discontinuity physics interpolation
+	# cannot smooth: without a reset the renderer streaks the character (and every
+	# child visual) from its pre-ragdoll position to the landing spot for a frame
+	# or two. Reset AFTER the body restores so the recursive snapshot sees the
+	# final transforms. No-op when interpolation is disabled.
+	if _character_root:
+		_character_root.reset_physics_interpolation()
 
 	_ragdoll_poses = saved_transforms.duplicate()
 	recovery_started.emit(face_up)

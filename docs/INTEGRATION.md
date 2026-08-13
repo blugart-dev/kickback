@@ -173,6 +173,26 @@ match kickback_char.get_active_state():
         return
 ```
 
+### Get-up recovery moves the character root
+
+When recovery starts, the controller teleports `character_root_path`'s node to
+where the hips landed and yaws it to face the way the body lies. Three things
+must be right for that to look clean:
+
+- **Model forward axis.** The yaw math assumes the model faces **+Z** (Mixamo
+  convention, matching the demos). If your character is authored with Godot's
+  forward = **-Z**, set `RagdollTuning.character_forward_sign = -1` or every
+  get-up stands the character up facing backwards.
+- **`rig_sync_path` must be wired** on the ActiveRagdollController. After the
+  teleport the controller forces an immediate skeleton pass (`sync_now`); if
+  the path is empty, the character renders one frame with pre-teleport bone
+  poses under the post-teleport root — a visible pop. (The editor setup tool
+  wires it; runtime assemblers must remember to.)
+- **Physics interpolation** (`physics/common/physics_interpolation`) is handled:
+  the controller calls `reset_physics_interpolation()` on the root and every
+  rig body after the teleport, so no streaking occurs. Nothing to configure —
+  just don't teleport the root yourself without the same reset.
+
 ---
 
 ## Impact Scoring (Collision Monitoring)
