@@ -9,9 +9,33 @@ extends Resource
 ## Each entry maps a rig body name to a skeleton bone, with mass and shape.
 @export var bones: Array[BoneDefinition] = []
 
+## How the builder orients and centres each joint's limit frame (see
+## [member joint_frame]).
+enum JointFrame {
+	## Frame derived from the skeleton's REST geometry, centred on the rest pose:
+	## +Y along the child bone (twist), +X the flexion / bend axis (from the
+	## rest bend if the joint is authored bent, else perpendicular to the bone in
+	## the character's sagittal plane, sense per [member JointDefinition.flex_direction]),
+	## +Z lateral. Rig-convention independent (Mixamo / Rigify / UE bone axes
+	## all land in the same frame), and the pose the rig happens to be built in
+	## (2 frames into whatever the animation plays) does not move the limits.
+	ANATOMICAL,
+	## The child bone's own rest basis, centred on the rest pose (X/Y/Z = the
+	## bone's local axes as authored — the pre-1.4 axis assumption, Mixamo-style
+	## Y-along-bone rigs; the frame the editor RigBaker used to bake).
+	BONE_REST,
+	## Pre-1.4 behaviour: the child bone's basis in the pose the rig is BUILT in,
+	## limits centred on that pose. Kept for comparison only.
+	BUILD_POSE,
+}
+
 @export_group("Joint Definitions")
 ## Each entry connects two rig bodies with angular limits.
 @export var joints: Array[JointDefinition] = []
+## Limit frame convention for every joint of this profile — see [enum JointFrame].
+## ANATOMICAL is the default; the shipped tables ([constant SkeletonDetector.JOINT_TABLE],
+## [method create_mixamo_default]) are authored for it.
+@export var joint_frame: JointFrame = JointFrame.ANATOMICAL
 
 @export_group("Intermediate Bones")
 ## Skeleton bones not in the physics rig that need interpolated pose overrides.
@@ -202,34 +226,11 @@ static func create_mixamo_default() -> RagdollProfile:
 		bone_def.shape_offset = entry[6]
 		profile.bones.append(bone_def)
 
-	# --- Joint definitions ---
-	var joint_data: Array[Array] = [
-		# [parent, child, x_limits, y_limits, z_limits]
-		["Hips",       "Spine",      Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-10, 10)],
-		["Spine",      "Chest",      Vector2(-15, 15),  Vector2(-15, 15),  Vector2(-10, 10)],
-		["Chest",      "Head",       Vector2(-40, 40),  Vector2(-50, 50),  Vector2(-30, 30)],
-		["Chest",      "UpperArm_L", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
-		["UpperArm_L", "LowerArm_L", Vector2(-65, 65),  Vector2(-5, 5),    Vector2(-5, 5)],
-		["LowerArm_L", "Hand_L",     Vector2(-40, 40),  Vector2(-20, 20),  Vector2(-50, 50)],
-		["Chest",      "UpperArm_R", Vector2(-70, 70),  Vector2(-70, 70),  Vector2(-70, 70)],
-		["UpperArm_R", "LowerArm_R", Vector2(-65, 65),  Vector2(-5, 5),    Vector2(-5, 5)],
-		["LowerArm_R", "Hand_R",     Vector2(-40, 40),  Vector2(-20, 20),  Vector2(-50, 50)],
-		["Hips",       "UpperLeg_L", Vector2(-60, 60),  Vector2(-20, 20),  Vector2(-30, 30)],
-		["UpperLeg_L", "LowerLeg_L", Vector2(-60, 60),  Vector2(-5, 5),    Vector2(-5, 5)],
-		["LowerLeg_L", "Foot_L",     Vector2(-30, 30),  Vector2(-10, 10),  Vector2(-20, 20)],
-		["Hips",       "UpperLeg_R", Vector2(-60, 60),  Vector2(-20, 20),  Vector2(-30, 30)],
-		["UpperLeg_R", "LowerLeg_R", Vector2(-60, 60),  Vector2(-5, 5),    Vector2(-5, 5)],
-		["LowerLeg_R", "Foot_R",     Vector2(-30, 30),  Vector2(-10, 10),  Vector2(-20, 20)],
-	]
-
-	for entry: Array in joint_data:
-		var joint_def := JointDefinition.new()
-		joint_def.parent_rig = entry[0]
-		joint_def.child_rig = entry[1]
-		joint_def.limit_x = entry[2]
-		joint_def.limit_y = entry[3]
-		joint_def.limit_z = entry[4]
-		profile.joints.append(joint_def)
+	# --- Joint definitions --- (the shared humanoid table, ANATOMICAL frame)
+	var rig_names := PackedStringArray()
+	for bone_def: BoneDefinition in profile.bones:
+		rig_names.append(bone_def.rig_name)
+	profile.joints = SkeletonDetector.default_joints_for(rig_names)
 
 	# --- Intermediate bones ---
 	var spine1 := IntermediateBoneEntry.new()

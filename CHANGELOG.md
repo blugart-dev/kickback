@@ -53,6 +53,55 @@
   `is_guiding()`, `get_guide_scale()`. Motivation: an FPS whose death ragdolls read as
   a marionette with cut strings.
 
+### Changed
+- **Joint limits that don't fight the animation** — the 6DOF joints' limit frames were
+  whatever pose the skeleton had when the rig built (2 frames into the animation, so an
+  arbitrary idle frame was every limit's "zero") and their axes were the child bone's own
+  local axes with the JOINT_TABLE assuming Mixamo's Y-along-bone roll; measured on a real
+  game's twitchy idles: head 17.6 deg mean / 37.7 max off its animation, wrist twist and
+  elbow lateral at a limit 60-90 % of frames, feet 47 deg past a limit. Now:
+  - `RagdollProfile.joint_frame` (`JointFrame.ANATOMICAL` default): every joint's limit
+    frame is derived from the skeleton's REST geometry and centred on the rest pose — +Y
+    along the child bone (twist), +X the flexion / bend axis (the authored rest bend when
+    the joint is built bent, else bone x the character's forward with the sense given by
+    `JointDefinition.flex_direction`), +Z lateral; "forward" is left x up from the profile's
+    own roles, so Mixamo, Rigify and UE bone conventions all land in the same frame. The
+    builder parks the child body at its rest-relative pose for the one instant Godot
+    captures the joint frames, then puts it back — the pose the rig is built in no longer
+    moves any limit. `BONE_REST` (child bone rest basis, rest-centred; what RigBaker used
+    to bake) and `BUILD_POSE` (pre-1.4) are kept for comparison; the editor RigBaker uses
+    the same frame helper (`PhysicsRigBuilder.compute_rest_joint_frame`, static).
+  - `JointDefinition.flex_direction` (`Flex.NONE / FORWARD / BACKWARD`) fixes the sense of
+    +X so one-sided flexion limits are safe: the shipped tables now give the elbow
+    (-10, 150) FORWARD, the knee (-10, 140) BACKWARD, the hip (-30, 120) FORWARD, the
+    shoulder (-90, 150) FORWARD — a limp corpse's elbows and knees no longer fold the
+    wrong way, and the alive character's bends are never held back. Twist / lateral ranges
+    are anatomical-generous (elbow twist +-80 — retargeted mocap puts forearm pronation
+    there — and lateral +-20, wrist +-70/+-80/+-60, knee twist +-25 lateral +-15, ankle
+    +-50/+-35/+-35, head +-70/+-75/+-50, spine +-35/+-30/+-25). One table
+    (`SkeletonDetector.JOINT_TABLE`, `default_joints_for()`), used by both
+    `create_profile_from_skeleton` and `RagdollProfile.create_mixamo_default`.
+  - `JointDefinition.apply_to` mirrors the bounds on the way into the engine: Godot's
+    Generic6DOFJoint3D measures the angle with the opposite sign to "the child's rotation
+    about the joint axis, right-hand rule" (measured under Jolt: with (0, 150) on X the
+    child could turn -150..0 and nothing positive). Symmetric limits are unaffected;
+    hand-authored one-sided limits from before this release flip sense.
+  - `RagdollTuning.joint_limit_scale` (default 1.0): multiplies every authored bound at
+    build — the softness dial, since Jolt ignores the 6DOF angular limit softness /
+    damping / restitution parameters (documented on `JointDefinition`).
+  - `PhysicsRigBuilder.get_joints()` entries carry `frame_parent` / `frame_child` (the
+    limit frame in each body's local space); `get_joint_angles(child_rig[, parent_xform,
+    child_xform])` returns the current (or a given pose's) angles in that frame,
+    swing-twist about X the way Jolt measures them — the per-joint "is this limit fighting
+    the animation" probe.
+  Result on the game rig (four characters, lockstep idle): every joint's animation
+  inside its limits 100 % of frames (elbow lateral / wrist twist / ankle were at a limit
+  30-90 % of frames), head 17.6/37.7 -> 7.1/20.8 deg mean/max on the worst idle (the rest
+  is the game's own low extremity spring strengths: with limits disabled entirely the
+  numbers are identical), walker chest floor 2.2 -> 1.4 deg, flinch peaks unchanged. Tests:
+  test/test_joint_limits.gd (frames independent of the build pose, limits contain rest, no
+  pinched bend axis, elbow/knee sense + hyperextension block, scale, angles helper).
+
 ### Fixed
 - **PhysicsCollisionMonitor self-collision filter covers unmonitored own bodies** — with
   `monitored_bones` set to a subset, a monitored body striking one of its OWN rig's

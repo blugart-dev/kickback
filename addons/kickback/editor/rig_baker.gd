@@ -87,7 +87,13 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		var child_bone_idx := skeleton.find_bone(child_bone_name)
 		if child_bone_idx < 0:
 			continue
-		var joint_global := skeleton.global_transform * skeleton.get_bone_global_rest(child_bone_idx)
+		# Same limit frame as the runtime builder (rest-centred; ANATOMICAL by
+		# default — see RagdollProfile.joint_frame). Bodies are baked at rest, so
+		# the frames captured on scene load are centred on the rest pose too.
+		var frame_rest := skeleton.get_bone_global_rest(child_bone_idx)
+		if profile.joint_frame == RagdollProfile.JointFrame.ANATOMICAL:
+			frame_rest = PhysicsRigBuilder.compute_rest_joint_frame(skeleton, profile, joint_def)
+		var joint_global := skeleton.global_transform * frame_rest
 
 		var joint := Generic6DOFJoint3D.new()
 		joint.name = "%s_to_%s" % [joint_def.parent_rig, joint_def.child_rig]
@@ -98,7 +104,7 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		joint.node_b = NodePath("../%s" % joint_def.child_rig)
 
 		# Lock linear axes + apply angular limits/compliance (typed, shared with PhysicsRigBuilder)
-		joint_def.apply_to(joint)
+		joint_def.apply_to(joint, tuning.joint_limit_scale)
 
 		undo_redo.add_do_method(rig_builder, "add_child", joint)
 		undo_redo.add_do_method(joint, "set_owner", scene_owner)

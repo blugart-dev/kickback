@@ -200,11 +200,18 @@ any PhysicalBone3D nodes still in the scene receive the overridden transforms.
 This can produce degenerate bases that Jolt rejects. Fix: `queue_free()` the
 PhysicalBoneSimulator3D entirely, not just `process_mode = DISABLED`.
 
-### Symmetric joint limits without spring resolver
-Without a spring resolver to enforce pose direction, asymmetric 6DOF angular
-limits (e.g., knee -120/0) cause backwards bending because the joint frame
-orientation is unpredictable. Use symmetric limits (e.g., ±60) until the spring
-resolver is in place.
+### Asymmetric joint limits need a predictable frame (and Godot's sign is mirrored)
+Asymmetric 6DOF angular limits (knee 0..140) used to cause backwards bending
+because the joint frame's orientation was whatever the child bone's local axes
+happened to be in the build pose. Since 1.4 the builder derives every frame
+from the rest geometry (REFERENCE.md "Joint limit frames") and one-sided limits
+are safe. Two engine facts to keep in mind: Godot's Generic6DOFJoint3D measures
+the limited angle with the OPPOSITE sign to "rotation of node_b about the joint
+axis, right-hand rule" (measured under Jolt: with (0, 150) on X the child could
+turn -150..0 and nothing positive) — `JointDefinition.apply_to` mirrors the
+bounds; and Jolt ignores the 6DOF angular limit softness / damping / restitution
+parameters (prints "not supported when using Jolt Physics" once) — use
+`RagdollTuning.joint_limit_scale` to soften.
 
 ### Degenerate basis guard for set_bone_global_pose_override
 Always check `basis.determinant()` before passing a transform to

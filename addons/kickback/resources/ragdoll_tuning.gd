@@ -303,6 +303,13 @@ extends Resource
 @export var angular_damp: float = 8.0
 ## Linear damping for ragdoll bodies when springs are inactive.
 @export var linear_damp: float = 2.0
+## Multiplies every joint's authored angular limits (both bounds, about the
+## rest pose) when the rig is built: 1.0 = as authored in the RagdollProfile,
+## 1.5 = 50 % wider (a game whose animations overdrive the anatomical ranges —
+## exaggerated idles, mocap twist), 0.7 = stiffer corpses. This is the
+## "softness" dial under Jolt, which ignores the 6DOF angular limit softness /
+## damping / restitution parameters. Read at build time only.
+@export_range(0.25, 3.0) var joint_limit_scale: float = 1.0
 ## Maximum angular velocity for spring-driven bodies.
 @export var max_angular_velocity: float = 20.0
 ## Maximum linear velocity for spring-driven bodies.

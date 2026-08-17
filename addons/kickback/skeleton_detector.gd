@@ -108,23 +108,31 @@ const SHAPE_TABLE := {
 	"UpperLeg_R": "capsule", "LowerLeg_R": "capsule", "Foot_R": "box",
 }
 
-# Standard joint topology: parent_rig → child_rig + angular limits
+# Standard joint topology: parent_rig → child_rig + angular limits (degrees) in
+# the ANATOMICAL joint frame the builder derives per joint from the skeleton's
+# rest geometry (PhysicsRigBuilder.compute_rest_joint_frame): X = flexion / bend
+# axis, Y = twist about the child bone, Z = lateral; 0 = the rest pose. Ranges are
+# anatomical, a little generous (the springs shape the pose while the character
+# is alive — the limits are the ragdoll's safety net and must never fight the
+# animation; RagdollTuning.joint_limit_scale widens them further). One-sided X
+# ranges (elbow, knee, hip) need the flexion sense: `flex` (JointDefinition.Flex)
+# says which way the child folds for +X — FORWARD (elbow, hip), BACKWARD (knee).
 const JOINT_TABLE: Array[Dictionary] = [
-	{p = "Hips", c = "Spine", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-10, 10)},
-	{p = "Spine", c = "Chest", lx = Vector2(-15, 15), ly = Vector2(-15, 15), lz = Vector2(-10, 10)},
-	{p = "Chest", c = "Head", lx = Vector2(-40, 40), ly = Vector2(-50, 50), lz = Vector2(-30, 30)},
-	{p = "Chest", c = "UpperArm_L", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
-	{p = "UpperArm_L", c = "LowerArm_L", lx = Vector2(-65, 65), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
-	{p = "LowerArm_L", c = "Hand_L", lx = Vector2(-40, 40), ly = Vector2(-20, 20), lz = Vector2(-50, 50)},
-	{p = "Chest", c = "UpperArm_R", lx = Vector2(-70, 70), ly = Vector2(-70, 70), lz = Vector2(-70, 70)},
-	{p = "UpperArm_R", c = "LowerArm_R", lx = Vector2(-65, 65), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
-	{p = "LowerArm_R", c = "Hand_R", lx = Vector2(-40, 40), ly = Vector2(-20, 20), lz = Vector2(-50, 50)},
-	{p = "Hips", c = "UpperLeg_L", lx = Vector2(-60, 60), ly = Vector2(-20, 20), lz = Vector2(-30, 30)},
-	{p = "UpperLeg_L", c = "LowerLeg_L", lx = Vector2(-60, 60), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
-	{p = "LowerLeg_L", c = "Foot_L", lx = Vector2(-30, 30), ly = Vector2(-10, 10), lz = Vector2(-20, 20)},
-	{p = "Hips", c = "UpperLeg_R", lx = Vector2(-60, 60), ly = Vector2(-20, 20), lz = Vector2(-30, 30)},
-	{p = "UpperLeg_R", c = "LowerLeg_R", lx = Vector2(-60, 60), ly = Vector2(-5, 5), lz = Vector2(-5, 5)},
-	{p = "LowerLeg_R", c = "Foot_R", lx = Vector2(-30, 30), ly = Vector2(-10, 10), lz = Vector2(-20, 20)},
+	{p = "Hips", c = "Spine", lx = Vector2(-35, 35), ly = Vector2(-30, 30), lz = Vector2(-25, 25)},
+	{p = "Spine", c = "Chest", lx = Vector2(-35, 35), ly = Vector2(-30, 30), lz = Vector2(-25, 25)},
+	{p = "Chest", c = "Head", lx = Vector2(-70, 70), ly = Vector2(-75, 75), lz = Vector2(-50, 50)},
+	{p = "Chest", c = "UpperArm_L", lx = Vector2(-90, 150), ly = Vector2(-90, 90), lz = Vector2(-120, 120), flex = JointDefinition.Flex.FORWARD},
+	{p = "UpperArm_L", c = "LowerArm_L", lx = Vector2(-10, 150), ly = Vector2(-80, 80), lz = Vector2(-20, 20), flex = JointDefinition.Flex.FORWARD},
+	{p = "LowerArm_L", c = "Hand_L", lx = Vector2(-70, 70), ly = Vector2(-80, 80), lz = Vector2(-60, 60)},
+	{p = "Chest", c = "UpperArm_R", lx = Vector2(-90, 150), ly = Vector2(-90, 90), lz = Vector2(-120, 120), flex = JointDefinition.Flex.FORWARD},
+	{p = "UpperArm_R", c = "LowerArm_R", lx = Vector2(-10, 150), ly = Vector2(-80, 80), lz = Vector2(-20, 20), flex = JointDefinition.Flex.FORWARD},
+	{p = "LowerArm_R", c = "Hand_R", lx = Vector2(-70, 70), ly = Vector2(-80, 80), lz = Vector2(-60, 60)},
+	{p = "Hips", c = "UpperLeg_L", lx = Vector2(-30, 120), ly = Vector2(-40, 40), lz = Vector2(-45, 45), flex = JointDefinition.Flex.FORWARD},
+	{p = "UpperLeg_L", c = "LowerLeg_L", lx = Vector2(-10, 140), ly = Vector2(-25, 25), lz = Vector2(-15, 15), flex = JointDefinition.Flex.BACKWARD},
+	{p = "LowerLeg_L", c = "Foot_L", lx = Vector2(-50, 50), ly = Vector2(-35, 35), lz = Vector2(-35, 35)},
+	{p = "Hips", c = "UpperLeg_R", lx = Vector2(-30, 120), ly = Vector2(-40, 40), lz = Vector2(-45, 45), flex = JointDefinition.Flex.FORWARD},
+	{p = "UpperLeg_R", c = "LowerLeg_R", lx = Vector2(-10, 140), ly = Vector2(-25, 25), lz = Vector2(-15, 15), flex = JointDefinition.Flex.BACKWARD},
+	{p = "LowerLeg_R", c = "Foot_R", lx = Vector2(-50, 50), ly = Vector2(-35, 35), lz = Vector2(-35, 35)},
 ]
 
 # Chain order for finding child bones in the mapping
@@ -245,20 +253,31 @@ static func create_profile_from_skeleton(
 		profile.bones.append(bone_def)
 
 	# Create joint definitions (only for pairs where both bones exist)
+	profile.joints = default_joints_for(PackedStringArray(bone_mapping.keys()))
+
+	# Detect intermediate bones (bones between two mapped bones in the hierarchy)
+	_detect_intermediate_bones(skeleton, bone_mapping, profile)
+
+	return profile
+
+
+## The standard humanoid joint set ([constant JOINT_TABLE]) as JointDefinitions,
+## restricted to the pairs whose rig bodies are both in [param rig_names]. Shared
+## by [method create_profile_from_skeleton] and
+## [method RagdollProfile.create_mixamo_default] so there is one table.
+static func default_joints_for(rig_names: PackedStringArray) -> Array[JointDefinition]:
+	var out: Array[JointDefinition] = []
 	for jt: Dictionary in JOINT_TABLE:
-		if jt.p in bone_mapping and jt.c in bone_mapping:
+		if jt.p in rig_names and jt.c in rig_names:
 			var joint_def := JointDefinition.new()
 			joint_def.parent_rig = jt.p
 			joint_def.child_rig = jt.c
 			joint_def.limit_x = jt.lx
 			joint_def.limit_y = jt.ly
 			joint_def.limit_z = jt.lz
-			profile.joints.append(joint_def)
-
-	# Detect intermediate bones (bones between two mapped bones in the hierarchy)
-	_detect_intermediate_bones(skeleton, bone_mapping, profile)
-
-	return profile
+			joint_def.flex_direction = jt.get("flex", JointDefinition.Flex.NONE)
+			out.append(joint_def)
+	return out
 
 
 ## Creates PhysicalBone3D nodes inside a PhysicalBoneSimulator3D (Godot's built-in

@@ -74,12 +74,10 @@ fighting itself the wide band only left every bone wandering 2 deg off its targe
 Set `self_collision = true`, `spring_chain_consistency = 0`, `spring_feed_forward = 0`,
 deadband `0.04` for the pre-1.4 behaviour.
 
-Two things the pass measured but did NOT change, worth knowing:
+One thing the pass measured but did NOT change, worth knowing (the joint limits it
+also flagged — build-pose-centred, Mixamo-axis — were fixed next, see "Joint limit
+frames" below):
 
-- Joint limits are relative to whatever pose the skeleton has when the rig builds (the
-  joint node's transform vs each body at creation), and the JOINT_TABLE limits assume
-  Mixamo bone axes; on other rigs / twitchy animations the head, feet and elbow twist can
-  sit at a limit and fight (measured 10-18 deg mean head error on one idle).
 - Headless, the process loop can stall (~140 ms) and the engine catches up with
   `max_physics_steps_per_frame` (8) ticks in one frame; an AnimationPlayer in the default
   IDLE callback mode then stands still for 8 ticks and jumps 0.14 s. Any headless
@@ -172,20 +170,83 @@ Hips (root, no parent joint)
 
 ## Joint angular limits (degrees)
 
-| Joint             | X (flexion)     | Y (twist)      | Z (lateral)    |
-|-------------------|-----------------|----------------|----------------|
-| Hips→Spine        | -30 to 30       | -30 to 30      | -20 to 20      |
-| Spine→Chest       | -30 to 30       | -30 to 30      | -20 to 20      |
-| Chest→Head        | -60 to 60       | -70 to 70      | -45 to 45      |
-| Chest→UpperArm    | -90 to 90       | -90 to 90      | -90 to 90      |
-| UpperArm→LowerArm | 0 to 150        | -10 to 10      | -10 to 10      |
-| LowerArm→Hand     | -60 to 60       | -30 to 30      | -80 to 80      |
-| Hips→UpperLeg     | -90 to 90       | -30 to 30      | -45 to 45      |
-| UpperLeg→LowerLeg | -150 to 0       | -10 to 10      | -10 to 10      |
-| LowerLeg→Foot     | -45 to 45       | -20 to 20      | -30 to 30      |
+The shipped table (`SkeletonDetector.JOINT_TABLE`, shared by `create_profile_from_skeleton`
+and `RagdollProfile.create_mixamo_default` through `default_joints_for()`). Axes are the
+joint's ANATOMICAL limit frame (below): X = flexion / bend, Y = twist about the child
+bone, Z = lateral; 0 = the rest pose. `flex` is `JointDefinition.flex_direction`.
 
-Note: "0 to 150" for elbows/knees means they can only bend one way. Tune in-engine
-with Debug → Visible Collision Shapes.
+| Joint             | X (flexion)  | Y (twist)   | Z (lateral)  | flex     |
+|-------------------|--------------|-------------|--------------|----------|
+| Hips→Spine        | -35 to 35    | -30 to 30   | -25 to 25    |          |
+| Spine→Chest       | -35 to 35    | -30 to 30   | -25 to 25    |          |
+| Chest→Head        | -70 to 70    | -75 to 75   | -50 to 50    |          |
+| Chest→UpperArm    | -90 to 150   | -90 to 90   | -120 to 120  | FORWARD  |
+| UpperArm→LowerArm | -10 to 150   | -80 to 80   | -20 to 20    | FORWARD  |
+| LowerArm→Hand     | -70 to 70    | -80 to 80   | -60 to 60    |          |
+| Hips→UpperLeg     | -30 to 120   | -40 to 40   | -45 to 45    | FORWARD  |
+| UpperLeg→LowerLeg | -10 to 140   | -25 to 25   | -15 to 15    | BACKWARD |
+| LowerLeg→Foot     | -50 to 50    | -35 to 35   | -35 to 35    |          |
+
+Ranges are anatomical and a little generous on purpose: while the character is alive the
+springs shape the pose and the limits must never hold a bone back from its animation (a
+limit the animation crosses is a steady error the spring cannot close — measured 17.6 deg
+mean head error on a head-lolling idle with the pre-1.4 +-40 head range); when limp they
+are the corpse's safety net (elbows / knees fold one way only). Retargeted mocap puts
+forearm pronation on the wrist / forearm twist and reads 15-20 deg of "lateral" at the
+elbow, hence those widths. `RagdollTuning.joint_limit_scale` (default 1.0) multiplies every
+bound at build time — the softness dial: Jolt ignores the Generic6DOFJoint3D angular limit
+softness / damping / restitution parameters (`JointDefinition`'s compliance group is a
+no-op under Jolt and the engine says so once).
+
+### Joint limit frames (1.4)
+
+Godot captures a Generic6DOFJoint3D's two local frames from the joint node's and the two
+bodies' transforms at the moment `node_a` / `node_b` are assigned, and the relative
+rotation the angular limits are measured against is ZERO in that configuration. Before
+1.4 the runtime rig assigned them with the bodies on whatever pose the AnimationPlayer
+had written two frames after spawn, so an arbitrary idle frame was every limit's centre,
+and the frame's axes were the child bone's own local axes — the table assumed Mixamo's
+Y-along-bone roll. `RagdollProfile.joint_frame` now selects:
+
+- `ANATOMICAL` (default) — `PhysicsRigBuilder.compute_rest_joint_frame(skeleton, profile,
+  joint_def)` (static; the RigBaker uses it too), from the skeleton's REST geometry:
+  origin = the child bone's rest origin; +Y = the child bone's long axis (its own local
+  axis nearest the direction toward its `BoneDefinition.child_bone`, or that raw direction
+  when no local axis is within 35 deg — identity-basis rigs); +X = the flexion axis: the
+  authored rest bend's axis (parent bone direction x child bone direction, +rotation
+  increases the bend) when the joint is authored bent by 3-45 deg (A-pose elbows / knees
+  with a pole bend), sign-corrected to `flex_direction`; otherwise bone x forward
+  (+rotation folds the child toward the character's front, or toward its back for
+  `Flex.BACKWARD`), falling back to bone x up / bone x lateral for bones that point
+  forward (feet); +Z = X x Y. "Forward" is the character's own — left x up from the rest
+  positions of the profile's leg (or arm) chains and root / head roles — so Mixamo, Rigify,
+  the Godot humanoid profile and UE-style X-along-bone rigs all get the same semantic
+  axes. The builder parks the child body at `parent_now * parent_rest^-1 * child_rest`
+  (and the joint at the rest frame in the same parent-relative sense) for the one instant
+  the frames are captured, then restores its animation pose — nothing has been simulated
+  yet, and frames already captured by the body's other joints are stored local to the
+  bodies. The registered anchors are the rest offsets (pose independent).
+- `BONE_REST` — the child bone's rest basis, rest-centred (what RigBaker used to bake;
+  the pre-1.4 axis assumption without the build-pose centre).
+- `BUILD_POSE` — the pre-1.4 behaviour, for comparison.
+
+Sign: `JointDefinition` limits are the allowed rotation of the CHILD about each frame
+axis (right-hand rule); Godot's Generic6DOFJoint3D measures the angle with the opposite
+sign (under Jolt, with (0, 150) on X the child could turn -150..0 about +X and nothing
+positive), so `apply_to` mirrors the bounds on the way in. Jolt decomposes the relative
+rotation swing-twist with X as the twist axis (Y/Z swing, pyramid) — per-axis for pure
+rotations, and one-sided ranges are safe on every axis; the wide one-sided flexion ranges
+sit on X on purpose. `PhysicsRigBuilder.get_joint_angles(child_rig)` returns the current
+angles in that decomposition (0 = rest), and takes optional parent / child transforms to
+evaluate the animation pose instead of the bodies — the "is this limit fighting the
+animation" probe (`get_joints()` entries expose `frame_parent` / `frame_child`).
+
+Measured on a 16-body auto-detected rig in a real game (four characters, lockstep
+idles) after the change: every joint's animation inside its limits 100 % of frames (elbow
+lateral / wrist twist / ankle were at a limit 30-90 % of frames before), worst-idle head
+error 17.6/37.7 -> 7.1/20.8 deg mean/max — and identical numbers with the angular limits
+disabled entirely, i.e. the residual is the game's low extremity spring strengths, not
+the joints.
 
 ## Impact profiles
 
