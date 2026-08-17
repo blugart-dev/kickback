@@ -63,6 +63,12 @@ character.get_node("KickbackCharacter").queue_ragdoll()
 kickback_char.queue_persistent()
 ```
 
+**queue_persistent_guided()** — the animation-guided death (below), spawn-safe:
+```gdscript
+anim_player.play("death_back")
+kickback_char.queue_persistent_guided(0.5, 0.5)
+```
+
 ### Configuring bodies after spawn
 
 Use `await_bodies()` on PhysicsRigBuilder to wait for bodies to exist:
@@ -172,6 +178,28 @@ match kickback_char.get_active_state():
         # Physics is driving — skip movement/navigation
         return
 ```
+
+### Animation-guided deaths
+
+`set_persistent(true)` zeroes every spring at once — a marionette with cut strings.
+When you have an authored death clip, play it and call
+`set_persistent_guided(strength_scale := 0.5, ramp_time := 0.5, ease := 1.0)`
+instead: the state is PERSISTENT from the first frame, but every bone's spring keeps
+chasing the animation at `base * strength_scale`, ramping to zero over `ramp_time`
+(`scale(t) = strength_scale * (1 - t)^ease`; `ease` 1 = linear, 2 = drops fast then
+trails off). The clip shapes the fall while physics — contacts, the killing shot's
+impulse (hits stay pure impulse during the guide) — increasingly takes over; after
+the ramp the body is exactly as limp as a plain persistent ragdoll (`guide_finished`
+fires). The protective fall brace is NOT armed (the clip authors the catch).
+`set_persistent(false)` releases it at any point. Notes:
+
+- Play the death clip yourself, before or right after the call — the plugin never
+  plays animations. In-place clips work best (the Hips XZ of the target is stripped
+  by `strip_root_motion`; the clip's hips dropping to the floor is Y and desired).
+- A kill on a body that is already RAGDOLL/GETTING_UP has no clip to guide — call
+  plain `set_persistent(true)`; the guide is for deaths from NORMAL/STAGGER.
+- `queue_persistent_guided(...)` is the spawn-safe form (starts on `setup_complete`).
+- `is_guiding()` / `get_guide_scale()` expose the ramp for probes and debug HUDs.
 
 ### Get-up recovery moves the character root
 

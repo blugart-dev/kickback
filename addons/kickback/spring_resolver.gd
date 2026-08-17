@@ -1,9 +1,13 @@
 ## Velocity-based spring resolver that drives physics ragdoll bodies toward
 ## animation skeleton poses. Each frame, computes rotation/position error per
-## bone and lerps rigid body velocities toward the correction, weighted by
-## per-bone strength. Strength can be reduced on hit so physics wins temporarily,
-## then recovers over time. Corrections are normalized to a 60 Hz reference, so
-## the feel is frame-rate independent — bit-identical at 60 Hz, stable at 30/120.
+## bone and lerps rigid body velocities toward the correction (plus the target's
+## own motion, fed forward), weighted by per-bone strength. Bodies update
+## parent-first and a jointed child's linear command follows its parent through
+## the joint anchor, so the joint solve has nothing to fight (see
+## RagdollTuning.spring_chain_consistency / spring_feed_forward). Strength can be
+## reduced on hit so physics wins temporarily, then recovers over time.
+## Corrections are normalized to a 60 Hz reference, so the feel is frame-rate
+## independent — bit-identical at 60 Hz, stable at 30/120.
 @icon("res://addons/kickback/icons/spring_resolver.svg")
 class_name SpringResolver
 extends Node
@@ -21,6 +25,14 @@ var _rig_builder: PhysicsRigBuilder
 var _active: bool = false
 var _bones: Dictionary = {}  # rig_name → {body, bone_idx, base_strength, strength}
 var _bone_names: PackedStringArray = PackedStringArray()  # cached _bones.keys(); stable after _init_bones()
+## Spring update order: parent-first down the joint chain, so a child's linear
+## command can be derived from its parent's ALREADY-written velocities.
+var _order: PackedStringArray = PackedStringArray()
+## rig_name → {parent: String, anchor_parent: Vector3, anchor_child: Vector3}
+## for every body that hangs off a joint (from PhysicsRigBuilder.get_joints()).
+var _chain: Dictionary = {}
+var _chain_consistency: float = 1.0
+var _feed_forward: float = 1.0
 var _settle_timer: float = 0.0
 var _default_recovery_rate: float = 0.3
 var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
@@ -43,6 +55,8 @@ func configure(tuning: RagdollTuning) -> void:
 	if _tuning:
 		_max_angular_vel_sq = _tuning.max_angular_velocity * _tuning.max_angular_velocity
 		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
+		_chain_consistency = _tuning.spring_chain_consistency
+		_feed_forward = _tuning.spring_feed_forward
 
 
 ## Re-caches values that are stored at init time. Call when tuning changes at runtime.
@@ -52,6 +66,8 @@ func refresh_tuning() -> void:
 		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
 		_strip_root_motion = _tuning.strip_root_motion
 		_root_motion_bone = _tuning.root_motion_bone
+		_chain_consistency = _tuning.spring_chain_consistency
+		_feed_forward = _tuning.spring_feed_forward
 
 
 func _ready() -> void:
@@ -73,6 +89,8 @@ func _ensure_tuning() -> void:
 		_tuning = RagdollTuning.create_default()
 	_strip_root_motion = _tuning.strip_root_motion
 	_root_motion_bone = _tuning.root_motion_bone
+	_chain_consistency = _tuning.spring_chain_consistency
+	_feed_forward = _tuning.spring_feed_forward
 
 
 func _init_bones() -> void:
@@ -88,12 +106,46 @@ func _init_bones() -> void:
 			"bone_idx": bone_idx,
 			"base_strength": base_str,
 			"strength": base_str,
+			"prev_target": Transform3D.IDENTITY,
+			"has_prev_target": false,
 		}
 	# Cache the rig-name list once. The key set is fixed after init (only the
 	# per-bone values mutate), and get_all_bone_names() is hit every physics
 	# frame by the controller/HUD/foot-IK — returning the cached PackedStringArray
 	# avoids rebuilding it from _bones.keys() on each call.
 	_bone_names = PackedStringArray(_bones.keys())
+	_init_chain()
+
+
+## Builds the joint chain (parent links + anchors) and the parent-first update
+## order from the builder's joint registry. Bodies without a registered joint
+## (roots, or a rig built by an older baker) are ordered first and get the
+## legacy independent linear command.
+func _init_chain() -> void:
+	_chain.clear()
+	var joints := _rig_builder.get_joints()
+	for child_rig: String in joints:
+		var j: Dictionary = joints[child_rig]
+		if child_rig in _bones and j.parent in _bones:
+			_chain[child_rig] = {
+				"parent": j.parent,
+				"anchor_parent": j.anchor_parent,
+				"anchor_child": j.anchor_child,
+			}
+	var depth: Dictionary = {}
+	for rig_name: String in _bones:
+		var d := 0
+		var cur := rig_name
+		var guard := 0
+		while cur in _chain and guard < 64:
+			cur = _chain[cur].parent
+			d += 1
+			guard += 1
+		depth[rig_name] = d
+	var names: Array = _bones.keys()
+	names.sort_custom(func(a: String, b: String) -> bool:
+		return depth[a] < depth[b] if depth[a] != depth[b] else a < b)
+	_order = PackedStringArray(names)
 
 
 ## Returns the Skeleton3D used for animation target poses.
@@ -122,8 +174,10 @@ func _physics_process(delta: float) -> void:
 	var skel_global := _skeleton.global_transform
 	var has_overrides := not _target_overrides.is_empty()
 
-	# Single merged pass: strength recovery + property updates + spring computation
-	for rig_name: String in _bones:
+	# Single merged pass: strength recovery + property updates + spring computation.
+	# Parent-first: a child's linear command reads its parent's velocities as
+	# written THIS tick (see the chain block below).
+	for rig_name: String in _order:
 		var state: Dictionary = _bones[rig_name]
 		var body: RigidBody3D = state.body
 
@@ -146,6 +200,7 @@ func _physics_process(delta: float) -> void:
 		# Spring computation
 		var strength: float = state.strength
 		if strength < 0.001:
+			state.has_prev_target = false  # a limp bone's target isn't tracked; no stale feed-forward when it wakes
 			continue
 
 		var target_xform: Transform3D
@@ -159,7 +214,24 @@ func _physics_process(delta: float) -> void:
 			target_xform = skel_global * anim_pose
 		var current_xform := body.global_transform
 
-		_apply_angular_spring(body, target_xform, current_xform, strength, delta)
+		# Feed-forward: how the target itself moved since last tick (world rotation
+		# vector + translation), see _apply_angular_spring.
+		var ff_rot := Vector3.ZERO
+		var ff_lin := Vector3.ZERO
+		if _feed_forward > 0.0 and state.has_prev_target:
+			var prev: Transform3D = state.prev_target
+			var dq: Quaternion = (target_xform.basis.orthonormalized() * prev.basis.orthonormalized().inverse()).get_rotation_quaternion()
+			if dq.w < 0:
+				dq = -dq
+			var dangle := 2.0 * acos(clampf(dq.w, -1.0, 1.0))
+			var daxis := Vector3(dq.x, dq.y, dq.z)
+			if daxis.length_squared() >= 0.0001 and dangle >= 0.0001:
+				ff_rot = daxis.normalized() * dangle * _feed_forward
+			ff_lin = (target_xform.origin - prev.origin) * _feed_forward
+		state.prev_target = target_xform
+		state.has_prev_target = true
+
+		_apply_angular_spring(body, target_xform, current_xform, strength, delta, ff_rot)
 
 		var pin := _get_pin_strength(rig_name) * ratio
 		# Injury reduces pin strength (creates visible sag/limp on injured bones)
@@ -173,7 +245,35 @@ func _physics_process(delta: float) -> void:
 		var lin_target := Vector3.ZERO
 		if dist > 0.0001:
 			lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
-		body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
+		lin_target += ff_lin / maxf(delta, 1e-6)
+		# Chain consistency: the joint locks this body's anchor to its parent's, so
+		# whatever linear velocity we command, the solver overwrites it with "parent
+		# anchor velocity" — and pays for the mismatch with equal-and-opposite
+		# impulses at the anchor. The anchor sits half a bone from each body's
+		# centre of mass, so those impulses SPIN the bodies — and on a light one
+		# (head, hand, foot: tiny inertia) a 0.1-0.3 m/s anchor pull comes back as
+		# several rad/s: measured on a 16-body rig, a head's commanded angular
+		# velocity returned from the solve reversed, and 50-90 % of the chest's was
+		# rewritten every tick while children were pinned independently (the idle
+		# wobble / rig lag). Command the kinematically consistent velocity up front
+		# — v_child = v_parent + w_parent x r_parent - w_child x r_child, with the
+		# parent's velocities as written this tick (parent-first order) — and scale
+		# the child's own position pin out by the same factor: a pull the joint
+		# won't allow is exactly such an anchor impulse. The child's position
+		# follows from its ancestors' orientation springs and the root pin instead
+		# (the joint holds it there); the solver has nothing left to fight.
+		var lin_base := body.linear_velocity
+		if _chain_consistency > 0.0 and rig_name in _chain:
+			var link: Dictionary = _chain[rig_name]
+			var parent_body: RigidBody3D = _bones[link.parent].body
+			var r_parent: Vector3 = parent_body.global_basis * link.anchor_parent
+			var r_child: Vector3 = current_xform.basis * link.anchor_child
+			var consistent: Vector3 = parent_body.linear_velocity \
+				+ parent_body.angular_velocity.cross(r_parent) \
+				- body.angular_velocity.cross(r_child)
+			lin_base = lin_base.lerp(consistent, _chain_consistency)
+			pin *= 1.0 - _chain_consistency
+		body.linear_velocity = lin_base.lerp(lin_target, _fr_weight(pin, delta))
 
 		if body.angular_velocity.length_squared() > _max_angular_vel_sq:
 			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
@@ -185,7 +285,10 @@ func _strength_ratio(state: Dictionary) -> float:
 	return state.strength / state.base_strength if state.base_strength > 0.001 else 1.0
 
 
-func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Transform3D, strength: float, delta: float) -> void:
+## [param ff_rot] is the target's own rotation over the last tick (world rotation
+## vector, radians), fed forward so a MOVING target is tracked without the
+## one-tick-per-tick lag of a pure error spring (see [member RagdollTuning.spring_feed_forward]).
+func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Transform3D, strength: float, delta: float, ff_rot: Vector3 = Vector3.ZERO) -> void:
 	var error_basis := target.basis.orthonormalized() * current.basis.orthonormalized().inverse()
 	var det := error_basis.determinant()
 	if det < 0.001 and det > -0.001:
@@ -197,16 +300,22 @@ func _apply_angular_spring(body: RigidBody3D, target: Transform3D, current: Tran
 
 	var angle := 2.0 * acos(clampf(q.w, -1.0, 1.0))
 	var axis_raw := Vector3(q.x, q.y, q.z)
-	if axis_raw.length_squared() < 0.0001 or angle < 0.001:
-		return
-
 	# Settle deadband: command NO correction within the deadband, then ramp in
 	# proportionally above it. A tiny irreducible steady-state error (e.g. a planted
 	# foot the joints can't perfectly satisfy) would otherwise be amplified by the
 	# ×_REFERENCE_HZ conversion into sustained velocity every tick — the idle buzz.
 	# Negligible for the large errors of real motion / hit reactions.
-	var eff_angle := maxf(angle - _tuning.spring_angular_settle_deadband, 0.0)
-	var target_vel := (axis_raw.normalized() * eff_angle) * _REFERENCE_HZ
+	var correction := Vector3.ZERO
+	if axis_raw.length_squared() >= 0.0001 and angle >= 0.001:
+		var eff_angle := maxf(angle - _tuning.spring_angular_settle_deadband, 0.0)
+		correction = (axis_raw.normalized() * eff_angle) * _REFERENCE_HZ
+	if correction == Vector3.ZERO and ff_rot == Vector3.ZERO:
+		return
+	# Feed-forward: the error term alone reaches where the target WAS; add the
+	# target's own velocity so the body arrives where it IS (zero steady-state lag
+	# on a moving target). Scaled by strength like everything else — a weakened
+	# bone follows the animation's motion less, as before.
+	var target_vel := correction + ff_rot / maxf(delta, 1e-6)
 	body.angular_velocity = body.angular_velocity.lerp(target_vel, _fr_weight(strength, delta))
 
 

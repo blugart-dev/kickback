@@ -37,3 +37,30 @@ func test_monitor_connects_and_disconnects_cleanly():
 	assert_false(foot.contact_monitor, "_exit_tree restores contact_monitor = false")
 	assert_eq(foot.body_entered.get_connections().size(), base_conns,
 		"_exit_tree disconnects body_entered (no leaked connection to the freed monitor)")
+
+
+func test_self_collision_filter_covers_unmonitored_bones():
+	# monitored_bones = a subset: a monitored Hips striking this rig's own
+	# (unmonitored) hand must still be filtered as a self-contact (regression:
+	# the filter only knew the monitored subset, so torso-vs-own-arm contacts
+	# leaked out as environment impacts).
+	var h = await _spawn()
+	var mon := PhysicsCollisionMonitor.new()
+	mon.monitored_bones = PackedStringArray(["Hips", "Chest"])
+	mon.velocity_threshold = 0.0
+	mon.cooldown = 0.0
+	h.add_child(mon)
+	await get_tree().process_frame
+	watch_signals(mon)
+
+	var hips: RigidBody3D = h.get_body("Hips")
+	var hand: RigidBody3D = h.get_body("Hand_R")
+	assert_true(hips.contact_monitor, "monitored Hips reports contacts")
+	assert_false(hand.contact_monitor, "unmonitored Hand_R is not observed")
+	# Drive the handler directly (contact_monitor only reports real contacts):
+	# own hand -> filtered; the ground -> reported.
+	mon._on_body_entered(hand, hips)
+	assert_signal_not_emitted(mon, "body_impact", "own-rig hand contact is filtered")
+	mon._on_body_entered(h.ground, hips)
+	assert_signal_emitted(mon, "body_impact", "environment contact is reported")
+	mon.free()

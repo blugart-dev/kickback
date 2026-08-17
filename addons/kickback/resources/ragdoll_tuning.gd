@@ -213,6 +213,15 @@ extends Resource
 ## Bones whose collision_mask is set to 0 during NORMAL state and restored on
 ## STAGGER/RAGDOLL. Prevents clipping from animation poses (crossed arms, etc.).
 @export var normal_state_disabled_collision: PackedStringArray = []
+## Whether the bodies of ONE rig collide with each other. Off by default: the
+## auto-generated torso boxes and limb capsules overlap in ordinary animation
+## poses (measured on a hunched idle: Chest-Hips in contact 170 of 180 frames,
+## forearms inside the chest box, upper arms in the spine box), and each of
+## those contacts is a solver impulse that rewrites the spring commands every
+## tick — the largest source of the rig lagging / wobbling behind its animation.
+## Bodies still collide with everything else on [member collision_mask]
+## (environment, OTHER ragdolls). Enable to reproduce the pre-1.4 behaviour.
+@export var self_collision: bool = false
 
 # ── Advanced: Spring Dynamics ───────────────────────────────────────────────
 
@@ -233,11 +242,29 @@ extends Resource
 ## in proportionally above it. Kills the steady-state buzz where a tiny irreducible
 ## error (e.g. a planted foot the joints can't perfectly satisfy) is otherwise
 ## amplified into sustained velocity every tick. Negligible during real motion/hits
-## (errors are far larger). 0.0 = disabled. ~0.04 rad ≈ 2.3°.
-@export_range(0.0, 0.2) var spring_angular_settle_deadband: float = 0.04
+## (errors are far larger). 0.0 = disabled. 0.01 rad ≈ 0.6° (was 0.04 ≈ 2.3°
+## before 1.4: with the rig no longer fighting itself — see self_collision and
+## spring_chain_consistency — the wide band only left every bone wandering 2° off
+## its target; the narrow one measures LESS frame-to-frame jitter, not more).
+@export_range(0.0, 0.2) var spring_angular_settle_deadband: float = 0.01
 ## Linear settle deadband (meters). Position-spring analogue of
 ## [member spring_angular_settle_deadband]. 0.0 = disabled.
 @export_range(0.0, 0.05) var spring_linear_settle_deadband: float = 0.004
+## How much a jointed body's linear command follows its parent through the joint
+## anchor (1.0 = fully kinematically consistent: v_child = v_parent + w_parent x
+## r; 0.0 = legacy, every body pinned independently). The joint enforces that
+## relation anyway — commanding it up front keeps the solver from paying for the
+## mismatch with impulses that rewrite the angular commands (the idle "wobble" /
+## rig lag behind the animation). Lower only to reproduce the pre-1.4 tracking.
+@export_range(0.0, 1.0) var spring_chain_consistency: float = 1.0
+## How much of the animation target's own motion (its rotation / translation
+## since the previous tick) is fed forward into the spring command. The plain
+## error spring only ever reaches where the target WAS, so a moving target is
+## trailed by one tick's worth of motion per tick of lag (a 150 deg/s idle sway
+## reads 3-8 deg behind); 1.0 = arrive where the target IS (zero steady-state
+## lag), 0.0 = legacy pure error spring. Scaled by bone strength like the
+## error term, so weakened bones still let go.
+@export_range(0.0, 1.0) var spring_feed_forward: float = 1.0
 
 # ── Advanced: Directional Bracing ───────────────────────────────────────────
 

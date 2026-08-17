@@ -36,6 +36,57 @@ rigid_body.linear_velocity = rigid_body.linear_velocity.lerp(pos_error / delta, 
 `strength` is the key parameter: 0.0 = pure ragdoll, 1.0 = perfect tracking.
 `pin_strength` should be lower than rotational strength (0.2-0.3) to prevent floating.
 
+### Rig fidelity additions (1.4)
+
+Three terms were added after measuring, on a 16-body auto-detected rig in a real
+game, that a spring-driven idle sat 5-15 deg off its animation and wobbled — and that
+the springs were not the cause; the *solver* rewrote 50-90 % of the commanded angular
+velocity every tick (a head's came back reversed). Diagnosis and defaults:
+
+1. **Self-collision off** (`RagdollTuning.self_collision = false`, builder adds a
+   collision exception for every body pair). Only jointed pairs were excluded before;
+   the auto-generated torso boxes and limb capsules overlap in ordinary poses (Chest-Hips
+   in contact 170 of 180 idle frames, forearms inside the chest box), and every contact is
+   a solver impulse against the springs.
+2. **Chain-consistent linear commands** (`spring_chain_consistency`, 0..1, default 1).
+   Bodies update parent-first (`PhysicsRigBuilder.get_joints()` gives the topology and
+   the joint anchor in both bodies' local frames). A jointed child's linear velocity is
+   commanded as the kinematic identity the joint enforces anyway,
+   `v_child = v_parent + w_parent x r_parent - w_child x r_child` (parent velocities as
+   written this tick), and its own position pin is scaled out by the same factor.
+   Reason: the anchor sits half a bone from each body's centre of mass, so the impulse
+   the point constraint applies to reconcile an inconsistent command *spins* the bodies —
+   a 0.1-0.3 m/s pull on a light body (head, hand, foot: tiny inertia) becomes several
+   rad/s. With consistent commands the anchor velocity mismatch after the spring's writes
+   is 0.000 m/s and the solver has nothing to fight. Positions of children follow from
+   their ancestors' orientation springs and the root pin (the joint holds them there).
+3. **Feed-forward** (`spring_feed_forward`, 0..1, default 1). The error term alone reaches
+   where the target *was*; the target's own rotation / translation since the previous
+   tick is added to the commanded velocity, so a moving target is tracked with zero
+   steady-state lag (a 150 deg/s idle twitch used to read 3-8 deg behind). Scaled by
+   strength like the error term, so weakened bones still let go; a limp bone (strength
+   ~0) drops its target history so no stale motion is fed forward when it wakes.
+
+`spring_angular_settle_deadband` default 0.04 -> 0.01 rad: with the rig no longer
+fighting itself the wide band only left every bone wandering 2 deg off its target
+(and measured *more* frame-to-frame jitter, not less).
+
+Set `self_collision = true`, `spring_chain_consistency = 0`, `spring_feed_forward = 0`,
+deadband `0.04` for the pre-1.4 behaviour.
+
+Two things the pass measured but did NOT change, worth knowing:
+
+- Joint limits are relative to whatever pose the skeleton has when the rig builds (the
+  joint node's transform vs each body at creation), and the JOINT_TABLE limits assume
+  Mixamo bone axes; on other rigs / twitchy animations the head, feet and elbow twist can
+  sit at a limit and fight (measured 10-18 deg mean head error on one idle).
+- Headless, the process loop can stall (~140 ms) and the engine catches up with
+  `max_physics_steps_per_frame` (8) ticks in one frame; an AnimationPlayer in the default
+  IDLE callback mode then stands still for 8 ticks and jumps 0.14 s. Any headless
+  measurement of tracking should run the AnimationPlayer in PHYSICS callback mode (after
+  the rig is built — before, a physics-mode player hasn't ticked and the joints would be
+  centred on the rest pose).
+
 ## Center of mass balance ratio
 
 Computes how off-balance the character is by comparing the mass-weighted center

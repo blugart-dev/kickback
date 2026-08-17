@@ -8,7 +8,56 @@
 
 ## [Unreleased]
 
+### Added
+- **Rig fidelity pass (tracking)** — measured on a 16-body auto-detected rig in a real
+  game: a spring-driven idle sat 5-15 deg off its animation and wobbled, and the Jolt
+  solve — not the springs — was rewriting 50-90 % of the commanded angular velocity every
+  tick (a head's came back reversed). Three general fixes, all defaults, all in the
+  resolver/builder (docs/REFERENCE.md "Rig fidelity additions"):
+  - `RagdollTuning.self_collision` (default **false**): the builder now adds a collision
+    exception for every body pair of the rig. Only jointed pairs were excluded before, and
+    the auto-generated torso boxes / limb capsules overlap in ordinary poses (Chest-Hips
+    in contact 170 of 180 idle frames, forearms inside the chest box) — each contact a
+    solver impulse against the springs. Bodies still collide with the environment and
+    OTHER ragdolls per `collision_mask`.
+  - `RagdollTuning.spring_chain_consistency` (0..1, default **1.0**): bodies update
+    parent-first and a jointed child's linear velocity is commanded as the identity the
+    joint enforces anyway (`v_child = v_parent + w_parent x r_parent - w_child x r_child`,
+    parent as written this tick), its own position pin scaled out. The joint anchor sits
+    half a bone from each body's centre of mass, so the reconciling impulse for an
+    inconsistent command spins the light bodies (head, hands, feet). New
+    `PhysicsRigBuilder.get_joints()` registry (child rig -> parent, joint, anchors in both
+    local frames; also recovered for baked rigs).
+  - `RagdollTuning.spring_feed_forward` (0..1, default **1.0**): the target's own rotation
+    / translation since the previous tick is fed into the command, so a moving target is
+    tracked with zero steady-state lag instead of one tick of motion per tick of lag.
+    Scaled by strength; a limp bone drops its target history.
+  - `spring_angular_settle_deadband` default 0.04 -> 0.01 rad (the wide band only left
+    bones wandering 2 deg off target once the rig stopped fighting itself; the narrow one
+    measures less jitter). Result on the game rig (lockstep, chest, four characters):
+    mean error 6.7/3.2/12.9/14.9 deg -> 2.1/1.3/1.8/1.8, max 14.5-19.5 -> 2.2-5, jitter
+    <= 1 deg/frame; a 20 deg authored flinch renders 25 deg instead of 14. Legacy behaviour:
+    `self_collision = true`, `spring_chain_consistency = 0`, `spring_feed_forward = 0`,
+    deadband 0.04. Tests: test/test_rig_fidelity.gd.
+- **Animation-guided persistent ragdoll** — `ActiveRagdollController.set_persistent_guided(
+  strength_scale := 0.5, ramp_time := 0.5, ease := 1.0)` (facade: `KickbackCharacter.
+  set_persistent_guided` / spawn-safe `queue_persistent_guided`). Instead of the instant
+  collapse of `set_persistent(true)`, every bone's spring strength starts at
+  `base * strength_scale` and ramps to zero over `ramp_time` (`scale(t) = strength_scale *
+  (1 - t)^ease`), still chasing whatever the animation plays — typically the authored
+  death clip started at the same moment — so the clip shapes the fall while physics
+  (contacts, hit impulses, which stay pure impulse) increasingly takes over. State is
+  PERSISTENT from the first frame, the protective fall brace is not armed (the clip
+  authors the catch), the ramp ends exactly as limp as a plain persistent ragdoll
+  (`guide_finished` signal), and `set_persistent(false)` releases it as usual. Queries:
+  `is_guiding()`, `get_guide_scale()`. Motivation: an FPS whose death ragdolls read as
+  a marionette with cut strings.
+
 ### Fixed
+- **PhysicsCollisionMonitor self-collision filter covers unmonitored own bodies** — with
+  `monitored_bones` set to a subset, a monitored body striking one of its OWN rig's
+  unmonitored bodies (Hips vs its own hand) passed the self filter and was emitted as an
+  environment `body_impact`. The filter now knows every body of the rig.
 - **PERSISTENT no longer strands the protective fall-brace** — `set_persistent(true)`
   runs `_full_ragdoll()`, which arms the fall-catch reach when a stumble/hit direction
   is on record, but the brace was only advanced in `State.RAGDOLL`; the immediate

@@ -133,6 +133,7 @@ Or use the preset `.tres` files in `addons/kickback/presets/`.
 - **Force stagger:** `kickback_character.trigger_stagger(hit_direction)`
 - **Force ragdoll:** `kickback_character.trigger_ragdoll()`
 - **Persistent ragdoll (death):** `kickback_character.set_persistent(true)` — revive with `set_persistent(false)`
+- **Animation-guided death:** play your death clip, then `kickback_character.set_persistent_guided(strength_scale := 0.5, ramp_time := 0.5, ease := 1.0)` — the springs keep chasing the clip at `strength_scale` of their base and ramp to zero over `ramp_time` (the authored fall shapes the body, physics takes over), ending as a plain persistent ragdoll; `queue_persistent_guided(...)` is the spawn-safe form
 - **Protected bones:** set `ragdoll_tuning.protected_bones` to keep legs (or any bones) animated during hits
 - **Query state:** `is_ragdolled()`, `is_staggering()`, `get_active_state_name()`
 - **Advanced control:** `var active_controller = kickback_character.get_active_controller()` — the `ActiveRagdollController` (or `null`), for the queries below

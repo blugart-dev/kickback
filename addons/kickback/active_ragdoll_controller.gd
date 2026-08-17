@@ -14,6 +14,11 @@
 ##      │ set_persistent(true)
 ##      ↓
 ##   PERSISTENT ──set_persistent(false)──→ GETTING_UP
+##
+## set_persistent_guided() enters PERSISTENT through an animation-GUIDED fall: the
+## springs keep chasing the animation at a strength scale that ramps to zero over a
+## short window (the authored death clip shapes the fall, physics takes over), then
+## the body is exactly as limp as a plain set_persistent(true).
 @icon("res://addons/kickback/icons/active_ragdoll_controller.svg")
 class_name ActiveRagdollController
 extends Node
@@ -96,6 +101,15 @@ var _fall_brace_arm_rigs: PackedStringArray = []
 var _fall_ground_y: float = 0.0  # actual ground height under the reach (for contact)
 var _fall_brace_target: Vector3 = Vector3.ZERO  # last reach target (cached for debug HUD)
 
+# Guided persistent ragdoll (see set_persistent_guided): while _guiding, every bone's
+# strength is base * scale(t) with scale ramping from _guide_scale to 0 over _guide_time
+# (curve exponent _guide_ease), so the animation leads the fall and physics takes over.
+var _guiding: bool = false
+var _guide_elapsed: float = 0.0
+var _guide_scale: float = 0.5
+var _guide_time: float = 0.5
+var _guide_ease: float = 1.0
+
 # Cached semantic role rig-names, resolved from the profile (see RagdollProfile roles).
 # Consumers query these instead of hardcoding "Hips"/"Foot_L"/... so non-Mixamo rigs work.
 var _root_rig: String = "Hips"
@@ -113,6 +127,9 @@ var _holds_ragdoll_slot: bool = false
 signal state_changed(new_state: int)
 ## Emitted when the character enters full ragdoll (all springs zeroed).
 signal ragdoll_started()
+## Emitted when a guided persistent ragdoll (see [method set_persistent_guided]) finishes
+## its ramp: every spring is now zero and the body is fully limp in PERSISTENT.
+signal guide_finished()
 ## Emitted when recovery begins after ragdoll settles.
 signal recovery_started(face_up: bool)
 ## Emitted when recovery completes and springs are fully restored.
@@ -276,6 +293,9 @@ func _physics_process(delta: float) -> void:
 		State.GETTING_UP:
 			_update_recovery(delta)
 		State.PERSISTENT:
+			# Guided death: ramp the animation-chasing springs down to limp.
+			if _guiding:
+				_update_guide(delta)
 			# A death can arrive mid-catch (set_persistent → _full_ragdoll arms the
 			# fall brace): let the reach play out and release on its own timer /
 			# ground contact, exactly as in RAGDOLL — otherwise the braced arm's
@@ -738,6 +758,28 @@ func _end_fall_brace() -> void:
 		_arm_ik.reset()
 
 
+## Advances a guided persistent ragdoll: re-asserts every bone's strength at
+## base * scale(t) each frame (nothing else revives strengths in PERSISTENT —
+## recovery_rate is 0), and limps the body completely once the ramp has run out.
+func _update_guide(delta: float) -> void:
+	_guide_elapsed += delta
+	if _guide_elapsed >= _guide_time:
+		_guiding = false
+		for rig_name: String in _spring.get_all_bone_names():
+			_spring.set_bone_strength(rig_name, 0.0)
+		guide_finished.emit()
+		return
+	_apply_guide_strengths()
+
+
+## Writes the current guide scale onto every bone (base strength, fatigue/injury
+## aware, times the ramp scale).
+func _apply_guide_strengths() -> void:
+	var s := get_guide_scale()
+	for rig_name: String in _spring.get_all_bone_names():
+		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name) * s)
+
+
 func _update_ragdoll(delta: float) -> void:
 	if _fall_bracing:
 		_update_fall_brace(delta)
@@ -971,6 +1013,49 @@ func set_persistent(enabled: bool) -> void:
 			_start_recovery()
 
 
+## Enters PERSISTENT ragdoll through an animation-GUIDED fall instead of the instant
+## collapse of [method set_persistent]: every bone's spring strength is set to its base
+## times [param strength_scale] and ramps to zero over [param ramp_time] seconds
+## (scale(t) = strength_scale * (1 - t)^[param ease]; 1 = linear, 2 = drops fast then
+## trails off), so the springs keep chasing whatever the animation plays — typically the
+## authored death clip started at the same moment — while physics (contacts, hit
+## impulses) increasingly takes over. The state is PERSISTENT from the first frame
+## ([signal ragdoll_started] and [signal state_changed] fire as for set_persistent),
+## the protective fall brace is NOT armed (the clip authors the catch), hits stay
+## pure impulse, and after the ramp the body is exactly as limp as a plain persistent
+## ragdoll ([signal guide_finished]). [method set_persistent](false) releases it as
+## usual, whether or not the ramp has finished. A ramp_time of 0 (or scale 0) is a
+## plain set_persistent(true).
+func set_persistent_guided(strength_scale: float = 0.5, ramp_time: float = 0.5, ease: float = 1.0) -> void:
+	_full_ragdoll(false)
+	_state = State.PERSISTENT
+	_guide_scale = clampf(strength_scale, 0.0, 1.0)
+	_guide_time = maxf(ramp_time, 0.0)
+	_guide_ease = maxf(ease, 0.01)
+	_guide_elapsed = 0.0
+	_guiding = _guide_time > 0.0 and _guide_scale > 0.0
+	if _guiding:
+		_apply_guide_strengths()
+	state_changed.emit(_state)
+	if not _guiding:
+		guide_finished.emit()
+
+
+## True while a guided persistent ragdoll (see [method set_persistent_guided]) is
+## still ramping its springs down.
+func is_guiding() -> bool:
+	return _guiding
+
+
+## Current strength scale of the guided ramp (strength_scale at the start, 0 once the
+## ramp is over or when not guiding).
+func get_guide_scale() -> float:
+	if not _guiding or _guide_time <= 0.0:
+		return 0.0
+	var t := clampf(_guide_elapsed / _guide_time, 0.0, 1.0)
+	return _guide_scale * pow(1.0 - t, _guide_ease)
+
+
 ## Returns the current state as a [enum State] integer value.
 func get_state() -> int:
 	return _state
@@ -1109,8 +1194,11 @@ func get_foot_rigs() -> PackedStringArray:
 
 # ── State Transitions ───────────────────────────────────────────────────────
 
-func _full_ragdoll() -> void:
+## [param brace] = false skips the protective fall reach (guided deaths: the
+## animation authors the catch).
+func _full_ragdoll(brace: bool = true) -> void:
 	_restore_disabled_collisions()
+	_guiding = false
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, 0.0)
 
@@ -1133,7 +1221,10 @@ func _full_ragdoll() -> void:
 	# Protective fall break: keep the leading arm active and reaching for the ground for
 	# a short window, while the rest of the body goes limp (the catch before the
 	# collapse). Re-boosts that arm's springs after the zeroing above.
-	_setup_fall_brace()
+	if brace:
+		_setup_fall_brace()
+	else:
+		_end_fall_brace()
 
 	state_changed.emit(_state)
 	ragdoll_started.emit()
@@ -1152,6 +1243,7 @@ func _full_ragdoll() -> void:
 
 func _start_recovery() -> void:
 	_end_fall_brace()  # release any in-flight protective reach before the get-up blend
+	_guiding = false  # a released guided death: the get-up ramp owns the strengths now
 	_state = State.GETTING_UP
 	_recovery_elapsed = 0.0
 	state_changed.emit(_state)

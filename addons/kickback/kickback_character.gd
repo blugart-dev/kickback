@@ -40,6 +40,7 @@ var _active_controller: ActiveRagdollController
 
 var _mode: int = Mode.NONE
 var _ready_complete: bool = false
+var _queued_guide: Array = [0.5, 0.5, 1.0]  # queue_persistent_guided args until setup completes
 var _exiting: bool = false
 
 ## Emitted when all controllers are initialized and the character is ready for use.
@@ -225,6 +226,31 @@ func set_persistent(enabled: bool) -> void:
 		push_warning("KickbackCharacter: no ActiveRagdollController available for set_persistent()")
 
 
+## Persistent ragdoll through an animation-GUIDED fall (see
+## [method ActiveRagdollController.set_persistent_guided]): the springs keep chasing
+## the animation you play (e.g. a death clip) at [param strength_scale] of their base,
+## ramping to zero over [param ramp_time] seconds; then the body is limp in PERSISTENT.
+## Release with [method set_persistent](false).
+func set_persistent_guided(strength_scale: float = 0.5, ramp_time: float = 0.5, ease: float = 1.0) -> void:
+	if _active_controller:
+		_active_controller.set_persistent_guided(strength_scale, ramp_time, ease)
+	else:
+		push_warning("KickbackCharacter: no ActiveRagdollController available for set_persistent_guided()")
+
+
+## [method set_persistent_guided] as soon as setup completes. Safe to call at spawn
+## time before the physics rig is built (the guide starts when the rig exists — play
+## the animation right away; the ramp just chases it from wherever it is by then).
+## If setup has already completed, starts immediately.
+func queue_persistent_guided(strength_scale: float = 0.5, ramp_time: float = 0.5, ease: float = 1.0) -> void:
+	if _ready_complete:
+		set_persistent_guided(strength_scale, ramp_time, ease)
+		return
+	_queued_guide = [strength_scale, ramp_time, ease]
+	if not setup_complete.is_connected(_deferred_persistent_guided):
+		setup_complete.connect(_deferred_persistent_guided, CONNECT_ONE_SHOT)
+
+
 ## Returns the character root Node3D.
 func get_character_root() -> Node3D:
 	return _character_root
@@ -258,6 +284,10 @@ func _deferred_ragdoll() -> void:
 
 func _deferred_persistent() -> void:
 	set_persistent(true)
+
+
+func _deferred_persistent_guided() -> void:
+	set_persistent_guided(_queued_guide[0], _queued_guide[1], _queued_guide[2])
 
 
 func _on_tuning_changed() -> void:

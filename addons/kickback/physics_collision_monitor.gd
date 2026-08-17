@@ -35,7 +35,8 @@ signal body_impact(bone_name: String, velocity: float, contact_body: Node3D)
 var _kickback_char: KickbackCharacter
 var _rig_builder: PhysicsRigBuilder
 var _connected: bool = false
-var _body_to_rig_name: Dictionary = {}       # RigidBody3D → rig_name
+var _body_to_rig_name: Dictionary = {}       # RigidBody3D → rig_name (monitored bodies)
+var _own_bodies: Dictionary = {}             # RigidBody3D → true, EVERY body of this rig
 var _cooldown_timestamps: Dictionary = {}    # rig_name → last emit time (msec)
 var _ragdoll_layer_mask: int = 0
 
@@ -81,10 +82,14 @@ func _connect_to_bodies() -> void:
 		monitor_set[bone_name] = true
 
 	for rig_name: String in bodies:
+		var body: RigidBody3D = bodies[rig_name]
+		# The self-collision filter must know EVERY body of the rig, not just the
+		# monitored subset — a monitored Hips striking this rig's own (unmonitored)
+		# hand is still a self-contact.
+		_own_bodies[body] = true
 		if not monitor_set.is_empty() and rig_name not in monitor_set:
 			continue
 
-		var body: RigidBody3D = bodies[rig_name]
 		body.contact_monitor = true
 		body.max_contacts_reported = maxi(body.max_contacts_reported, 1)
 		_body_to_rig_name[body] = rig_name
@@ -98,10 +103,10 @@ func _on_body_entered(other_body: Node3D, this_body: RigidBody3D) -> void:
 	if rig_name.is_empty():
 		return
 
-	# Filter self-collisions (bone-on-bone from the same rig)
+	# Filter self-collisions (bone-on-bone from the same rig, monitored or not)
 	if filter_self_collisions and other_body is RigidBody3D:
 		if other_body.collision_layer & _ragdoll_layer_mask:
-			if other_body in _body_to_rig_name:
+			if other_body in _own_bodies:
 				return
 
 	# Filter by velocity threshold
@@ -130,4 +135,5 @@ func _exit_tree() -> void:
 			body.contact_monitor = false
 			body.max_contacts_reported = 0
 	_body_to_rig_name.clear()
+	_own_bodies.clear()
 	_connected = false

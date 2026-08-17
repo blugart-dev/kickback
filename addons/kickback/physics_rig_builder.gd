@@ -11,6 +11,10 @@ extends Node3D
 var _skeleton: Skeleton3D
 var _bodies: Dictionary = {}         # rig_name → RigidBody3D
 var _rig_to_bone: Dictionary = {}    # rig_name → skeleton bone name
+## child rig_name → {parent: String, joint: Generic6DOFJoint3D,
+##   anchor_parent: Vector3, anchor_child: Vector3} — the joint anchor expressed
+## in each body's local frame at build time (see [method get_joints]).
+var _joints: Dictionary = {}
 var _built: bool = false
 var _profile: RagdollProfile
 var _tuning: RagdollTuning
@@ -65,6 +69,7 @@ func _build_rig() -> void:
 	for joint_def: JointDefinition in _profile.joints:
 		_create_joint(joint_def)
 
+	_apply_self_collision()
 	_built = true
 
 
@@ -103,7 +108,33 @@ func _adopt_baked_rig() -> bool:
 
 	_bodies = baked_bodies
 	_rig_to_bone = baked_bones
+
+	# Baked joints: recover the parent→child topology from node_a/node_b.
+	var body_to_rig: Dictionary = {}
+	for rig_name: String in _bodies:
+		body_to_rig[_bodies[rig_name]] = rig_name
+	for child in get_children():
+		if child is Generic6DOFJoint3D:
+			var a := child.get_node_or_null(child.node_a)
+			var b := child.get_node_or_null(child.node_b)
+			if a in body_to_rig and b in body_to_rig:
+				_register_joint(body_to_rig[a], body_to_rig[b], child)
+	_apply_self_collision()
 	return true
+
+
+## Excludes every body pair of this rig from colliding unless the tuning asks
+## for self-collision (RagdollTuning.self_collision). Jointed pairs are already
+## excluded by the joints; the non-adjacent pairs (Chest-Hips, forearm-chest,
+## upper arm-spine, ...) overlap in ordinary poses and would otherwise fight
+## the springs with contact impulses every tick.
+func _apply_self_collision() -> void:
+	if _tuning.self_collision:
+		return
+	var list: Array = _bodies.values()
+	for i in list.size():
+		for j in range(i + 1, list.size()):
+			(list[i] as RigidBody3D).add_collision_exception_with(list[j])
 
 
 func _get_bone_global(bone_name: String) -> Transform3D:
@@ -170,6 +201,23 @@ func _create_joint(joint_def: JointDefinition) -> void:
 
 	# Lock linear axes + apply angular limits/compliance (typed, shared with RigBaker)
 	joint_def.apply_to(joint)
+	_register_joint(joint_def.parent_rig, joint_def.child_rig, joint)
+
+
+## Records a joint's topology and its anchor in both bodies' local frames (from
+## the transforms at registration — the bone poses the rig was built on), so the
+## SpringResolver can command kinematically consistent linear velocities down
+## the chain.
+func _register_joint(parent_rig: String, child_rig: String, joint: Generic6DOFJoint3D) -> void:
+	var parent_body: RigidBody3D = _bodies[parent_rig]
+	var child_body: RigidBody3D = _bodies[child_rig]
+	var anchor := joint.global_position
+	_joints[child_rig] = {
+		"parent": parent_rig,
+		"joint": joint,
+		"anchor_parent": parent_body.global_transform.affine_inverse() * anchor,
+		"anchor_child": child_body.global_transform.affine_inverse() * anchor,
+	}
 
 
 ## Enables the physics rig. On first enable, snaps bodies to skeleton and unfreezes
@@ -212,6 +260,15 @@ func await_bodies() -> Dictionary:
 
 func get_bone_name_for_body(rig_name: String) -> String:
 	return _rig_to_bone.get(rig_name, "")
+
+
+## Returns the joint registry: child rig_name → {parent: String, joint:
+## Generic6DOFJoint3D, anchor_parent: Vector3, anchor_child: Vector3}. The anchor
+## vectors are the joint pivot in the parent's / child's local frame as built
+## (for the runtime rig the pivot sits at the child bone origin, so anchor_child
+## is ~zero). Empty until the rig is built.
+func get_joints() -> Dictionary:
+	return _joints
 
 
 func get_profile() -> RagdollProfile:
