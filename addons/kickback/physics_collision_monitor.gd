@@ -127,13 +127,20 @@ func _on_body_entered(other_body: Node3D, this_body: RigidBody3D) -> void:
 func _exit_tree() -> void:
 	if not _connected:
 		return
-	for body: RigidBody3D in _body_to_rig_name.keys():
-		if is_instance_valid(body):
-			var cb := _on_body_entered.bind(body)
-			if body.body_entered.is_connected(cb):
-				body.body_entered.disconnect(cb)
-			body.contact_monitor = false
-			body.max_contacts_reported = 0
+	# The keys can be already-freed bodies when the whole rig is torn down
+	# in one batch (an integrator's rig-LOD demote frees the builder's body
+	# children alongside this monitor) — a typed `body: RigidBody3D` loop
+	# variable throws on the freed assignment BEFORE is_instance_valid can
+	# guard, so the loop variable stays untyped.
+	for key in _body_to_rig_name.keys():
+		if not is_instance_valid(key):
+			continue
+		var body := key as RigidBody3D
+		var cb := _on_body_entered.bind(body)
+		if body.body_entered.is_connected(cb):
+			body.body_entered.disconnect(cb)
+		body.contact_monitor = false
+		body.max_contacts_reported = 0
 	_body_to_rig_name.clear()
 	_own_bodies.clear()
 	_connected = false
