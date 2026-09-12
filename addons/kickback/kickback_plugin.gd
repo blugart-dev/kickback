@@ -29,13 +29,13 @@ func _on_add_kickback() -> void:
 
 	var root: Node = selected[0]
 
-	var skeleton: Skeleton3D = _find_child_of_type(root, "Skeleton3D")
+	var skeleton := KickbackSetup.find_skeleton(root)
 	if not skeleton:
-		_show_error("Selected node has no Skeleton3D child.\nSelect a character node that contains a Skeleton3D.")
+		_show_error("Selected node has no Skeleton3D anywhere below it.\nSelect a character node that contains a Skeleton3D (e.g. Root/Model/Skeleton3D).")
 		return
 
 	for child in root.get_children():
-		if child.name == "KickbackCharacter":
+		if child is KickbackCharacter:
 			_show_error("This node already has Kickback controllers.\nRemove existing ones first to re-add.")
 			return
 
@@ -121,8 +121,6 @@ func _show_preset_dialog() -> void:
 func _execute_preset(preset_name: String) -> void:
 	var root := _pending_root
 	var skeleton := _pending_skeleton
-
-	var skeleton_name := skeleton.name
 	var scene_owner: Node = root.owner if root.owner else root
 
 	# Auto-detect humanoid bones
@@ -136,75 +134,19 @@ func _execute_preset(preset_name: String) -> void:
 		auto_profile = RagdollProfile.create_mixamo_default()
 
 	# Kickback is the active spring ragdoll — always create the active node set.
-	var include_active := true
+	# add_active_rig parents the nodes itself (the shared runtime-spawner path);
+	# the undo/redo action is registered around that already-performed "do"
+	# (commit_action(false)), so Undo removes the nodes and Redo re-adds them
+	# with their scene ownership.
+	var nodes := KickbackSetup.add_active_rig(root, skeleton, auto_profile, null, scene_owner)
 
-	# Preload scripts
-	var scripts: Dictionary = {}
-	var script_paths := [
-		"kickback_character", "physics_rig_builder", "physics_rig_sync",
-		"spring_resolver", "active_ragdoll_controller",
-	]
-	for script_name: String in script_paths:
-		var path := "res://addons/kickback/%s.gd" % script_name
-		var s: GDScript = load(path)
-		if not s:
-			_show_error("Failed to load '%s'.\nCheck that the Kickback addon is installed correctly." % path)
-			return
-		scripts[script_name] = s
-
-	# Create nodes
-	var nodes: Array[Node] = []
-
-	# KickbackCharacter (always created)
-	var kc := Node.new()
-	kc.name = "KickbackCharacter"
-	kc.set_script(scripts["kickback_character"])
-	kc.set("skeleton_path", NodePath("../%s" % skeleton_name))
-	kc.set("character_root_path", NodePath(".."))
-	kc.set("ragdoll_profile", auto_profile)
-	nodes.append(kc)
-
-	if include_active:
-		var builder := Node3D.new()
-		builder.name = "PhysicsRigBuilder"
-		builder.set_script(scripts["physics_rig_builder"])
-		builder.set("skeleton_path", NodePath("../%s" % skeleton_name))
-		nodes.append(builder)
-
-		# SkeletonModifier3D-based: PhysicsRigSync promotes itself under the Skeleton3D at
-		# runtime, so it can be created here alongside the other Kickback nodes.
-		var sync := SkeletonModifier3D.new()
-		sync.name = "PhysicsRigSync"
-		sync.set_script(scripts["physics_rig_sync"])
-		sync.set("skeleton_path", NodePath("../%s" % skeleton_name))
-		sync.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
-		nodes.append(sync)
-
-		var spring := Node.new()
-		spring.name = "SpringResolver"
-		spring.set_script(scripts["spring_resolver"])
-		spring.set("skeleton_path", NodePath("../%s" % skeleton_name))
-		spring.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
-		nodes.append(spring)
-
-		var active := Node.new()
-		active.name = "ActiveRagdollController"
-		active.set_script(scripts["active_ragdoll_controller"])
-		active.set("spring_resolver_path", NodePath("../SpringResolver"))
-		active.set("rig_builder_path", NodePath("../PhysicsRigBuilder"))
-		active.set("character_root_path", NodePath(".."))
-		active.set("rig_sync_path", NodePath("../PhysicsRigSync"))
-		nodes.append(active)
-
-	# Add all nodes via undo/redo
 	var undo := get_undo_redo()
 	undo.create_action("Add Kickback to Character (%s)" % preset_name)
-
 	for node: Node in nodes:
 		undo.add_do_method(self, "_add_node", root, node, scene_owner)
 		undo.add_undo_method(self, "_remove_node", root, node)
-
-	undo.commit_action()
+		undo.add_do_reference(node)
+	undo.commit_action(false)
 
 	# Set skeleton modifier callback to Physics for IK + spring sync
 	# Done outside undo/redo because the skeleton may belong to an instantiated sub-scene
@@ -266,13 +208,6 @@ func _add_node(parent: Node, child: Node, owner: Node) -> void:
 
 func _remove_node(parent: Node, child: Node) -> void:
 	parent.remove_child(child)
-
-
-func _find_child_of_type(node: Node, type_name: String) -> Node:
-	for child in node.get_children():
-		if child.get_class() == type_name:
-			return child
-	return null
 
 
 func _show_error(msg: String) -> void:

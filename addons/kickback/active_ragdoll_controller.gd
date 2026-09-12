@@ -70,7 +70,11 @@ var _stumble_drift: float = 0.0  # Current knockback drift speed (m/s), decays t
 var _stumble_dist_since_step: float = 0.0  # Drift distance accumulated toward the next step.
 var _fatigue: float = 0.0
 var _pain: float = 0.0
-var _last_hit_time: float = 0.0
+## Accumulated physics time (seconds). Hit streaks are measured against this,
+## not the wall clock, so pausing / Engine.time_scale don't extend or shorten
+## the rapid-fire window.
+var _physics_time: float = 0.0
+var _last_hit_time: float = -INF
 var _hit_streak: int = 0
 var _reaction_pulses: Dictionary = {}  # rig_name → {intensity: float, elapsed: float}
 var _injuries: Dictionary = {}  # rig_name → float (0.0-1.0, persistent damage)
@@ -177,6 +181,10 @@ func _ready() -> void:
 	_ensure_config()
 	_build_adjacency()
 	_rebuild_protected_set()
+	# Run BEFORE the SpringResolver (priority 0) each physics tick: the strength
+	# writes and the foot/arm IK target overrides made here are then consumed by
+	# the resolver in the SAME tick instead of one tick later.
+	process_physics_priority = -1
 
 
 func _ensure_config() -> void:
@@ -264,6 +272,7 @@ func _build_adjacency() -> void:
 func _physics_process(delta: float) -> void:
 	if not _spring or not _rig_builder:
 		return
+	_physics_time += delta
 
 	# Lazy foot IK init (deferred until SpringResolver has bones)
 	if not _foot_ik and _tuning and _tuning.foot_ik_enabled and _character_root:
@@ -866,7 +875,7 @@ func apply_hit(body: RigidBody3D, hit_dir: Vector3, hit_pos: Vector3, profile: I
 		return
 
 	# Hit streak: rapid consecutive hits escalate
-	var now := Time.get_ticks_msec() / 1000.0
+	var now := _physics_time
 	if now - _last_hit_time < _tuning.rapid_fire_window:
 		_hit_streak += 1
 	else:
@@ -1005,9 +1014,7 @@ func trigger_stagger(hit_dir: Vector3 = Vector3.FORWARD) -> void:
 ## Enables or disables persistent ragdoll (death/knockdown).
 func set_persistent(enabled: bool) -> void:
 	if enabled:
-		_full_ragdoll()
-		_state = State.PERSISTENT
-		state_changed.emit(_state)
+		_full_ragdoll(true, State.PERSISTENT)
 	else:
 		if _state == State.PERSISTENT:
 			_start_recovery()
@@ -1027,8 +1034,7 @@ func set_persistent(enabled: bool) -> void:
 ## usual, whether or not the ramp has finished. A ramp_time of 0 (or scale 0) is a
 ## plain set_persistent(true).
 func set_persistent_guided(strength_scale: float = 0.5, ramp_time: float = 0.5, ease: float = 1.0) -> void:
-	_full_ragdoll(false)
-	_state = State.PERSISTENT
+	_full_ragdoll(false, State.PERSISTENT)
 	_guide_scale = clampf(strength_scale, 0.0, 1.0)
 	_guide_time = maxf(ramp_time, 0.0)
 	_guide_ease = maxf(ease, 0.01)
@@ -1036,8 +1042,7 @@ func set_persistent_guided(strength_scale: float = 0.5, ramp_time: float = 0.5, 
 	_guiding = _guide_time > 0.0 and _guide_scale > 0.0
 	if _guiding:
 		_apply_guide_strengths()
-	state_changed.emit(_state)
-	if not _guiding:
+	else:
 		guide_finished.emit()
 
 
@@ -1195,8 +1200,10 @@ func get_foot_rigs() -> PackedStringArray:
 # ── State Transitions ───────────────────────────────────────────────────────
 
 ## [param brace] = false skips the protective fall reach (guided deaths: the
-## animation authors the catch).
-func _full_ragdoll(brace: bool = true) -> void:
+## animation authors the catch). [param target_state] is the state entered and
+## announced — RAGDOLL, or PERSISTENT for set_persistent(); a single
+## [signal state_changed] fires, with no transient RAGDOLL for persistent entries.
+func _full_ragdoll(brace: bool = true, target_state: int = State.RAGDOLL) -> void:
 	_restore_disabled_collisions()
 	_guiding = false
 	for rig_name: String in _spring.get_all_bone_names():
@@ -1210,7 +1217,7 @@ func _full_ragdoll(brace: bool = true) -> void:
 			for body: RigidBody3D in bodies.values():
 				body.linear_velocity += char_velocity
 
-	_state = State.RAGDOLL
+	_state = target_state
 	_ragdoll_elapsed = 0.0
 	_reaction_pulses.clear()
 	_spring.recovery_rate = 0.0
@@ -1259,8 +1266,7 @@ func _start_recovery() -> void:
 	# Detect orientation BEFORE moving root
 	var face_up := true
 	if chest_body:
-		var chest_forward_dot := chest_body.global_basis.z.dot(Vector3.UP)
-		face_up = chest_forward_dot > 0
+		face_up = is_face_up(chest_body.global_basis, _tuning.character_forward_sign)
 
 	# Save all body world transforms before moving root
 	var saved_transforms: Dictionary = {}
@@ -1335,6 +1341,13 @@ func _start_recovery() -> void:
 	# Force skeleton sync to prevent 1-frame visual pop after root teleport
 	if _rig_sync:
 		_rig_sync.sync_now()
+
+
+## True when a chest with world [param chest_basis] lies face up: its forward
+## axis (local Z times [param forward_sign], see
+## [member RagdollTuning.character_forward_sign]) points above the horizon.
+static func is_face_up(chest_basis: Basis, forward_sign: int) -> bool:
+	return (chest_basis.z * float(forward_sign)).dot(Vector3.UP) > 0.0
 
 
 func _finish_recovery() -> void:

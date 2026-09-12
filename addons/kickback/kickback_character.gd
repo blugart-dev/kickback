@@ -39,6 +39,7 @@ var _spring: SpringResolver
 var _active_controller: ActiveRagdollController
 
 var _mode: int = Mode.NONE
+var _setup_warnings: PackedStringArray = PackedStringArray()
 var _ready_complete: bool = false
 var _queued_guide: Array = [0.5, 0.5, 1.0]  # queue_persistent_guided args until setup completes
 var _exiting: bool = false
@@ -79,11 +80,6 @@ func _ready() -> void:
 		_spring.configure(ragdoll_tuning)
 	if _active_controller:
 		_active_controller.configure(ragdoll_profile, ragdoll_tuning)
-
-	# Listen for tuning changes so cached values refresh at runtime
-	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
-	if not tuning.changed.is_connected(_on_tuning_changed):
-		tuning.changed.connect(_on_tuning_changed)
 
 	# Active ragdoll mode requires the full node set
 	if _rig_builder and _spring and _rig_sync and _active_controller:
@@ -188,6 +184,30 @@ func is_setup_complete() -> bool:
 	return _ready_complete
 
 
+## The issues found while validating this character's setup in [method _ready]
+## (the same list [code]push_warning[/code] reported): Jolt not active, the
+## profile's bones / joints / roles / intermediate bones checked against the
+## actual [Skeleton3D] ([method RagdollProfile.validate_against_skeleton]), the
+## tuning checked against the profile, missing controller nodes. Empty when the
+## setup is clean. Setup is never aborted for these — the builder skips bones it
+## cannot find — so a mis-mapped rig runs with fewer bodies; this is how to tell.
+func get_setup_warnings() -> PackedStringArray:
+	return _setup_warnings
+
+
+## Re-caches the values the controllers copy out of [member ragdoll_tuning] at
+## configure time (velocity clamps, root-motion stripping, chain consistency,
+## feed-forward, protected bones). Call after mutating the RagdollTuning at
+## runtime — a bare property write on the resource is not seen otherwise.
+## Build-time settings (collision layers, joint limits, shapes) still need a
+## rig rebuild.
+func refresh_tuning() -> void:
+	if _spring:
+		_spring.refresh_tuning()
+	if _active_controller:
+		_active_controller.refresh_tuning()
+
+
 ## Forces the character to ragdoll immediately. Recovers automatically.
 func trigger_ragdoll() -> void:
 	if _active_controller:
@@ -290,13 +310,6 @@ func _deferred_persistent_guided() -> void:
 	set_persistent_guided(_queued_guide[0], _queued_guide[1], _queued_guide[2])
 
 
-func _on_tuning_changed() -> void:
-	if _spring:
-		_spring.refresh_tuning()
-	if _active_controller:
-		_active_controller.refresh_tuning()
-
-
 func _validate_setup() -> void:
 	var warnings := PackedStringArray()
 
@@ -305,6 +318,13 @@ func _validate_setup() -> void:
 
 	var tuning := ragdoll_tuning if ragdoll_tuning else RagdollTuning.create_default()
 	var profile := ragdoll_profile if ragdoll_profile else RagdollProfile.create_mixamo_default()
+
+	# Profile vs the real skeleton: a bone the profile names that the skeleton
+	# lacks means a body the builder silently skips (and an unjointed neighbour).
+	var profile_warnings := profile.validate_against_skeleton(_skeleton)
+	for w: String in profile_warnings:
+		warnings.append("Profile vs skeleton '%s': %s" % [_skeleton.name, w])
+
 	var tuning_warnings := tuning.validate_against_profile(profile)
 	for w: String in tuning_warnings:
 		warnings.append(w)
@@ -312,6 +332,7 @@ func _validate_setup() -> void:
 	if _mode == Mode.NONE:
 		warnings.append("No active ragdoll found — add PhysicsRigBuilder + PhysicsRigSync + SpringResolver + ActiveRagdollController as siblings")
 
+	_setup_warnings = warnings
 	if not warnings.is_empty():
 		var msg := "Kickback [%s]: %d issue(s):" % [get_parent().name, warnings.size()]
 		for w: String in warnings:

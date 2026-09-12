@@ -293,3 +293,45 @@ func test_apply_hit_resolves_rig_name_after_body_rename():
 	h.controller.apply_hit(chest, Vector3.FORWARD, chest.global_position, impact)
 	assert_lt(h.spring.get_bone_strength("Chest"), before,
 		"apply_hit resolves the rig via the builder map — the right bone weakens even after a body rename")
+
+
+# ── Setup validation surfaced at runtime (audit #14) ─────────────────────────
+
+func test_profile_bone_missing_from_skeleton_is_a_setup_warning():
+	var profile := RagdollProfile.create_mixamo_default()
+	for bd: BoneDefinition in profile.bones:
+		if bd.rig_name == "Head":
+			bd.skeleton_bone = "no_such_bone"
+			break
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(_core_tuning(), profile, true)
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "a mis-mapped bone does not abort setup")
+	var warnings: PackedStringArray = h.character.get_setup_warnings()
+	var found := ""
+	for w: String in warnings:
+		if "no_such_bone" in w:
+			found = w
+	assert_ne(found, "", "setup warnings name the missing skeleton bone; got %s" % str(warnings))
+	assert_true("Head" in found and "Skeleton3D" in found,
+		"the warning names the rig bone and the skeleton it was checked against: %s" % found)
+	assert_false(h.rig_builder.get_bodies().has("Head"), "the builder skipped the unmappable body")
+
+
+func test_clean_profile_has_no_skeleton_warnings():
+	var h = await _spawn()
+	for w: String in h.character.get_setup_warnings():
+		assert_false("Profile vs skeleton" in w, "clean Mixamo profile raises no skeleton warning: %s" % w)
+
+
+# ── refresh_tuning (audit #13) ───────────────────────────────────────────────
+
+func test_refresh_tuning_recaches_mutated_tuning():
+	var h = await _spawn()
+	assert_false(h.controller._is_bone_protected("Head"), "Head is not protected by default")
+	h.tuning.protected_bones = PackedStringArray(["Head"])
+	assert_false(h.controller._is_bone_protected("Head"),
+		"a bare resource write is not seen (nothing emits `changed`)")
+	h.character.refresh_tuning()
+	assert_true(h.controller._is_bone_protected("Head"), "refresh_tuning re-caches the controller's tuning")

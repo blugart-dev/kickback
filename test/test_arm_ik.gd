@@ -85,11 +85,29 @@ func test_initializes_and_reads_arm_lengths():
 	var h = await _spawn()
 	var solver = _make_solver(h)
 	assert_true(solver.is_initialized())
-	# Lengths derived from the synthetic skeleton's rest poses (0.28 m + 0.25 m).
-	assert_almost_eq(solver._upper_arm_len, 0.28, 0.02, "upper arm length read from rest")
-	assert_almost_eq(solver._lower_arm_len, 0.25, 0.02, "lower arm length read from rest")
+	# Lengths derived from the synthetic skeleton's rest poses (0.28 m + 0.25 m), per side.
+	assert_almost_eq(solver._upper_arm_len_l, 0.28, 0.02, "left upper arm length read from rest")
+	assert_almost_eq(solver._lower_arm_len_l, 0.25, 0.02, "left lower arm length read from rest")
+	assert_almost_eq(solver._upper_arm_len_r, 0.28, 0.02, "right upper arm length read from rest")
+	assert_almost_eq(solver._lower_arm_len_r, 0.25, 0.02, "right lower arm length read from rest")
 	# Full reach = the two segments summed.
 	assert_almost_eq(solver.get_reach(), 0.53, 0.03, "reach sums the arm segments")
+	assert_almost_eq(solver.get_reach("L"), 0.53, 0.03)
+	assert_almost_eq(solver.get_reach("R"), 0.53, 0.03)
+
+
+# Skeletons are not guaranteed symmetric: each arm must be measured on its own bones.
+func test_solver_measures_each_arm_separately():
+	var h = await _spawn()
+	# Lengthen the RIGHT upper arm only (rest pose), then initialise a fresh solver.
+	var elbow_r: int = h.bone_idx("mixamorig_RightForeArm")
+	h.skeleton.set_bone_rest(elbow_r, Transform3D(Basis.IDENTITY, Vector3(-0.38, 0.0, 0.0)))
+	var solver = _make_solver(h)
+	assert_almost_eq(solver._upper_arm_len_l, 0.28, 0.005, "left upper arm keeps its own length")
+	assert_almost_eq(solver._upper_arm_len_r, 0.38, 0.005, "right upper arm measured on the right bones")
+	assert_almost_eq(solver.get_reach("R"), 0.63, 0.01, "right reach uses the right arm")
+	assert_almost_eq(solver.get_reach("L"), 0.53, 0.01, "left reach uses the left arm")
+	assert_almost_eq(solver.get_reach(), 0.53, 0.01, "side-less reach is the shorter arm's")
 
 
 func test_reach_drives_hand_to_target():
@@ -113,16 +131,25 @@ func test_reach_drives_hand_to_target():
 	assert_true(solver.is_active())
 
 
-func test_unreachable_target_leaves_arm_at_anim():
+# An out-of-reach target used to write no override, popping the arm back to the
+# animation pose (every windmill cycle). It must now extend the arm fully toward it.
+func test_unreachable_target_extends_arm_toward_it():
 	var h = await _spawn()
 	var solver = _make_solver(h)
 	var shoulder := _bone_world(h, "UpperArm_R")
-	# Far beyond arm reach — the solve degenerates, so no override is written.
-	solver.begin_reach("R", shoulder + Vector3(5.0, 0, 0))
-	_pump(solver, 30)
-	assert_gt(solver._weight_r, 0.9, "weight still ramps even when unreachable")
-	assert_false(solver._overrides_buf.has("Hand_R"),
-		"unreachable target writes no override (arm stays at animation pose)")
+	var target := shoulder + Vector3(5.0, 0, 0)  # far beyond the 0.53 m reach
+	solver.begin_reach("R", target)
+	_pump(solver, 120)
+	assert_gt(solver._weight_r, 0.99, "weight ramps fully")
+	assert_true(solver._overrides_buf.has("Hand_R"), "out-of-reach target still writes the hand")
+	assert_true(solver._overrides_buf.has("UpperArm_R") and solver._overrides_buf.has("LowerArm_R"),
+		"shoulder and elbow overrides written")
+	var hand_t: Transform3D = solver._overrides_buf["Hand_R"]
+	var to_hand := hand_t.origin - shoulder
+	assert_almost_eq(to_hand.length(), solver.get_reach("R") - TwoBoneIK.REACH_MARGIN, 0.03,
+		"hand sits at full extension")
+	assert_gt(to_hand.normalized().dot(Vector3(1, 0, 0)), 0.99,
+		"arm points straight at the target")
 
 
 # Physics-anchored mode (used by the fall reach) solves from the arm's physical body

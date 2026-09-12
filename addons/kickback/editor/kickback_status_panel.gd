@@ -103,12 +103,15 @@ func _build_ui() -> void:
 		for w: String in all_warnings:
 			_add_check(w, false)
 
-	# Tuning Presets (#30)
+	# Tuning Presets (#30) — one entry per RagdollTuning.create_*() factory, so
+	# a new preset shows up here without touching the panel.
 	_add_section("Tuning Presets")
 	var preset_hbox := HBoxContainer.new()
 	var preset_option := OptionButton.new()
-	for preset_name: String in ["Default", "Game", "Tank", "Agile", "Fragile"]:
-		preset_option.add_item(preset_name)
+	for factory: String in _tuning_preset_factories():
+		var idx := preset_option.item_count
+		preset_option.add_item(factory.trim_prefix("create_").capitalize())
+		preset_option.set_item_metadata(idx, factory)
 	preset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preset_hbox.add_child(preset_option)
 	var apply_btn := Button.new()
@@ -150,21 +153,15 @@ func _on_bake(rig_builder: PhysicsRigBuilder) -> void:
 
 
 func _on_apply_preset(option: OptionButton) -> void:
+	if option.selected < 0:
+		return
 	var preset_name: String = option.get_item_text(option.selected)
-	var new_tuning: RagdollTuning
-	match preset_name:
-		"Default":
-			new_tuning = RagdollTuning.create_default()
-		"Game":
-			new_tuning = RagdollTuning.create_game_default()
-		"Tank":
-			new_tuning = RagdollTuning.create_tank()
-		"Agile":
-			new_tuning = RagdollTuning.create_agile()
-		"Fragile":
-			new_tuning = RagdollTuning.create_fragile()
-		_:
-			new_tuning = RagdollTuning.create_default()
+	var factory: String = option.get_item_metadata(option.selected)
+	# Static factories are dispatched by name through the Script object
+	# (GDScript resolves static functions in Script.call); the analyzer only
+	# rejects the direct `RagdollTuning.call(...)` spelling.
+	var tuning_script: Script = RagdollTuning
+	var new_tuning: RagdollTuning = tuning_script.call(factory)
 
 	if _editor_plugin:
 		var undo := _editor_plugin.get_undo_redo()
@@ -214,12 +211,36 @@ func _add_check(label_text: String, passed: bool) -> void:
 	add_child(hbox)
 
 
-func _check_node_path(kc: KickbackCharacter, property: String, _expected_type: String) -> bool:
+## True when [param property] on [param kc] resolves to a node that is (or
+## inherits) the engine class [param expected_type] — a path that resolves to
+## the wrong kind of node (a MeshInstance3D where the Skeleton3D should be) is
+## a setup error, not a pass.
+func _check_node_path(kc: KickbackCharacter, property: String, expected_type: String) -> bool:
 	var path: NodePath = kc.get(property)
 	if path.is_empty():
 		return false
 	var node := kc.get_node_or_null(path)
-	return node != null
+	return node != null and node.is_class(expected_type)
+
+
+## Names of the zero-argument static [code]create_*[/code] factories on
+## RagdollTuning (declaration order, [code]create_default[/code] first) — the
+## preset list is derived from what exists rather than maintained by hand.
+static func _tuning_preset_factories() -> PackedStringArray:
+	var names := PackedStringArray()
+	var script: Script = RagdollTuning
+	for method: Dictionary in script.get_script_method_list():
+		var method_name: String = method["name"]
+		var flags: int = method["flags"]
+		var is_static := (flags & METHOD_FLAG_STATIC) != 0
+		var no_args := (method["args"] as Array).is_empty()
+		if method_name.begins_with("create_") and is_static and no_args:
+			names.append(method_name)
+	var default_idx := names.find("create_default")
+	if default_idx > 0:
+		names.remove_at(default_idx)
+		names.insert(0, "create_default")
+	return names
 
 
 func _check_skeleton_callback_mode() -> bool:

@@ -15,8 +15,13 @@ var _character_root: Node3D
 var _skeleton: Skeleton3D
 var _world_3d: World3D
 
-var _upper_leg_len: float = 0.0
-var _lower_leg_len: float = 0.0
+# Segment lengths measured PER SIDE from the rest pose. Real skeletons (retargeted
+# mocap, asymmetric characters) are not guaranteed symmetric, and a right leg solved
+# with the left leg's lengths lands its knee off the chain.
+var _upper_leg_len_l: float = 0.0
+var _lower_leg_len_l: float = 0.0
+var _upper_leg_len_r: float = 0.0
+var _lower_leg_len_r: float = 0.0
 var _bone_idx: Dictionary = {}  # rig_name → skeleton bone index
 var _hips_idx: int = -1
 
@@ -69,8 +74,11 @@ var _step_duration: float = 0.25
 #                  reuse because the controller's solve and the spring's read of it
 #                  never interleave within a physics frame — each node's
 #                  _physics_process runs to completion in turn, so the spring never
-#                  observes a half-cleared buffer (and a same-frame solve fully
-#                  rebuilds it before the spring reads).
+#                  observes a half-cleared buffer. The overrides are consumed THIS
+#                  tick because the controller runs before the resolver — see
+#                  ActiveRagdollController.process_physics_priority, which orders
+#                  the controller's _physics_process ahead of SpringResolver's. Without
+#                  that ordering the resolver would read the previous tick's solve.
 var _anim_cache: Dictionary = {}
 var _overrides_buf: Dictionary = {}
 
@@ -111,14 +119,14 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 	if _hips_idx < 0:
 		return false
 
-	# Compute bone lengths from rest poses (use left leg — symmetric skeleton)
-	var ul := _skeleton.get_bone_global_rest(_bone_idx[_upper_l])
-	var ll := _skeleton.get_bone_global_rest(_bone_idx[_lower_l])
-	var fl := _skeleton.get_bone_global_rest(_bone_idx[_foot_l])
-	_upper_leg_len = ul.origin.distance_to(ll.origin)
-	_lower_leg_len = ll.origin.distance_to(fl.origin)
+	# Segment lengths from the rest pose, measured on each leg separately.
+	_upper_leg_len_l = _rest_length(_upper_l, _lower_l)
+	_lower_leg_len_l = _rest_length(_lower_l, _foot_l)
+	_upper_leg_len_r = _rest_length(_upper_r, _lower_r)
+	_lower_leg_len_r = _rest_length(_lower_r, _foot_r)
 
-	if _upper_leg_len < 0.01 or _lower_leg_len < 0.01:
+	if _upper_leg_len_l < 0.01 or _lower_leg_len_l < 0.01 \
+			or _upper_leg_len_r < 0.01 or _lower_leg_len_r < 0.01:
 		return false
 
 	# Cache foot body refs for collision management
@@ -134,6 +142,13 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 	return true
 
 
+## Rest-pose distance between two rig bones' origins (a segment length).
+func _rest_length(from_rig: String, to_rig: String) -> float:
+	var a := _skeleton.get_bone_global_rest(_bone_idx[from_rig])
+	var b := _skeleton.get_bone_global_rest(_bone_idx[to_rig])
+	return a.origin.distance_to(b.origin)
+
+
 func is_initialized() -> bool:
 	return _initialized
 
@@ -145,7 +160,12 @@ func is_active() -> bool:
 # ── NORMAL state: full IK solve ────────────────────────────────────────────
 
 func process(delta: float) -> void:
-	if not _initialized or not _tuning.foot_ik_enabled:
+	if not _initialized:
+		return
+	if not _tuning.foot_ik_enabled:
+		# Runtime toggle-off: drop any IK influence and hand the feet their collision
+		# masks back — otherwise a foot masked to 0 by an earlier solve stays that way.
+		reset()
 		return
 	_disable_foot_collision()
 	_solve_ik(delta, false)
@@ -165,7 +185,10 @@ func begin_stagger() -> void:
 
 
 func process_stagger(delta: float) -> void:
-	if not _initialized or not _tuning.foot_ik_enabled:
+	if not _initialized:
+		return
+	if not _tuning.foot_ik_enabled:
+		reset()  # see process(): a runtime toggle-off must restore the foot masks
 		return
 	if not _stagger_pinning:
 		_blend_out(delta)
@@ -373,7 +396,8 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	# Solve left leg (use pinned XZ for foot target)
 	if _ik_weight_l > 0.01:
 		var ft := Vector3(foot_xz_l.x, gpos_l.y + _tuning.foot_ik_ankle_height + _step_lift_l, foot_xz_l.y)
-		var ik := _solve_two_bone_ik(upper_l, lower_l, foot_l, ft, gnorm_l, ps)
+		var ik := _solve_two_bone_ik(_upper_leg_len_l, _lower_leg_len_l,
+			upper_l, lower_l, foot_l, ft, gnorm_l, ps)
 		if not ik.is_empty():
 			_blend_leg(overrides, _upper_l, _lower_l, _foot_l,
 				upper_l, lower_l, foot_l, ik, _ik_weight_l, ps)
@@ -381,7 +405,8 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	# Solve right leg
 	if _ik_weight_r > 0.01:
 		var ft := Vector3(foot_xz_r.x, gpos_r.y + _tuning.foot_ik_ankle_height + _step_lift_r, foot_xz_r.y)
-		var ik := _solve_two_bone_ik(upper_r, lower_r, foot_r, ft, gnorm_r, ps)
+		var ik := _solve_two_bone_ik(_upper_leg_len_r, _lower_leg_len_r,
+			upper_r, lower_r, foot_r, ft, gnorm_r, ps)
 		if not ik.is_empty():
 			_blend_leg(overrides, _upper_r, _lower_r, _foot_r,
 				upper_r, lower_r, foot_r, ik, _ik_weight_r, ps)
@@ -410,22 +435,36 @@ func _anim_global(bone_idx: int, sg: Transform3D) -> Transform3D:
 ## (positions by law of cosines, orientations as a swing of each segment's animation
 ## basis — see TwoBoneIK for why). This wrapper adds the leg-specific bits: the
 ## pelvis shift on the position chain and the foot's slope correction.
+## [param upper_len]/[param lower_len] are this leg's segment lengths.
 ## [param upper_anim]/[param lower_anim]/[param foot_anim] are world-space animation
 ## globals; [param ps] is the pelvis shift applied to the position chain.
-func _solve_two_bone_ik(upper_anim: Transform3D, lower_anim: Transform3D,
+## The foot is placed at the solver's effective end position ([code]ik["end"][/code],
+## the target clamped onto the leg's reach) so an over-stretched pin extends the leg
+## fully toward the pin instead of detaching the foot from the shin.
+func _solve_two_bone_ik(upper_len: float, lower_len: float,
+		upper_anim: Transform3D, lower_anim: Transform3D,
 		foot_anim: Transform3D, foot_target: Vector3, ground_normal: Vector3,
 		ps: Vector3) -> Dictionary:
-	var ik := TwoBoneIK.solve(_upper_leg_len, _lower_leg_len, upper_anim.origin + ps,
+	var ik := TwoBoneIK.solve(upper_len, lower_len, upper_anim.origin + ps,
 		foot_target, lower_anim.origin + ps, upper_anim, lower_anim, foot_anim,
-		-_character_root.global_basis.z)
+		_knee_fallback_axis())
 	if ik.is_empty():
 		return {}
 
-	# Foot rotation: apply slope delta to the animation pose.
-	# On flat ground (normal=UP) this is identity — no correction.
-	var slope_correction := Quaternion(Vector3.UP, ground_normal.normalized())
-	ik["foot"] = Transform3D(Basis(slope_correction) * foot_anim.basis, foot_target)
+	# Foot rotation: apply slope delta to the animation pose. On flat ground
+	# (normal=UP) this is identity — no correction. swing() is hardened against a
+	# zero or downward normal (the bare Quaternion(from, to) constructor yields NaN).
+	var slope_correction := TwoBoneIK.swing(Vector3.UP, ground_normal)
+	ik["foot"] = Transform3D(Basis(slope_correction) * foot_anim.basis, ik["end"])
 	return ik
+
+
+## Direction the knee bends toward when the animation leg is straight enough that
+## its own knee gives no bend plane: the character's forward, honouring the model's
+## authoring convention ([member RagdollTuning.character_forward_sign]) — a knee
+## folds forward whichever way the mesh was authored.
+func _knee_fallback_axis() -> Vector3:
+	return _character_root.global_basis.z * float(_tuning.character_forward_sign)
 
 
 # ── Leg blend helper ───────────────────────────────────────────────────────

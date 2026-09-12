@@ -16,8 +16,12 @@ var _tuning: RagdollTuning
 var _character_root: Node3D
 var _skeleton: Skeleton3D
 
-var _upper_arm_len: float = 0.0
-var _lower_arm_len: float = 0.0
+# Segment lengths measured PER SIDE from the rest pose (skeletons are not
+# guaranteed symmetric — see FootIKSolver).
+var _upper_arm_len_l: float = 0.0
+var _lower_arm_len_l: float = 0.0
+var _upper_arm_len_r: float = 0.0
+var _lower_arm_len_r: float = 0.0
 var _bone_idx: Dictionary = {}  # rig_name → skeleton bone index
 
 # Resolved role rig-names (from RagdollProfile semantic roles). Defaults match the
@@ -92,14 +96,14 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 			return false
 		_bone_idx[rig_name] = idx
 
-	# Compute arm segment lengths from rest poses (use left arm — symmetric skeleton).
-	var ua := _skeleton.get_bone_global_rest(_bone_idx[_upper_l])
-	var la := _skeleton.get_bone_global_rest(_bone_idx[_lower_l])
-	var ha := _skeleton.get_bone_global_rest(_bone_idx[_hand_l])
-	_upper_arm_len = ua.origin.distance_to(la.origin)
-	_lower_arm_len = la.origin.distance_to(ha.origin)
+	# Segment lengths from the rest pose, measured on each arm separately.
+	_upper_arm_len_l = _rest_length(_upper_l, _lower_l)
+	_lower_arm_len_l = _rest_length(_lower_l, _hand_l)
+	_upper_arm_len_r = _rest_length(_upper_r, _lower_r)
+	_lower_arm_len_r = _rest_length(_lower_r, _hand_r)
 
-	if _upper_arm_len < 0.01 or _lower_arm_len < 0.01:
+	if _upper_arm_len_l < 0.01 or _lower_arm_len_l < 0.01 \
+			or _upper_arm_len_r < 0.01 or _lower_arm_len_r < 0.01:
 		return false
 
 	# Cache the body map (physical anchoring) + hand refs (fall-reach contact pass).
@@ -111,6 +115,13 @@ func initialize(spring: SpringResolver, tuning: RagdollTuning, character_root: N
 	return true
 
 
+## Rest-pose distance between two rig bones' origins (a segment length).
+func _rest_length(from_rig: String, to_rig: String) -> float:
+	var a := _skeleton.get_bone_global_rest(_bone_idx[from_rig])
+	var b := _skeleton.get_bone_global_rest(_bone_idx[to_rig])
+	return a.origin.distance_to(b.origin)
+
+
 func is_initialized() -> bool:
 	return _initialized
 
@@ -120,10 +131,18 @@ func is_active() -> bool:
 	return _weight_l > 0.001 or _weight_r > 0.001
 
 
-## Full arm reach (upper + lower segment lengths). Lets the caller place a reach target
-## the arm can actually hit.
-func get_reach() -> float:
-	return _upper_arm_len + _lower_arm_len
+## Full arm reach (upper + lower segment lengths) of the arm on [param side] ("L"/"R").
+## Lets the caller place a reach target the arm can actually hit. With no side (or an
+## unknown one) returns the SHORTER arm's reach, so a target placed within it is
+## reachable by either arm.
+func get_reach(side: String = "") -> float:
+	var reach_l := _upper_arm_len_l + _lower_arm_len_l
+	var reach_r := _upper_arm_len_r + _lower_arm_len_r
+	if side == "L":
+		return reach_l
+	if side == "R":
+		return reach_r
+	return minf(reach_l, reach_r)
 
 
 ## Anchor the solve to the physical arm bodies (true) or the animation pose (false).
@@ -199,9 +218,11 @@ func _solve(delta: float) -> void:
 	_weight_r = lerpf(_weight_r, _target_weight_r, blend)
 
 	if _weight_l > 0.001:
-		_solve_arm(overrides, _upper_l, _lower_l, _hand_l, _reach_target_l, _weight_l, sg)
+		_solve_arm(overrides, _upper_arm_len_l, _lower_arm_len_l,
+			_upper_l, _lower_l, _hand_l, _reach_target_l, _weight_l, sg)
 	if _weight_r > 0.001:
-		_solve_arm(overrides, _upper_r, _lower_r, _hand_r, _reach_target_r, _weight_r, sg)
+		_solve_arm(overrides, _upper_arm_len_r, _lower_arm_len_r,
+			_upper_r, _lower_r, _hand_r, _reach_target_r, _weight_r, sg)
 
 	# Merge (not replace): the controller clears the override set once per frame and the
 	# foot solver contributes first; arm runs last so it wins on any shared bone.
@@ -210,11 +231,16 @@ func _solve(delta: float) -> void:
 
 ## Solves one arm toward [param target] and writes weight-blended overrides for its
 ## three bones. The hand keeps its source orientation (no slope concept for a hand) and
-## sits at the target; the shoulder/elbow swing to follow. The source pose is the arm's
-## animation pose, or its physical body pose when [member _physics_anchored] (so the
-## reach is computed from where the arm actually is, not a fallen-away animation pose).
-func _solve_arm(overrides: Dictionary, upper_name: String, lower_name: String,
-		hand_name: String, target: Vector3, weight: float, sg: Transform3D) -> void:
+## sits at the solver's effective end position — the target clamped onto the arm's
+## reach, so an out-of-reach goal (a wide windmill sweep, a distant brace point)
+## extends the arm fully toward it instead of dropping the override and popping the
+## arm back to its source pose. The shoulder/elbow swing to follow. The source pose is
+## the arm's animation pose, or its physical body pose when [member _physics_anchored]
+## (so the reach is computed from where the arm actually is, not a fallen-away
+## animation pose). [param upper_len]/[param lower_len] are this arm's segment lengths.
+func _solve_arm(overrides: Dictionary, upper_len: float, lower_len: float,
+		upper_name: String, lower_name: String, hand_name: String,
+		target: Vector3, weight: float, sg: Transform3D) -> void:
 	var upper_src: Transform3D
 	var lower_src: Transform3D
 	var hand_src: Transform3D
@@ -227,17 +253,27 @@ func _solve_arm(overrides: Dictionary, upper_name: String, lower_name: String,
 		lower_src = _anim_global(_bone_idx[lower_name], sg)
 		hand_src = _anim_global(_bone_idx[hand_name], sg)
 
-	var ik := TwoBoneIK.solve(_upper_arm_len, _lower_arm_len, upper_src.origin,
+	var ik := TwoBoneIK.solve(upper_len, lower_len, upper_src.origin,
 		target, lower_src.origin, upper_src, lower_src, hand_src,
-		-_character_root.global_basis.z)
+		_elbow_fallback_axis())
 	if ik.is_empty():
-		# Target unreachable — leave this arm at its source pose (no override).
+		# Degenerate input only (non-finite source / target) — leave this arm at its
+		# source pose. Reach is never the reason: the solver clamps to the arm's band.
 		return
 
-	var hand_ik := Transform3D(hand_src.basis, target)
+	var hand_ik := Transform3D(hand_src.basis, ik["end"])
 	overrides[upper_name] = upper_src.interpolate_with(ik["upper"], weight)
 	overrides[lower_name] = lower_src.interpolate_with(ik["lower"], weight)
 	overrides[hand_name] = hand_src.interpolate_with(hand_ik, weight)
+
+
+## Direction the elbow bends toward when the source arm is straight enough that its
+## own elbow gives no bend plane: the character's BACKWARD, honouring the model's
+## authoring convention ([member RagdollTuning.character_forward_sign]). An elbow
+## folds the forearm toward the front, so the elbow itself is displaced backward —
+## the mirror of the knee (see FootIKSolver._knee_fallback_axis).
+func _elbow_fallback_axis() -> Vector3:
+	return -_character_root.global_basis.z * float(_tuning.character_forward_sign)
 
 
 ## World-space physical transform of a rig body (the physical-anchor source).

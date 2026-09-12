@@ -7,7 +7,9 @@ extends Control
 
 var _detail_level: int = 0  # 0=off, 1=dots, 2=wireframe+state, 3=full
 var _active_targets: Array[Dictionary] = []   # [{spring, rig_builder, active_ctrl, kickback_char}]
-var _discovered: bool = false
+## Set whenever a KickbackCharacter enters or leaves the tree (and on enable);
+## the next _draw rescans instead of drawing stale targets.
+var _targets_dirty: bool = true
 
 const DOT_RADIUS_BASE := 5.0
 const DOT_RADIUS_MIN := 2.0
@@ -57,9 +59,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		visible = _detail_level > 0
 		# Only run _process (per-frame queue_redraw) while the overlay is visible.
 		set_process(_detail_level > 0)
-		if _detail_level > 0 and not _discovered:
-			_discover_targets()
+		_watch_tree(_detail_level > 0)
 		queue_redraw()
+
+
+## Follows characters entering / leaving the tree while the overlay is on (the
+## tree signals fire for every node, so the watch is only held while visible).
+## Enabling always forces a rescan — characters may have been freed while off.
+func _watch_tree(enable: bool) -> void:
+	var tree := get_tree()
+	if enable:
+		_targets_dirty = true
+		if not tree.node_added.is_connected(_on_tree_node_changed):
+			tree.node_added.connect(_on_tree_node_changed)
+			tree.node_removed.connect(_on_tree_node_changed)
+	elif tree.node_added.is_connected(_on_tree_node_changed):
+		tree.node_added.disconnect(_on_tree_node_changed)
+		tree.node_removed.disconnect(_on_tree_node_changed)
+
+
+func _on_tree_node_changed(node: Node) -> void:
+	if node is KickbackCharacter:
+		_targets_dirty = true
+
+
+func _exit_tree() -> void:
+	_watch_tree(false)
 
 
 func _discover_targets() -> void:
@@ -89,7 +114,25 @@ func _discover_targets() -> void:
 				"active_ctrl": active_ctrl,
 				"kickback_char": kc,
 			})
-	_discovered = true
+	_targets_dirty = false
+
+
+## True while every node a target draws from is still alive and in the tree.
+## A character being freed this frame (queue_free) is already excluded, so no
+## draw call ever touches a body mid-teardown.
+static func _is_target_valid(target: Dictionary) -> bool:
+	for key: String in ["spring", "rig_builder", "kickback_char", "active_ctrl"]:
+		# Untyped on purpose: a freed instance cannot be assigned to a typed
+		# Node variable (that assignment itself errors) — validate first.
+		var node = target[key]
+		if node == null:
+			continue  # active_ctrl is optional
+		if not is_instance_valid(node):
+			return false
+		var n := node as Node
+		if not n.is_inside_tree() or n.is_queued_for_deletion():
+			return false
+	return true
 
 
 func _process(_delta: float) -> void:
@@ -105,11 +148,16 @@ func _draw() -> void:
 	if not camera:
 		return
 
-	if _active_targets.is_empty():
+	if _targets_dirty:
 		_discover_targets()
 
 	var cam_pos := camera.global_position
 
+	# Prune anything freed since discovery (a character freed with the overlay
+	# open used to error here every frame), then draw what is left.
+	for i in range(_active_targets.size() - 1, -1, -1):
+		if not _is_target_valid(_active_targets[i]):
+			_active_targets.remove_at(i)
 	for target: Dictionary in _active_targets:
 		_draw_active_target(target, camera, cam_pos)
 

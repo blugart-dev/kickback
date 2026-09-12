@@ -152,8 +152,9 @@ func test_limits_contain_the_rest_pose_and_the_rig_reads_zero_at_rest():
 
 
 func test_no_bend_axis_is_pinched_and_hinges_are_wide():
+	var detected_skel: Skeleton3D = autofree(RigHarness.build_mixamo_skeleton())
 	for prof: RagdollProfile in [RagdollProfile.create_mixamo_default(),
-			SkeletonDetector.create_profile_from_skeleton(RigHarness.build_mixamo_skeleton(), _harness_mapping())]:
+			SkeletonDetector.create_profile_from_skeleton(detected_skel, _harness_mapping())]:
 		assert_eq(prof.joint_frame, RagdollProfile.JointFrame.ANATOMICAL, "profiles default to the ANATOMICAL frame")
 		for jd: JointDefinition in prof.joints:
 			for lim: Vector2 in [jd.limit_x, jd.limit_y, jd.limit_z]:
