@@ -9,6 +9,12 @@ and spring-based pose matching. Fully configurable and extensible.
 **Engine**: Godot 4.7+ with Jolt physics.
 **Language**: GDScript.
 
+## Start here
+
+Autonomous or fresh sessions: read `docs/PLAN.md` first (resume order, ground rules,
+current milestone, acceptance numbers, the loop command), then `docs/AUDIT_2026-09-12.md`
+§1/§8 and `docs/MUSCLE_SPIKE.md` "Decision".
+
 ## Project structure
 
 ```
@@ -26,6 +32,7 @@ kickback/
 │   ├── ROADMAP.md                   # Difficulty-weighted parity scorecard + milestones
 │   ├── VERSIONING.md                # What the version numbers mean
 │   ├── SELF_PRESERVATION.md         # 0.4.0 directed stumble + arm bracing (scripted root displacement — see audit)
+│   ├── PLAN.md                      # START HERE: execution plan, milestone checklists, acceptance numbers, loop command
 │   ├── AUDIT_2026-09-12.md          # Full audit: verdict, defects, docs drift, phase plan (do not edit)
 │   ├── MUSCLE_SPIKE.md              # Phase-2 muscle spike results + the 0.5.0 decision (velocity motors)
 │   └── SKELETON_MODIFIER_MIGRATION.md  # PhysicsRigSync → SkeletonModifier3D record
