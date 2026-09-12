@@ -70,6 +70,17 @@ const MASS_TABLE := {
 	"UpperLeg_R": 8.0, "LowerLeg_R": 4.0, "Foot_R": 2.0,
 }
 
+## Muscle torque limits (N·m) per rig body's parent joint, see
+## [member BoneDefinition.muscle_torque]. Anatomical, a little generous on the
+## limbs so a straight arm can be held and swung under gravity.
+const MUSCLE_TORQUE_TABLE := {
+	"Hips": 0.0, "Spine": 150.0, "Chest": 150.0, "Head": 30.0,
+	"UpperArm_L": 60.0, "LowerArm_L": 40.0, "Hand_L": 10.0,
+	"UpperArm_R": 60.0, "LowerArm_R": 40.0, "Hand_R": 10.0,
+	"UpperLeg_L": 200.0, "LowerLeg_L": 150.0, "Foot_L": 60.0,
+	"UpperLeg_R": 200.0, "LowerLeg_R": 150.0, "Foot_R": 60.0,
+}
+
 const SHAPE_TABLE := {
 	"Hips": "box", "Spine": "box", "Chest": "box", "Head": "sphere",
 	"UpperArm_L": "capsule", "LowerArm_L": "capsule", "Hand_L": "box",
@@ -389,6 +400,7 @@ static func create_profile_from_skeleton(
 		bone_def.skeleton_bone = skel_bone
 		bone_def.child_bone = child_bone
 		bone_def.mass = MASS_TABLE.get(slot, 5.0)
+		bone_def.muscle_torque = MUSCLE_TORQUE_TABLE.get(slot, 50.0)
 		bone_def.shape_type = SHAPE_TABLE.get(slot, "box")
 
 		# Estimate shape dimensions from bone length and skeleton geometry

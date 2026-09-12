@@ -8,6 +8,16 @@
 ## reduced on hit so physics wins temporarily, then recovers over time.
 ## Corrections are normalized to a 60 Hz reference, so the feel is frame-rate
 ## independent — bit-identical at 60 Hz, stable at 30/120.
+##
+## Two muscle modes ([enum RagdollTuning.MuscleMode]):
+## - VELOCITY_OVERWRITE (legacy, default): the block above, unchanged since 0.4.x.
+## - JOINT_MOTOR (0.5.0): the same command — error × gain + feed-forward — computed as a
+##   RELATIVE angular velocity in each joint's frame and handed to the joint's
+##   Generic6DOFJoint3D angular motor (Jolt, velocity mode) with the motor force limit =
+##   BoneDefinition.muscle_torque × strength ratio × RagdollTuning.muscle_strength_scale.
+##   Strength is a torque; gravity stays on; a hit produces a real, bounded reaction.
+##   The pelvis (no parent joint) keeps the velocity spring + a scaled position pin.
+##   See docs/MUSCLE_SPIKE.md for the measurements behind the design.
 @icon("res://addons/kickback/icons/spring_resolver.svg")
 class_name SpringResolver
 extends Node
@@ -38,6 +48,35 @@ var _default_recovery_rate: float = 0.3
 var _target_overrides: Dictionary = {}  # rig_name → Transform3D (temporary blend targets)
 var _pin_injury_modifiers: Dictionary = {}  # rig_name → float (0.0-1.0, reduces pin strength)
 var _tuning: RagdollTuning
+## JOINT_MOTOR mode (see the header). Mirrors _tuning.muscle_mode; re-read by
+## configure()/refresh_tuning().
+var _motor_mode: bool = false
+## True while the joints' motors are enabled and the bodies carry the motor-mode
+## properties (gravity on, muscle damping). Toggled by _apply_motor_mode().
+var _motors_enabled: bool = false
+## rig_name → {joint: Generic6DOFJoint3D, parent: String, fp: Basis, fc: Basis} for
+## every body that hangs off a joint: the joint's limit frame in the parent's / the
+## child's local basis (PhysicsRigBuilder.get_joints), so the relative rotation the
+## motor acts on is `(parent * fp)^-1 * (child * fc)`.
+var _motor_joints: Dictionary = {}
+## The root's world joint (JOINT_MOTOR mode): a limit-free Generic6DOFJoint3D between
+## the world and the root body whose angular motor drives the root's orientation
+## (RagdollTuning.muscle_root_torque). Created on entering motor mode, freed on leaving.
+var _root_world_joint: Generic6DOFJoint3D = null
+## Microseconds the last resolver tick took (legacy or motor path) — for the bench.
+var _last_tick_usec: int = 0
+## Godot's Generic6DOFJoint3D reports/measures the child's rotation about the joint
+## frame with the OPPOSITE sign to the right-hand rule (same mirror JointDefinition.apply_to
+## compensates for on the limits). Measured under Jolt 4.7.2 by tools/spike/motor_spike.gd:
+## a +1 rad/s motor target on each axis yields -1 rad/s of child-relative-to-parent
+## rotation about that joint-frame axis.
+const MOTOR_AXIS_SIGN := -1.0
+## Measured on the ybot idle (tools/bench/ybot_bench.gd, BENCH_DIAG=1): commanding the
+## motor entirely in the parent frame left every joint 2-4 deg short on the swing
+## axes, entirely in the child frame fixed the swing axes but tripled the twist (X)
+## error — Jolt solves the 6DOF angular motor on swing-twist axes, twist about the
+## parent frame's X and swing about the child frame's Y/Z. Single-axis harness tests
+## cannot tell the frames apart (the rotation axis is invariant under the rotation).
 var _max_angular_vel_sq: float = 400.0
 var _max_linear_vel_sq: float = 100.0
 var _strip_root_motion: bool = true
@@ -63,6 +102,7 @@ func configure(tuning: RagdollTuning) -> void:
 		_max_linear_vel_sq = _tuning.max_linear_velocity * _tuning.max_linear_velocity
 		_chain_consistency = _tuning.spring_chain_consistency
 		_feed_forward = _tuning.spring_feed_forward
+		_motor_mode = _tuning.muscle_mode == RagdollTuning.MuscleMode.JOINT_MOTOR
 
 
 ## Re-caches values that are stored at init time. Call when tuning changes at runtime.
@@ -74,6 +114,7 @@ func refresh_tuning() -> void:
 		_root_motion_bone = _tuning.root_motion_bone
 		_chain_consistency = _tuning.spring_chain_consistency
 		_feed_forward = _tuning.spring_feed_forward
+		_motor_mode = _tuning.muscle_mode == RagdollTuning.MuscleMode.JOINT_MOTOR
 		_resolve_root_motion_bone()
 
 
@@ -98,6 +139,7 @@ func _ensure_tuning() -> void:
 	_root_motion_bone = _tuning.root_motion_bone
 	_chain_consistency = _tuning.spring_chain_consistency
 	_feed_forward = _tuning.spring_feed_forward
+	_motor_mode = _tuning.muscle_mode == RagdollTuning.MuscleMode.JOINT_MOTOR
 
 
 func _init_bones() -> void:
@@ -115,6 +157,13 @@ func _init_bones() -> void:
 			"strength": base_str,
 			"prev_target": Transform3D.IDENTITY,
 			"has_prev_target": false,
+			# JOINT_MOTOR mode: this tick's world target (parents are resolved first,
+			# so a child's joint command can read it), the previous relative target
+			# (feed-forward), and the muscle torque from the profile.
+			"target_xform": Transform3D.IDENTITY,
+			"prev_rel_target": Basis.IDENTITY,
+			"has_prev_rel": false,
+			"torque": 50.0,
 		}
 	# Cache the rig-name list once. The key set is fixed after init (only the
 	# per-bone values mutate), and get_all_bone_names() is hit every physics
@@ -164,6 +213,22 @@ func _init_chain() -> void:
 		return depth[a] < depth[b] if depth[a] != depth[b] else a < b)
 	_order = PackedStringArray(names)
 
+	# Motor data: joint node + limit frames per jointed body, muscle torque per bone.
+	_motor_joints.clear()
+	for child_rig: String in _chain:
+		var j: Dictionary = joints[child_rig]
+		_motor_joints[child_rig] = {
+			"joint": j.joint,
+			"parent": j.parent,
+			"fp": (j.frame_parent as Transform3D).basis.orthonormalized(),
+			"fc": (j.frame_child as Transform3D).basis.orthonormalized(),
+		}
+	var profile := _rig_builder.get_profile()
+	if profile:
+		for bone_def: BoneDefinition in profile.bones:
+			if bone_def.rig_name in _bones:
+				_bones[bone_def.rig_name].torque = bone_def.muscle_torque
+
 
 ## Returns the Skeleton3D used for animation target poses.
 func get_skeleton() -> Skeleton3D:
@@ -186,7 +251,21 @@ func is_active() -> bool:
 func _physics_process(delta: float) -> void:
 	if _bones.is_empty() or not _skeleton:
 		return
+	var t0 := Time.get_ticks_usec()
+	_tick(delta)
+	_last_tick_usec = Time.get_ticks_usec() - t0
 
+
+func _tick(delta: float) -> void:
+	if _motor_mode:
+		if not _motors_enabled:
+			_apply_motor_mode(true)
+		_tick_joint_motors(delta)
+		return
+	elif _motors_enabled:
+		_apply_motor_mode(false)  # switched back to the legacy resolver at runtime
+
+	# ── VELOCITY_OVERWRITE (legacy) ──────────────────────────────────────────
 	# Cache animation bone globals once per frame
 	var skel_global := _skeleton.global_transform
 	var has_overrides := not _target_overrides.is_empty()
@@ -294,6 +373,289 @@ func _physics_process(delta: float) -> void:
 			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
 		if body.linear_velocity.length_squared() > _max_linear_vel_sq:
 			body.linear_velocity = body.linear_velocity.normalized() * _tuning.max_linear_velocity
+
+
+# ── JOINT_MOTOR muscle path (0.5.0) ─────────────────────────────────────────
+
+## Enables / disables the joint motors and applies the per-mode body properties.
+## Motor mode: gravity ON at the tuning's gravity_scale for every body (the muscles
+## hold the pose; the pelvis pin holds the character up), muscle damping. Leaving
+## motor mode zeroes the motor targets and disables the flags; the legacy path
+## re-applies its own gravity / damping formulas on its next tick.
+func _apply_motor_mode(enable: bool) -> void:
+	if enable:
+		_create_root_world_joint()
+	for child_rig: String in _motor_joints:
+		var joint: Generic6DOFJoint3D = _motor_joints[child_rig].joint
+		if not enable:
+			_set_motor(joint, Vector3.ZERO, 0.0)
+		joint.set_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_MOTOR, enable)
+		joint.set_flag_y(Generic6DOFJoint3D.FLAG_ENABLE_MOTOR, enable)
+		joint.set_flag_z(Generic6DOFJoint3D.FLAG_ENABLE_MOTOR, enable)
+	if not enable:
+		_free_root_world_joint()
+	for state: Dictionary in _bones.values():
+		state.has_prev_target = false
+		state.has_prev_rel = false
+		if enable:
+			var body: RigidBody3D = state.body
+			body.gravity_scale = _tuning.gravity_scale
+			body.angular_damp = _tuning.muscle_angular_damp
+			body.linear_damp = _tuning.muscle_linear_damp
+	_motors_enabled = enable
+
+
+## Attaches the root body to the world through a limit-free 6DOF joint (node_a empty
+## = the world under Jolt's default `joints/world_node`) and registers it in
+## _motor_joints with an empty parent, so the root is driven by the same joint-motor
+## code as every other body: frame A is the world (identity), frame C is the root's
+## basis at attachment, the command is the root's world orientation error.
+func _create_root_world_joint() -> void:
+	if _root_world_joint or _root_motion_bone.is_empty():
+		return
+	var root_rig := _root_motion_bone
+	if root_rig not in _bones or root_rig in _motor_joints:
+		return
+	var root_body: RigidBody3D = _bones[root_rig].body
+	var joint := Generic6DOFJoint3D.new()
+	joint.name = "%s_world_motor" % root_rig
+	_rig_builder.add_child(joint)
+	joint.global_transform = Transform3D(Basis.IDENTITY, root_body.global_position)
+	joint.node_b = joint.get_path_to(root_body)
+	for axis_flag in [Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT]:
+		joint.set_flag_x(axis_flag, false)
+		joint.set_flag_y(axis_flag, false)
+		joint.set_flag_z(axis_flag, false)
+	_root_world_joint = joint
+	_motor_joints[root_rig] = {
+		"joint": joint,
+		"parent": "",
+		"fp": Basis.IDENTITY,
+		"fc": root_body.global_basis.orthonormalized().inverse(),
+	}
+
+
+func _free_root_world_joint() -> void:
+	if not _root_world_joint:
+		return
+	_motor_joints.erase(_root_motion_bone)
+	_root_world_joint.queue_free()
+	_root_world_joint = null
+
+
+func _tick_joint_motors(delta: float) -> void:
+	var skel_global := _skeleton.global_transform
+	var has_overrides := not _target_overrides.is_empty()
+	var inv_dt := 1.0 / maxf(delta, 1e-6)
+	var gain: float = _tuning.muscle_gain
+	var w_max: float = _tuning.muscle_max_angular_velocity
+	var torque_scale: float = _tuning.muscle_strength_scale
+
+	# Parent-first: a child's joint command reads its parent's target as resolved
+	# THIS tick (state.target_xform).
+	for rig_name: String in _order:
+		var state: Dictionary = _bones[rig_name]
+		var body: RigidBody3D = state.body
+
+		if _active:
+			state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
+		var strength: float = state.strength
+		var ratio := _strength_ratio(state)
+
+		var target_xform: Transform3D
+		if has_overrides and rig_name in _target_overrides:
+			target_xform = _target_overrides[rig_name]
+		else:
+			target_xform = skel_global * get_animation_bone_global(state.bone_idx)
+		state.target_xform = target_xform
+
+		if rig_name in _motor_joints:
+			_drive_joint_motor(rig_name, state, body, target_xform, strength, ratio, gain, w_max, torque_scale, inv_dt)
+			if rig_name not in _chain:
+				# The root: orientation by the world-joint motor above, position by
+				# the (scaled) pin until the balance layer exists.
+				_drive_root_pin(rig_name, state, body, target_xform, strength, ratio, delta)
+		else:
+			_drive_root_body(rig_name, state, body, target_xform, strength, ratio, delta)
+
+		if body.angular_velocity.length_squared() > _max_angular_vel_sq:
+			body.angular_velocity = body.angular_velocity.normalized() * _tuning.max_angular_velocity
+		if body.linear_velocity.length_squared() > _max_linear_vel_sq:
+			body.linear_velocity = body.linear_velocity.normalized() * _tuning.max_linear_velocity
+
+
+## One jointed body: relative-rotation error between the current and the target
+## parent→child rotation, in the parent-side joint frame A, times gain / tick, plus
+## the target's own relative angular velocity (feed-forward), clamped, mirrored into
+## Godot's motor convention; force limit = muscle torque × strength ratio × scale.
+## A limp bone (strength ~0) gets a zero force limit — the motor lets go entirely.
+func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, target_xform: Transform3D,
+		strength: float, ratio: float, gain: float, w_max: float, torque_scale: float, inv_dt: float) -> void:
+	var j: Dictionary = _motor_joints[rig_name]
+	var joint: Generic6DOFJoint3D = j.joint
+	if strength < 0.001:
+		state.has_prev_rel = false
+		_set_motor(joint, Vector3.ZERO, 0.0)
+		return
+	var parent_rig: String = j.parent
+	var fp: Basis = j.fp
+	var fc: Basis = j.fc
+	var a: Basis = fp
+	var pa: Basis = fp
+	if not parent_rig.is_empty():
+		var parent_state: Dictionary = _bones[parent_rig]
+		var parent_body: RigidBody3D = parent_state.body
+		a = parent_body.global_basis.orthonormalized() * fp
+		pa = (parent_state.target_xform as Transform3D).basis.orthonormalized() * fp
+	var b: Basis = body.global_basis.orthonormalized() * fc
+	var ca: Basis = target_xform.basis.orthonormalized() * fc
+	var r_rel: Basis = a.inverse() * b
+	var r_tgt: Basis = pa.inverse() * ca
+
+	var err := _axis_angle(r_tgt * r_rel.inverse())
+	var angle := err.length()
+	if angle > 0.0:
+		# Same settle deadband as the legacy spring (no buzz on an irreducible error).
+		err *= maxf(angle - _tuning.spring_angular_settle_deadband, 0.0) / angle
+	var ff := Vector3.ZERO
+	if _feed_forward > 0.0 and state.has_prev_rel:
+		ff = _axis_angle(r_tgt * (state.prev_rel_target as Basis).inverse()) * inv_dt * _feed_forward
+	state.prev_rel_target = r_tgt
+	state.has_prev_rel = true
+
+	var w: Vector3 = err * (gain * inv_dt) + ff
+	if w.length_squared() > w_max * w_max:
+		w = w.normalized() * w_max
+	var torque: float = _tuning.muscle_root_torque if parent_rig.is_empty() else float(state.torque)
+	var limit: float = torque * torque_scale * ratio
+	# Jolt's 6DOF angular motor is solved on its swing-twist axes: the twist axis is
+	# the X of the PARENT's constraint frame (A), the two swing axes are the Y / Z of
+	# the CHILD's (B = A * r_rel). Hand each component in its own frame.
+	var w_b: Vector3 = r_rel.inverse() * w
+	var w_cmd := Vector3(w.x, w_b.y, w_b.z)
+	_set_motor(joint, w_cmd * MOTOR_AXIS_SIGN, limit)
+
+
+## The root's position pin in JOINT_MOTOR mode (orientation comes from its world
+## joint motor): the legacy linear spring scaled by muscle_root_pin.
+func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, target_xform: Transform3D,
+		strength: float, ratio: float, delta: float) -> void:
+	if strength < 0.001:
+		state.has_prev_target = false
+		return
+	var ff_lin := Vector3.ZERO
+	if _feed_forward > 0.0 and state.has_prev_target:
+		ff_lin = (target_xform.origin - (state.prev_target as Transform3D).origin) * _feed_forward
+	state.prev_target = target_xform
+	state.has_prev_target = true
+	var pin := _get_pin_strength(rig_name) * ratio * _tuning.muscle_root_pin
+	var pin_injury: float = _pin_injury_modifiers.get(rig_name, 0.0)
+	if pin_injury > 0.0:
+		pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
+	var pos_error := target_xform.origin - body.global_position
+	var dist := pos_error.length()
+	var lin_target := Vector3.ZERO
+	if dist > 0.0001:
+		lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
+	lin_target += ff_lin / maxf(delta, 1e-6)
+	body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
+
+
+## The root (and any body without a registered joint): the legacy velocity spring
+## for orientation, and the position pin scaled by muscle_root_pin — what holds the
+## standing character up until the balance layer exists (docs/PLAN.md 0.6.0).
+func _drive_root_body(rig_name: String, state: Dictionary, body: RigidBody3D, target_xform: Transform3D,
+		strength: float, ratio: float, delta: float) -> void:
+	if strength < 0.001:
+		state.has_prev_target = false
+		return
+	var current_xform := body.global_transform
+	var ff_rot := Vector3.ZERO
+	var ff_lin := Vector3.ZERO
+	if _feed_forward > 0.0 and state.has_prev_target:
+		var prev: Transform3D = state.prev_target
+		ff_rot = _axis_angle(target_xform.basis.orthonormalized() * prev.basis.orthonormalized().inverse()) * _feed_forward
+		ff_lin = (target_xform.origin - prev.origin) * _feed_forward
+	state.prev_target = target_xform
+	state.has_prev_target = true
+
+	_apply_angular_spring(body, target_xform, current_xform, strength, delta, ff_rot)
+
+	var pin := _get_pin_strength(rig_name) * ratio * _tuning.muscle_root_pin
+	var pin_injury: float = _pin_injury_modifiers.get(rig_name, 0.0)
+	if pin_injury > 0.0:
+		pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
+	var pos_error := target_xform.origin - current_xform.origin
+	var dist := pos_error.length()
+	var lin_target := Vector3.ZERO
+	if dist > 0.0001:
+		lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
+	lin_target += ff_lin / maxf(delta, 1e-6)
+	body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
+
+
+static func _set_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float) -> void:
+	joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY, target.x)
+	joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY, target.y)
+	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY, target.z)
+	joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
+	joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
+	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
+
+
+## Rotation vector (axis × angle, radians) of [param r]; zero for a near-identity basis.
+static func _axis_angle(r: Basis) -> Vector3:
+	var det := r.determinant()
+	if det < 0.001 and det > -0.001:
+		return Vector3.ZERO
+	var q := r.get_rotation_quaternion()
+	if q.w < 0.0:
+		q = -q
+	var angle := 2.0 * acos(clampf(q.w, -1.0, 1.0))
+	var axis := Vector3(q.x, q.y, q.z)
+	if axis.length_squared() < 1e-10 or angle < 1e-5:
+		return Vector3.ZERO
+	return axis.normalized() * angle
+
+
+## True when the resolver drives the rig through the joint motors (JOINT_MOTOR).
+func is_motor_mode() -> bool:
+	return _motor_mode
+
+
+## The muscle torque limit (N·m) of [param rig_name]'s parent joint before strength
+## scaling: the profile's BoneDefinition.muscle_torque, or muscle_root_torque for the
+## root; 0 for unknown bones.
+func get_muscle_torque(rig_name: String) -> float:
+	if rig_name not in _bones:
+		return 0.0
+	if rig_name == _root_motion_bone and rig_name not in _chain:
+		return _tuning.muscle_root_torque
+	if rig_name in _motor_joints:
+		return float(_bones[rig_name].torque)
+	return 0.0
+
+
+## Microseconds the last resolver tick took (either path). For benches / the HUD.
+func get_last_tick_usec() -> int:
+	return _last_tick_usec
+
+
+## The motor command last written for [param rig_name]'s parent joint (JOINT_MOTOR
+## mode): {target: Vector3 (Godot's motor convention, i.e. already mirrored),
+## limit: float (N·m)}. Empty for the root / unknown bones. For tests and the HUD.
+func get_motor_command(rig_name: String) -> Dictionary:
+	if rig_name not in _motor_joints:
+		return {}
+	var joint: Generic6DOFJoint3D = _motor_joints[rig_name].joint
+	return {
+		"target": Vector3(
+			joint.get_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY),
+			joint.get_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY),
+			joint.get_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_TARGET_VELOCITY)),
+		"limit": joint.get_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT),
+		"enabled": joint.get_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_MOTOR),
+	}
 
 
 func _strength_ratio(state: Dictionary) -> float:

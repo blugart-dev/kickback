@@ -11,6 +11,13 @@ extends Resource
 @export var child_bone: String = ""
 ## Mass of the RigidBody3D for this bone.
 @export var mass: float = 5.0
+## Peak torque (N·m) the muscle driving this bone's PARENT joint can exert when
+## the bone is at full spring strength — the joint motor's force limit in
+## [enum RagdollTuning.MuscleMode] JOINT_MOTOR (scaled by the bone's current
+## strength ratio and [member RagdollTuning.muscle_strength_scale]). Anatomical
+## ballpark: hip 200, knee 150, spine 150, shoulder 60, elbow 40, neck 30, wrist
+## 10. Unused by the legacy velocity resolver. Ignored on the root bone.
+@export_range(0.0, 1000.0) var muscle_torque: float = 50.0
 
 @export_group("Collision Shape")
 ## Collision shape type: "box", "capsule", or "sphere".

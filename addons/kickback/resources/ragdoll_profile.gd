@@ -213,6 +213,7 @@ static func create_mixamo_default() -> RagdollProfile:
 		bone_def.skeleton_bone = entry[1]
 		bone_def.child_bone = entry[2]
 		bone_def.mass = entry[3]
+		bone_def.muscle_torque = SkeletonDetector.MUSCLE_TORQUE_TABLE.get(entry[0], 50.0)
 		bone_def.shape_type = entry[4]
 		var dims: Vector3 = entry[5]
 		match entry[4]:

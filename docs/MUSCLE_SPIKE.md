@@ -111,3 +111,20 @@ parent's motion into the child's target like the resolver's chain-consistency te
 30 Hz stability (kp scaling alone was not enough; verify with `_fr_weight`-style
 normalisation), and the swing-twist wrap after violent hits (velocity mode recovered in
 every 60/120 Hz run; verify on the ybot with joint limits at their authored values).
+
+## Addendum — what the implementation found (0.5.0, 2026-09-13)
+
+- **The spike commanded the motor in the wrong frame for two of its three axes.** Jolt
+  solves the 6DOF angular motor on swing-twist axes: twist about the *parent* frame's X,
+  swing about the *child* frame's Y/Z. The spike (and the first implementation) used the
+  parent frame for all three; on the harness T-pose that is invisible (single-axis
+  rotations), on the ybot idle it left every joint 2–4° short. With the split, the ybot
+  idle went from 5.4° to 0.96° mean. Part of the spike's "TRACK deficit" was this, not
+  the torque budget.
+- **The root must be a motor too.** A velocity-overwritten pelvis under bounded child
+  motors sat 8° off on the real idle (the reaction torques of the spine and hip motors
+  rock it); a limit-free world joint with a 400 N·m motor fixed it (pelvis 0.6°).
+- **Gain 0.10 per tick, not 0.15–0.25.** Once the pelvis is a bounded motor the arm chain
+  rings at 0.15 on a 60° elbow step; 0.10 settles without ringing and still tracks a
+  ±40° 1.5 Hz swing within 5°.
+- Final ybot numbers and the 30 Hz caveat are in REFERENCE.md "Muscle layer".

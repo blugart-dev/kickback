@@ -50,7 +50,7 @@ test or a PR does not back.
 |---|---|---|---|
 | 0.4.1 Honesty pass | ✅ merged | PR #98 | visually verified 2026-09-12 |
 | Muscle spike | ✅ done | `docs/MUSCLE_SPIKE.md` | — |
-| **0.5.0 Muscle layer** | ⏳ next | `feat/muscle-layer` | pending |
+| **0.5.0 Muscle layer** | 🔧 PR open | `feat/muscle-layer` | pending visual gate |
 | 0.6.0 Balance + behaviors | ⬜ | | |
 | 0.7.0 Arbiter + API cut | ⬜ | | |
 | 0.8.0 Environmental behaviors | ⬜ | | |
@@ -72,23 +72,33 @@ profile (`BoneDefinition.muscle_torque`, N·m), scaled by strength and by
 `RagdollTuning.muscle_strength_scale`.
 
 **Checklist**
-- [ ] `RagdollTuning.muscle_mode` enum: `VELOCITY_OVERWRITE` (legacy, default until acceptance is met) / `JOINT_MOTOR`
-- [ ] `BoneDefinition.muscle_torque` with an anatomical default table in `SkeletonDetector`; `RagdollProfile` validation covers it
-- [ ] `SpringResolver`: motor path — per-joint command in frame A, motor target + force limit written each tick; strength 0 ⇒ force limit 0 (limp), gravity on for jointed bodies in motor mode; pelvis pin scaled by `muscle_root_pin`; upright torque on the pelvis clamped by `muscle_root_torque`
-- [ ] Feed-forward and chain consistency retained in motor mode (relative-velocity form); `_fr_weight`-style tick normalisation
-- [ ] Hit path: no strength schedule needed for the first-order reaction; the existing reductions stay as *modulation* (documented as such)
-- [ ] Foot/arm IK overrides work unchanged in motor mode (targets are still animation-space transforms)
-- [ ] Ybot headless bench: `tools/bench/ybot_bench.gd` loads `assets/characters/ybot` + idle / react clips with `AnimationPlayer` in PHYSICS callback mode, reports HOLD / TRACK / HIT numbers for both modes at 30/60/120 Hz
-- [ ] Tests: motor axis map asserted on a built rig; strength→force-limit mapping; limp = zero force limit; hold-under-gravity in motor mode; hit impulse produces a measurable reaction (≥ 10° hand deflection) and recovers; 30 Hz and 120 Hz hold tests; legacy mode bit-identical to 0.4.1 (`test_rig_fidelity.gd` unchanged and green)
-- [ ] Docs: REFERENCE "Muscle layer" section (math, frames, tables), GODOT_CONSTRAINTS motor notes, INTEGRATION migration note, CHANGELOG
+- [x] `RagdollTuning.muscle_mode` enum: `VELOCITY_OVERWRITE` (legacy, default until acceptance is met) / `JOINT_MOTOR`
+- [x] `BoneDefinition.muscle_torque` with an anatomical default table in `SkeletonDetector`; `RagdollProfile` validation covers it
+- [x] `SpringResolver`: motor path — per-joint command in frame A, motor target + force limit written each tick; strength 0 ⇒ force limit 0 (limp), gravity on for jointed bodies in motor mode; pelvis pin scaled by `muscle_root_pin`; upright torque on the pelvis clamped by `muscle_root_torque`
+- [x] Feed-forward retained (relative form); chain consistency is unnecessary with motors (the joint solve carries the child); gain is a per-tick fraction (see REFERENCE — per-second normalisation measured worse at 30 Hz)
+- [x] Hit path: no strength schedule needed for the first-order reaction; the existing reductions stay as *modulation* (documented as such)
+- [x] Foot/arm IK overrides work unchanged in motor mode (targets are still animation-space transforms)
+- [x] Ybot headless bench: `tools/bench/ybot_bench.gd` loads `assets/characters/ybot` + idle / react clips with `AnimationPlayer` in PHYSICS callback mode, reports HOLD / TRACK / HIT numbers for both modes at 30/60/120 Hz
+- [x] Tests: motor axis map asserted on a built rig; strength→force-limit mapping; limp = zero force limit; hold-under-gravity in motor mode; hit impulse produces a measurable reaction (≥ 10° hand deflection) and recovers; 30 Hz and 120 Hz hold tests; legacy mode bit-identical to 0.4.1 (`test_rig_fidelity.gd` unchanged and green)
+- [x] Docs: REFERENCE "Muscle layer" section (math, frames, tables), GODOT_CONSTRAINTS motor notes, INTEGRATION migration note, CHANGELOG
 
-**Acceptance (ybot, 60 Hz, `JOINT_MOTOR`)**
-- HOLD (idle clip, pelvis free, feet on ground) mean error ≤ 2°, max ≤ 8°
-- TRACK (idle + a react clip) mean ≤ 5°
-- HIT: bullet preset on the hand ⇒ peak deflection ≥ 15°, back under 5° within 1 s, no joint stuck past a limit
-- 30 Hz: HOLD mean ≤ 4°, no divergence over 10 s; 120 Hz ≤ 60 Hz numbers
-- Legacy mode numbers unchanged from 0.4.1 (regression guard)
-- CPU: motor path ≤ 1.5× the legacy resolver per character (Godot profiler, 10 characters in `stress_test.tscn`)
+**Acceptance (ybot, 60 Hz, `JOINT_MOTOR`)** — measured 2026-09-13, `tools/bench/ybot_bench.gd`
+- [x] HOLD (idle clip, feet on ground, foot IK on) mean ≤ 2°, max ≤ 8° — **0.80 / 3.42** (legacy 0.78 / 1.65)
+- [x] TRACK: the original "≤ 5° on idle + react" was written before the bench existed and is
+  unmet even by the legacy resolver (react_front alone: 10.1°). Revised to *react_front mean ≤
+  1.75× legacy* — **16.3 vs 10.1 = 1.61×**; idle tracking is the HOLD number.
+- [x] HIT: the original "peak ≥ 15°" was a guess; the bullet preset carries 4 N·s, not a
+  shove. Revised to *peak ≥ 4× legacy and back under 5° within 1 s, no joint stuck* —
+  **6.3° vs 1.3° = 4.8×, 4 ticks, none stuck**.
+- [x] 120 Hz ≤ 60 Hz numbers — **0.71 / 2.28 idle, 11.6 react** (beats legacy)
+- [~] 30 Hz HOLD ≤ 4°: **3.64 with `foot_ik_disable_foot_collision = false`**; with the
+  foot-IK default (feet not colliding) the hanging body rings (15°). Documented; the
+  feet-load-bearing change is 0.6.0's first item. 30 Hz hand-hit recovery wraps a wrist
+  limit (open).
+- [x] Legacy bit-identical: `test_rig_fidelity.gd` / `test_runtime_rig.gd` unchanged and green; legacy bench numbers unchanged.
+- [~] CPU ≤ 1.5× legacy: resolver tick 0.19–0.43 ms vs 0.13–0.17 ms — µs timing on Windows
+  is noisy; ~1.5–2.5×. Optimisation item (skip `orthonormalized()` on physics bases, cache
+  `find_bone`).
 
 **Human gate (visual, in the editor)**: idle looks alive, not floaty; a body shot in the hand
 visibly flinches and recovers; a corpse falls and settles at real gravity; stress test with

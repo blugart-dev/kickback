@@ -102,6 +102,79 @@ frames" below):
   the rig is built — before, a physics-mode player hasn't ticked and the joints would be
   centred on the rest pose).
 
+## Muscle layer — JOINT_MOTOR mode (0.5.0)
+
+`RagdollTuning.muscle_mode = MuscleMode.JOINT_MOTOR` swaps the velocity overwrite above
+for **torque-bounded joint motors** while keeping the same command. The legacy mode is
+untouched (bit-identical, still the default until the visual gate passes).
+
+**Per jointed body, every physics tick** (`SpringResolver._drive_joint_motor`):
+
+```
+A   = parent.basis * frame_parent          # the joint limit frame on the parent (world)
+B   = child.basis  * frame_child           # the same frame carried by the child
+PA  = parent_target.basis * frame_parent   # animation (or IK override) targets
+CA  = child_target.basis  * frame_child
+R_rel = A^-1 * B                           # current  parent→child rotation
+R_tgt = PA^-1 * CA                         # target   parent→child rotation
+err   = axis_angle(R_tgt * R_rel^-1)       # rotation vector, frame A, settle deadband applied
+ff    = axis_angle(R_tgt * R_tgt_prev^-1) / dt * spring_feed_forward
+w     = clamp(err * muscle_gain / dt + ff, muscle_max_angular_velocity)
+motor.target = -( w.x, (R_rel^-1 * w).y, (R_rel^-1 * w).z )   # see "frames" below
+motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * (strength / base_strength)
+```
+
+- **Strength is a torque.** `strength / base_strength` scales the motor force limit;
+  a limp bone (strength ≈ 0) gets a zero limit and the motor lets go. Hit reductions,
+  fatigue, injury and the recovery ramp all still work through strength, now as torque
+  modulation. `strength_map` / `default_spring_strength` no longer set stiffness in this
+  mode — the ratio is what matters.
+- **Gravity stays on** for every jointed body (`gravity_scale`, not scaled by strength);
+  damping is `muscle_angular_damp` / `muscle_linear_damp`.
+- **Frames.** Two engine facts measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`,
+  `tools/bench/ybot_bench.gd BENCH_DIAG=1`): the motor target velocity is **mirrored**
+  (`MOTOR_AXIS_SIGN = -1`, the same convention `JointDefinition.apply_to` compensates on
+  the limits), and the 6DOF angular motor is solved on **swing-twist axes** — the twist
+  axis is the **parent** frame's X, the two swing axes are the **child** frame's Y and Z.
+  Commanding everything in the parent frame left every joint of a real idle 2–4° short
+  on the swing axes; everything in the child frame tripled the twist error.
+- **The root** has no parent joint: entering motor mode attaches it to the world with a
+  limit-free `Generic6DOFJoint3D` (`<Root>_world_motor`, node_a empty = world) whose
+  motor drives the pelvis' world orientation with `muscle_root_torque`; its position
+  keeps the legacy pin scaled by `muscle_root_pin` until the balance layer exists.
+- **Gain is a per-tick fraction** (`muscle_gain`, default 0.10): the stability of a
+  velocity motor under an explicit position loop is set by gain × tick. Measured at 60 Hz
+  on the harness: 0.10 holds within 0.5° and settles a 60° elbow step without ringing;
+  0.15 rings once the pelvis is a bounded motor; 0.20+ limit-cycles on the light arm.
+
+**Torque table** (`SkeletonDetector.MUSCLE_TORQUE_TABLE`, N·m, on the child body of each
+joint): Spine 150, Chest 150, Head 30, UpperArm 60, LowerArm 40, Hand 10, UpperLeg 200,
+LowerLeg 150, Foot 60; root `muscle_root_torque` 400. Physically honest by construction:
+a 3 N·m shoulder cannot hold a horizontal arm (test), 60 N·m can.
+
+**Ybot bench** (`tools/bench/ybot_bench.gd`, idle / react_front / bullet on the hand,
+foot IK on, 2026-09-13):
+
+| Mode | Hz | IDLE mean / max | REACT mean | HIT peak / recover | resolver ms/tick |
+|---|---:|---|---:|---|---|
+| legacy | 60 | 0.78 / 1.65 | 10.1 | 1.3° / 4 ticks | 0.17 |
+| **JOINT_MOTOR** | 60 | **0.80 / 3.42** | 16.3 | **6.3° / 4 ticks** | 0.19–0.43 (noisy) |
+| legacy | 120 | 0.86 / 1.40 | 13.1 | 1.2° / 4 | 0.25 |
+| JOINT_MOTOR | 120 | 0.71 / 2.28 | 11.6 | 6.2° / 4 | 0.46 |
+| legacy | 30 | 1.06 / 7.17 | 10.0 | 1.7° / 4 | 0.15 |
+| JOINT_MOTOR, feet off (default) | 30 | 15.0 / 41.8 (rings) | 39.9 | never | 0.19 |
+| JOINT_MOTOR, feet colliding | 30 | 3.64 / 19.4 | 40.4 | never (joint wraps) | 0.18 |
+
+Read: at 60 Hz the motor layer matches the legacy cheat on idle under real gravity with
+bounded torques, tracks a violent react clip 1.6× worse (torque-limited, by design), and
+gives a real hit reaction (4.8× the legacy deflection, muscle recovery in 4 ticks). At
+120 Hz it beats legacy everywhere. **30 Hz is an open item**: with foot IK's default
+(feet don't collide in NORMAL) the body hangs from the pelvis pin and rings at 30 Hz;
+`foot_ik_disable_foot_collision = false` (feet load-bearing) brings idle to 3.6°, and the
+hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
+tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
+noisy on Windows; the motor path is roughly 1.5–2.5× the legacy path.
+
 ## Center of mass balance ratio
 
 Computes how off-balance the character is by comparing the mass-weighted center

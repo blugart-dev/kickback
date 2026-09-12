@@ -499,6 +499,60 @@ var character_forward_sign: int = 1
 @export_range(-1.0, 1.0) var arm_fall_reach_min_facing: float = -0.25
 
 
+# ── Muscle Layer (0.5.0) ────────────────────────────────────────────────────
+
+## How the SpringResolver drives the rig toward the animation pose.
+enum MuscleMode {
+	## Legacy (0.4.x): body angular / linear velocities are overwritten every tick
+	## toward the target; strength is a blend fraction; gravity is scaled out at full
+	## strength. Exact tracking, physically dishonest (hits are erased).
+	VELOCITY_OVERWRITE,
+	## Each jointed body is driven by its Generic6DOFJoint3D angular MOTOR (Jolt,
+	## velocity mode): the same error × gain + feed-forward command, expressed as a
+	## relative angular velocity in the joint frame, with the motor force limit =
+	## [member BoneDefinition.muscle_torque] × strength ratio × [member
+	## muscle_strength_scale]. Gravity stays on for every jointed body; strength is a
+	## torque; hits produce real reactions. The pelvis (no parent joint) keeps the
+	## velocity-overwrite spring and a pin scaled by [member muscle_root_pin]. See
+	## docs/MUSCLE_SPIKE.md.
+	JOINT_MOTOR,
+}
+
+@export_group("Muscle Layer")
+## See [enum MuscleMode]. Default is the legacy resolver until JOINT_MOTOR meets its
+## acceptance numbers on the demo character (docs/PLAN.md, 0.5.0).
+@export var muscle_mode: MuscleMode = MuscleMode.VELOCITY_OVERWRITE
+## Global multiplier on every bone's [member BoneDefinition.muscle_torque].
+@export_range(0.0, 5.0) var muscle_strength_scale: float = 1.0
+## Fraction of the joint-space rotation error the motor is commanded to close PER
+## PHYSICS TICK (the motor target velocity is error × gain / tick). Kept a per-tick
+## fraction, not a per-second rate, because the stability of a velocity motor driven
+## by an explicit position loop is governed by gain × tick. Measured on the harness
+## rig at 60 Hz (test/test_muscle_layer.gd): 0.10 holds within 0.5°, settles a 60°
+## elbow step to <2° without ringing and tracks a ±40° 1.5 Hz arm swing within ~5°;
+## 0.15 rings on the light arm chain once the pelvis is a bounded motor too, 0.20+
+## limit-cycles. 0.10 is the default.
+@export_range(0.02, 1.0) var muscle_gain: float = 0.10
+## Cap on the commanded relative angular velocity (rad/s) per joint.
+@export_range(1.0, 60.0) var muscle_max_angular_velocity: float = 15.0
+## Multiplier on the pelvis position pin in JOINT_MOTOR mode (the pin is what holds
+## the standing character up until the balance layer exists; 0 = the pelvis is a free
+## body under gravity).
+@export_range(0.0, 1.0) var muscle_root_pin: float = 0.6
+## Torque limit (N·m) of the pelvis' ORIENTATION motor in JOINT_MOTOR mode. The root
+## has no parent joint, so the resolver attaches it to the world with a free
+## Generic6DOFJoint3D whose angular motor drives the pelvis toward the animation's
+## world orientation — the "upright authority" the balance layer (0.6.0) will replace.
+## Bounded so the spine / hip motors' reaction torques can still rock the pelvis
+## instead of being absorbed by an infinite root.
+@export_range(0.0, 2000.0) var muscle_root_torque: float = 400.0
+## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
+## the tracking damping; this only bleeds free rotation).
+@export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5
+## Linear damping applied to jointed bodies in JOINT_MOTOR mode.
+@export_range(0.0, 10.0) var muscle_linear_damp: float = 0.1
+
+
 ## Creates a RagdollTuning with standard defaults. Equivalent to RagdollTuning.new()
 ## since all property defaults are pre-populated.
 static func create_default() -> RagdollTuning:

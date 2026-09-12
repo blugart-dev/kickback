@@ -297,6 +297,33 @@ pattern is still wrong. Use `body_impact` for scoring and VFX; use
 
 ---
 
+## Muscle Mode (0.5.0)
+
+`RagdollTuning.muscle_mode` selects how the rig is driven:
+
+- `VELOCITY_OVERWRITE` (default): the 0.4.x resolver — exact tracking, gravity scaled
+  out at full strength, hits erased unless strength drops.
+- `JOINT_MOTOR`: every joint's Jolt angular motor drives the same command with a force
+  limit of `BoneDefinition.muscle_torque × strength ratio × muscle_strength_scale`;
+  gravity stays on; a hit produces a real, torque-bounded reaction; a limp bone has a
+  zero force limit. The pelvis gets a world joint for its orientation
+  (`muscle_root_torque`) and keeps a scaled position pin (`muscle_root_pin`).
+
+```gdscript
+var tuning := RagdollTuning.create_default()
+tuning.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR
+kickback.ragdoll_tuning = tuning          # before setup, or:
+kickback.ragdoll_tuning.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR
+kickback.refresh_tuning()                 # at runtime — the resolver switches modes on its next tick
+```
+
+What changes for you: `strength_map` no longer sets stiffness (the strength *ratio*
+scales torque); tune `muscle_torque` per bone in the profile and `muscle_strength_scale`
+globally; `muscle_gain` (per-tick fraction, default 0.10) is the tracking stiffness — do
+not raise it past ~0.15. Measured numbers, tick-rate caveats (30 Hz needs
+`foot_ik_disable_foot_collision = false`) and the open items are in REFERENCE.md
+"Muscle layer" and docs/PLAN.md.
+
 ## Tuning Presets
 
 Factory methods on `RagdollTuning` for common character archetypes:
