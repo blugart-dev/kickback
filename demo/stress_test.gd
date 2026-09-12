@@ -1,6 +1,7 @@
 extends Node3D
 
 const DemoHelpers := preload("res://demo/demo_helpers.gd")
+const OrbitCamera := preload("res://demo/orbit_camera.gd")
 
 const GRID_COLS := 5
 const GRID_ROWS := 4
@@ -12,10 +13,7 @@ var _kickbacks: Array[KickbackCharacter] = []
 
 # Camera orbit
 var _cam: Camera3D
-var _cam_distance: float = 12.0
-var _cam_yaw: float = 0.0
-var _cam_pitch: float = -35.0
-var _dragging: bool = false
+var _orbit: OrbitCamera
 
 var _fps_label: Label
 var _budget_label: Label
@@ -27,6 +25,7 @@ var YBOT_SCENE: PackedScene
 
 func _ready() -> void:
 	_cam = $Camera3D
+	_orbit = OrbitCamera.new(_cam, 12.0, -35.0, 1.0, 3.0, 30.0, -80.0, 10.0)
 	_fps_label = $HUD/FPSLabel
 	YBOT_SCENE = load("res://assets/characters/ybot/ybot.tscn")
 
@@ -108,26 +107,14 @@ func _explode_all() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _orbit.handle_input(event):
+		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				if mb.pressed:
-					KickbackRaycast.shoot_from_camera(
-						get_viewport(), mb.position, _profile)
-			MOUSE_BUTTON_RIGHT:
-				_dragging = mb.pressed
-			MOUSE_BUTTON_WHEEL_UP:
-				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 1.0, 3.0)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 1.0, 30.0)
-
-	elif event is InputEventMouseMotion and _dragging:
-		var mm := event as InputEventMouseMotion
-		_cam_yaw -= mm.relative.x * 0.3
-		_cam_pitch = clampf(_cam_pitch - mm.relative.y * 0.3, -80.0, 10.0)
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			KickbackRaycast.shoot_from_camera(
+				get_viewport(), mb.position, _profile)
 
 	elif event is InputEventKey and event.pressed:
 		match (event as InputEventKey).keycode:
@@ -136,9 +123,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if not _cam:
-		return
-	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
+	_orbit.update()
 
 	# Update FPS
 	if _fps_label:

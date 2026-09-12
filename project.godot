@@ -18,6 +18,14 @@ config/icon="res://icon.svg"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/kickback/plugin.cfg")
 
+[layer_names]
+
+3d_physics/layer_1="Environment"
+3d_physics/layer_2="Projectiles"
+3d_physics/layer_3="Characters"
+3d_physics/layer_4="Active Ragdoll"
+3d_physics/layer_5="Godot Ragdoll"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

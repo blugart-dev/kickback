@@ -3,8 +3,10 @@
 ## simulates the struck bone + its neighbours, applies an impulse, then blends
 ## back to animation. This is NOT part of the Kickback plugin (Kickback is the
 ## active spring ragdoll); it lives in demo/ purely for the side-by-side contrast.
-class_name PartialRagdollController
+## No global class name: demos preload this script.
 extends Node
+
+const HitEvent := preload("res://demo/hit_event.gd")
 
 @export_group("References")
 ## Path to the PhysicalBoneSimulator3D used for selective bone simulation.

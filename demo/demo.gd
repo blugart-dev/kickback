@@ -1,6 +1,9 @@
 extends Node3D
 
 const DemoHelpers := preload("res://demo/demo_helpers.gd")
+const OrbitCamera := preload("res://demo/orbit_camera.gd")
+const HitEvent := preload("res://demo/hit_event.gd")
+const PartialRagdollController := preload("res://demo/partial_ragdoll_controller.gd")
 
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Arrow", "Shotgun", "Explosion"])
@@ -12,10 +15,7 @@ var _godot_sim: PhysicalBoneSimulator3D
 
 # Camera orbit
 var _cam: Camera3D
-var _cam_distance: float = 5.0
-var _cam_yaw: float = 0.0
-var _cam_pitch: float = -15.0
-var _dragging: bool = false
+var _orbit: OrbitCamera
 
 var _persistent: bool = false
 
@@ -24,6 +24,7 @@ var _weapon_label: Label
 
 func _ready() -> void:
 	_cam = $Camera3D
+	_orbit = OrbitCamera.new(_cam, 5.0, -15.0, 1.0, 2.0, 20.0)
 	_weapon_label = $HUD/WeaponLabel
 
 	_profiles = [
@@ -42,7 +43,7 @@ func _ready() -> void:
 	# Debug gizmos — self-contained, finds all characters
 	DemoHelpers.add_debug_hud(self)
 
-	_update_weapon_label()
+	_weapon_idx = DemoHelpers.select_weapon(_weapon_idx, _weapon_names, _weapon_label)
 
 
 func _setup_active(char_root: Node3D) -> KickbackCharacter:
@@ -84,34 +85,18 @@ func _setup_godot_ragdoll(char_root: Node3D) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _orbit.handle_input(event):
+		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				if mb.pressed:
-					_shoot(mb.position)
-			MOUSE_BUTTON_RIGHT:
-				_dragging = mb.pressed
-			MOUSE_BUTTON_WHEEL_UP:
-				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 1.0, 2.0)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 1.0, 20.0)
-
-	elif event is InputEventMouseMotion and _dragging:
-		var mm := event as InputEventMouseMotion
-		_cam_yaw -= mm.relative.x * 0.3
-		_cam_pitch = clampf(_cam_pitch - mm.relative.y * 0.3, -80.0, 80.0)
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			_shoot(mb.position)
 
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
+		_weapon_idx = DemoHelpers.select_weapon_by_key(key, _weapon_idx, _weapon_names, _weapon_label)
 		match key:
-			KEY_1: _set_weapon(0)
-			KEY_2: _set_weapon(1)
-			KEY_3: _set_weapon(2)
-			KEY_4: _set_weapon(3)
-			KEY_5: _set_weapon(4)
 			KEY_R:
 				if _active_kickback:
 					_active_kickback.trigger_ragdoll()
@@ -124,22 +109,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					_active_kickback.set_persistent(_persistent)
 
 
-func _physics_process(delta: float) -> void:
-	if not _cam:
-		return
-
+func _physics_process(_delta: float) -> void:
 	# Camera orbits the midpoint between both characters
-	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
-
-
-func _set_weapon(idx: int) -> void:
-	_weapon_idx = clampi(idx, 0, _profiles.size() - 1)
-	_update_weapon_label()
-
-
-func _update_weapon_label() -> void:
-	if _weapon_label:
-		_weapon_label.text = "Weapon: %s  [1-5]" % _weapon_names[_weapon_idx]
+	_orbit.update()
 
 
 # Raycasts from the camera and routes the hit by collider type: a RigidBody3D is

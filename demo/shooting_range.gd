@@ -14,6 +14,9 @@ const BALL_MASS := 2.0
 const BALL_LIFETIME := 6.0
 const THROW_MIN := 5.0
 const THROW_MAX := 30.0
+## Projectiles live on UI layer 2 (see KickbackLayers / GODOT_CONSTRAINTS.md
+## "Collision layers"); the plugin only names the layers it owns.
+const BALL_LAYER := 1 << 1
 
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Arrow", "Shotgun", "Explosion"])
@@ -32,13 +35,7 @@ func _ready() -> void:
 	_throw_label = $"../HUD/ThrowLabel"
 
 	# Cranked profiles for the demo — big visible physics reactions
-	_profiles = [
-		_make_profile(&"Bullet",    15.0, 0.55, 0.0,  0.05, 0.90, 3, 0.35),
-		_make_profile(&"Melee",     22.0, 0.80, 0.05, 0.15, 0.92, 4, 0.25),
-		_make_profile(&"Arrow",     18.0, 0.60, 0.0,  0.10, 0.90, 2, 0.3),
-		_make_profile(&"Shotgun",   30.0, 0.65, 0.10, 0.40, 0.95, 5, 0.20),
-		_make_profile(&"Explosion", 50.0, 1.00, 0.50, 0.95, 1.0, 99, 0.12),
-	]
+	_profiles = DemoHelpers.create_cranked_profiles()
 
 	# Set up each character with Active Ragdoll
 	var targets := get_node("../Targets")
@@ -50,7 +47,7 @@ func _ready() -> void:
 	DemoHelpers.add_debug_hud(get_node("../HUD"))
 
 	_capture_mouse()
-	_update_weapon_label()
+	_weapon_idx = DemoHelpers.select_weapon(_weapon_idx, _weapon_names, _weapon_label)
 	_update_throw_label()
 
 
@@ -99,12 +96,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
+		_weapon_idx = DemoHelpers.select_weapon_by_key(key, _weapon_idx, _weapon_names, _weapon_label)
 		match key:
-			KEY_1: _set_weapon(0)
-			KEY_2: _set_weapon(1)
-			KEY_3: _set_weapon(2)
-			KEY_4: _set_weapon(3)
-			KEY_5: _set_weapon(4)
 			KEY_P:
 				# Toggle persistent on nearest character
 				var nearest := _get_nearest_kickback()
@@ -149,8 +142,9 @@ func _physics_process(delta: float) -> void:
 func _throw_ball() -> void:
 	var ball := RigidBody3D.new()
 	ball.mass = BALL_MASS
-	ball.collision_layer = 2
-	ball.collision_mask = 9  # ground (layer 1) + active ragdoll (layer 4)
+	ball.collision_layer = BALL_LAYER
+	# Hits the ground (layer 1) and the active ragdoll bodies (layer 4)
+	ball.collision_mask = KickbackLayers.ENVIRONMENT_LAYER | KickbackLayers.ACTIVE_RAGDOLL_LAYER
 	ball.contact_monitor = true
 	ball.max_contacts_reported = 4
 	ball.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
@@ -224,30 +218,6 @@ func _get_nearest_kickback() -> KickbackCharacter:
 			nearest_dist = dist
 			nearest = kc
 	return nearest
-
-
-func _make_profile(pname: StringName, impulse: float, transfer: float, upward: float,
-		ragdoll_prob: float, reduction: float, spread: int, recovery: float) -> ImpactProfile:
-	var p := ImpactProfile.new()
-	p.profile_name = pname
-	p.base_impulse = impulse
-	p.impulse_transfer_ratio = transfer
-	p.upward_bias = upward
-	p.ragdoll_probability = ragdoll_prob
-	p.strength_reduction = reduction
-	p.strength_spread = spread
-	p.recovery_rate = recovery
-	return p
-
-
-func _set_weapon(idx: int) -> void:
-	_weapon_idx = clampi(idx, 0, _profiles.size() - 1)
-	_update_weapon_label()
-
-
-func _update_weapon_label() -> void:
-	if _weapon_label:
-		_weapon_label.text = "Weapon: %s  [1-5]" % _weapon_names[_weapon_idx]
 
 
 func _update_throw_label() -> void:

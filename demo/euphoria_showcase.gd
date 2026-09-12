@@ -5,6 +5,7 @@
 extends Node3D
 
 const DemoHelpers := preload("res://demo/demo_helpers.gd")
+const OrbitCamera := preload("res://demo/orbit_camera.gd")
 
 const WALK_SPEED := 1.8
 
@@ -25,16 +26,14 @@ var _moving_anim: AnimationPlayer
 
 # Camera orbit
 var _cam: Camera3D
-var _cam_distance: float = 6.0
-var _cam_yaw: float = 0.0
-var _cam_pitch: float = -15.0
-var _dragging: bool = false
+var _orbit: OrbitCamera
 
 var _weapon_label: Label
 
 
 func _ready() -> void:
 	_cam = $Camera3D
+	_orbit = OrbitCamera.new(_cam, 6.0, -15.0, 0.5, 2.0, 15.0)
 	_weapon_label = $HUD/WeaponLabel
 
 	_profiles = [
@@ -124,49 +123,27 @@ func _physics_process(delta: float) -> void:
 		if move_dir.length_squared() > 0.01:
 			mover.global_rotation.y = atan2(move_dir.x, move_dir.z)
 
-	_update_camera()
-
-
-func _update_camera() -> void:
-	if not _cam:
-		return
-	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
+	_orbit.update()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _orbit.handle_input(event):
+		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				if mb.pressed:
-					# Threat anticipation on the injuries character (right)
-					if _kickbacks.size() > 2 and _kickbacks[2]:
-						var threat_dir := -_cam.global_basis.z
-						_kickbacks[2].anticipate_threat(threat_dir, 0.5)
-					KickbackRaycast.shoot_from_camera(
-						get_viewport(), mb.position, _profiles[_weapon_idx])
-			MOUSE_BUTTON_RIGHT:
-				_dragging = mb.pressed
-			MOUSE_BUTTON_WHEEL_UP:
-				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 0.5, 2.0)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 0.5, 15.0)
-
-	elif event is InputEventMouseMotion and _dragging:
-		var mm := event as InputEventMouseMotion
-		_cam_yaw -= mm.relative.x * 0.3
-		_cam_pitch = clampf(_cam_pitch - mm.relative.y * 0.3, -80.0, 80.0)
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			# Threat anticipation on the injuries character (right)
+			if _kickbacks.size() > 2 and _kickbacks[2]:
+				var threat_dir := -_cam.global_basis.z
+				_kickbacks[2].anticipate_threat(threat_dir, 0.5)
+			KickbackRaycast.shoot_from_camera(
+				get_viewport(), mb.position, _profiles[_weapon_idx])
 
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
+		_weapon_idx = DemoHelpers.select_weapon_by_key(key, _weapon_idx, _weapon_names, _weapon_label)
 		match key:
-			KEY_1: _set_weapon(0)
-			KEY_2: _set_weapon(1)
-			KEY_3: _set_weapon(2)
-			KEY_4: _set_weapon(3)
-			KEY_5: _set_weapon(4)
 			KEY_R:
 				for kc: KickbackCharacter in _kickbacks:
 					if kc: kc.trigger_ragdoll()
@@ -183,9 +160,3 @@ func _unhandled_input(event: InputEvent) -> void:
 				_can_walk = true
 				if _moving_anim:
 					_moving_anim.play("walk")
-
-
-func _set_weapon(idx: int) -> void:
-	_weapon_idx = clampi(idx, 0, _profiles.size() - 1)
-	if _weapon_label:
-		_weapon_label.text = "Weapon: %s  [1-5]" % _weapon_names[_weapon_idx]

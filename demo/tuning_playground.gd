@@ -5,6 +5,7 @@
 extends Node3D
 
 const DemoHelpers := preload("res://demo/demo_helpers.gd")
+const OrbitCamera := preload("res://demo/orbit_camera.gd")
 
 var _profile: ImpactProfile           # shared test-hit profile (IMPACT sliders edit this)
 var _custom_tuning: RagdollTuning     # Custom character's body tuning (all other sliders)
@@ -13,10 +14,7 @@ var _kickbacks: Array[KickbackCharacter] = []
 
 # Camera orbit
 var _cam: Camera3D
-var _cam_distance: float = 12.0
-var _cam_yaw: float = 0.0
-var _cam_pitch: float = -12.0
-var _dragging: bool = false
+var _orbit: OrbitCamera
 
 # Slider references
 var _sliders: Dictionary = {}
@@ -24,6 +22,7 @@ var _sliders: Dictionary = {}
 
 func _ready() -> void:
 	_cam = $Camera3D
+	_orbit = OrbitCamera.new(_cam, 12.0, -12.0, 0.5, 5.0, 20.0)
 	_profile = ImpactProfile.create_bullet()
 	_profile.base_impulse = 18.0
 	_profile.impulse_transfer_ratio = 0.6
@@ -234,13 +233,30 @@ func _add_slider(parent: Control, param_name: String, min_val: float, max_val: f
 
 
 func _on_slider_changed(param_name: String, value: float) -> void:
+	if _apply_impact_param(param_name, value):
+		return
+	_apply_tuning_param(param_name, value)
+	# The resolver and controller cache tuning values when configured — push the
+	# live edit through the facade so the Custom character actually picks it up.
+	if _custom_kickback:
+		_custom_kickback.refresh_tuning()
+
+
+## IMPACT sliders edit the shared test-hit profile. Returns true when
+## [param param_name] was one of them.
+func _apply_impact_param(param_name: String, value: float) -> bool:
 	match param_name:
-		# IMPACT — the shared test-hit profile
 		"base_impulse": _profile.base_impulse = value
 		"transfer_ratio": _profile.impulse_transfer_ratio = value
 		"strength_spread": _profile.strength_spread = int(value)
 		"ragdoll_probability": _profile.ragdoll_probability = value
-		# Everything else — the Custom character's body tuning
+		_: return false
+	return true
+
+
+## Every other slider edits the Custom character's body tuning.
+func _apply_tuning_param(param_name: String, value: float) -> void:
+	match param_name:
 		"stagger_threshold": _custom_tuning.stagger_threshold = value
 		"stagger_duration": _custom_tuning.stagger_duration = value
 		"stagger_floor": _custom_tuning.stagger_strength_floor = value
@@ -303,39 +319,26 @@ func _on_slider_changed(param_name: String, value: float) -> void:
 
 func _shoot_all() -> void:
 	for kc: KickbackCharacter in _kickbacks:
-		var parent := kc.get_parent()
-		for sibling in parent.get_children():
-			if sibling is PhysicsRigBuilder:
-				var bodies: Dictionary = sibling.get_bodies()
-				var body: RigidBody3D = bodies.get("Chest", bodies.get("Hips"))
-				if body:
-					kc.receive_hit(body, -_cam.global_basis.z, body.global_position, _profile)
-				break
+		var builder := DemoHelpers.find_rig_builder(kc)
+		if not builder:
+			continue
+		var bodies: Dictionary = builder.get_bodies()
+		var body: RigidBody3D = bodies.get("Chest", bodies.get("Hips"))
+		if body:
+			kc.receive_hit(body, -_cam.global_basis.z, body.global_position, _profile)
 
 
 # --- Input ---
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _orbit.handle_input(event):
+		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				if mb.pressed:
-					KickbackRaycast.shoot_from_camera(
-						get_viewport(), mb.position, _profile)
-			MOUSE_BUTTON_RIGHT:
-				_dragging = mb.pressed
-			MOUSE_BUTTON_WHEEL_UP:
-				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 0.5, 5.0)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 0.5, 20.0)
-
-	elif event is InputEventMouseMotion and _dragging:
-		var mm := event as InputEventMouseMotion
-		_cam_yaw -= mm.relative.x * 0.3
-		_cam_pitch = clampf(_cam_pitch - mm.relative.y * 0.3, -80.0, 80.0)
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			KickbackRaycast.shoot_from_camera(
+				get_viewport(), mb.position, _profile)
 
 	elif event is InputEventKey and event.pressed:
 		match (event as InputEventKey).keycode:
@@ -349,6 +352,4 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if not _cam:
-		return
-	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance)
+	_orbit.update()
