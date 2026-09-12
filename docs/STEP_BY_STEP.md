@@ -4,12 +4,21 @@
 > Test scenes have been reorganized into `test/scenes/` and some early scenes
 > were consolidated. See `CLAUDE.md` for the current project structure.
 >
-> **v0.5.0 update**: Step 8 (LOD system) was removed. Active Ragdoll and Partial
-> Ragdoll are now independent modes — pick one per character, no runtime switching.
-> A new STAGGER state was added to the active ragdoll state machine.
+> **Legacy v0.5.0 update**: Step 8 (LOD system) was removed; Active Ragdoll and Partial
+> Ragdoll became independent modes. A new STAGGER state was added to the active ragdoll
+> state machine.
 >
-> **v0.6.0 update**: Momentum transfer + center of mass balance tracking.
+> **Later**: the Partial Ragdoll mode (PhysicalBoneSimulator3D, Steps 0–1) was removed
+> from the plugin altogether. Kickback is the active ragdoll only; the partial path
+> survives as `demo/partial_ragdoll_controller.gd`, the built-in-ragdoll side of the
+> comparison demo. Steps 0–2 below are the history of a tier that no longer ships.
+>
+> **Legacy v0.6.0 update**: Momentum transfer + center of mass balance tracking.
 > Stagger is now physics-informed, not just timer-based.
+>
+> **2026-09 audit**: several "learnings" recorded below are load-bearing hacks the
+> audit identifies (velocity-overwrite muscles, gravity scaled by strength, root
+> teleport on get-up). See the entry at the end and `AUDIT_2026-09-12.md`.
 
 Do these in order. Each step builds on the previous. Each has a test scene and
 concrete pass/fail criteria. Do NOT proceed to the next step until the current
@@ -340,9 +349,14 @@ core active ragdoll system.
 
 ---
 
-## Step 8 — LOD system + integration ✅ COMPLETE
+## Step 8 — LOD system + integration ❌ REMOVED
 
-**Goal**: Wire everything together with distance-based fidelity.
+> The LOD tiers were built and then removed (legacy v0.5.0): partial ragdoll and
+> additive flinch left the plugin, so there is nothing to tier between. What survived
+> is the `KickbackCharacter` coordinator and the `KickbackManager` budget (a hard cap
+> on simultaneous spontaneous ragdolls, not distance-based fidelity). Kept for history.
+
+**Goal (original)**: Wire everything together with distance-based fidelity.
 
 **Tasks**:
 - Create LOD manager: distance to camera → tier selection
@@ -373,10 +387,10 @@ core active ragdoll system.
 
 # Next Milestones
 
-## Milestone 1 — Mid-tier partial ragdoll in LOD
+## Milestone 1 — Mid-tier partial ragdoll in LOD ❌ DROPPED
 Re-integrate partial ragdoll (PhysicalBoneSimulator3D) as a mid-tier between
-active ragdoll and flinch. Currently LOD jumps ACTIVE → FLINCH. Need a cheaper
-physics reaction for 10-25m range.
+active ragdoll and flinch. Dropped with the LOD system and the partial-ragdoll
+mode; the PhysicalBoneSimulator3D path now exists only in the comparison demo.
 
 ## Milestone 2 — Locomotion support ✅ COMPLETE
 Import walk/run animations. Test spring resolver with locomotion — character
@@ -414,7 +428,7 @@ One-click "Add Kickback to character", visual strength debugger, weapon profile
 editor, collision shape visualization.
 
 **Status**: Complete. Key features:
-- Tool menu "Add Kickback to Selected": creates the Active-Ragdoll node set (5 nodes; 2 for Partial Ragdoll) with auto-wired NodePaths
+- Tool menu "Add Kickback to Selected": creates the Active-Ragdoll node set (5 nodes) with auto-wired NodePaths (since 0.4.1 via `KickbackSetup.add_active_rig`, skeleton found at any depth)
 - Validates Skeleton3D + AnimationPlayer prerequisites, prevents duplicates
 - Undoable via EditorUndoRedoManager
 - StrengthDebugHUD: 2D overlay (F3 toggle) showing per-bone strength as colored dots
@@ -609,3 +623,22 @@ to `tuning_playground.gd` (sway, recovery rate, active resistance).
 Files changed: `active_ragdoll_controller.gd`, `ragdoll_tuning.gd`,
 `tuning_playground.gd`, `shooting_range.gd`, `signal_showcase.gd`,
 `stress_test.gd`, `animated_npc.gd`, `euphoria_showcase.gd`
+
+---
+
+## 2026-09 audit — honesty pass (0.4.1 candidate)
+
+A full audit of the plugin ([AUDIT_2026-09-12.md](AUDIT_2026-09-12.md)) found the rig,
+joint frames, sync, IK math and tests sound, and the "brain" scripted: the spring
+resolver is a velocity-overwrite tracker rather than a muscle model, a limp ragdoll fell
+at half gravity, the 0.4.0 directed stumble teleports the character root, and the balance
+model is a static CoM offset. Real Euphoria parity was put at ~20–25%.
+
+Step 1 of the audit's order of work is this honesty pass: the docs above and ROADMAP /
+SELF_PRESERVATION / README were corrected, dead tuning knobs deleted, and the §4 defects
+1–5, 12–15, 19–22 fixed (gravity semantics, phantom RAGDOLL signal on `set_persistent`,
+wall-clock timers, forward-sign face-up, recursive setup tool, demos wiring
+`rig_sync_path`, HUD validity guards, runtime skeleton validation, IK reach clamping).
+Next: the muscle spike (`tools/spike/motor_spike.gd`), then the motor muscle layer
+(0.5.0), balance + behaviors (0.6.0), arbiter + API (0.7.0) — see ROADMAP.md.
+CHANGELOG.md has the itemised list.

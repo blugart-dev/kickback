@@ -34,7 +34,24 @@ rigid_body.linear_velocity = rigid_body.linear_velocity.lerp(pos_error / delta, 
 ```
 
 `strength` is the key parameter: 0.0 = pure ragdoll, 1.0 = perfect tracking.
-`pin_strength` should be lower than rotational strength (0.2-0.3) to prevent floating.
+`pin_strength` is the position-tracking blend. Shipped defaults
+(`RagdollTuning.pin_strength_overrides`): **Hips 0.85**, feet 0.4, every other body 0.1
+(`default_pin_strength`). The Hips pin is what holds the character up — the
+[audit](AUDIT_2026-09-12.md) §3.1 calls it a kinematic anchor, and replacing it with a
+weak safety-net pin plus an upright torque is part of the planned muscle layer; the
+light 0.1 pins elsewhere let the joints, not the pins, place the limbs.
+
+**Gravity.** Every tick each body's `gravity_scale` is written as
+`RagdollTuning.gravity_scale × (1 − strength / base_strength)` (`gravity_scale` default
+1.0). A bone at full strength has no gravity (the springs hold the pose); a limp bone
+falls at exactly `gravity_scale` — real gravity by default. Pre-0.4.1 a separate hidden
+0.5 multiplier halved that and the tuning knob was overwritten on the first tick.
+
+**Root motion.** The target walk-up (`get_animation_bone_global`) zeroes the XZ of the
+root-motion bone's *local* pose when `RagdollTuning.strip_root_motion` is on, so the root
+body, every descendant, and every other consumer of the animation target (foot/arm IK,
+the get-up blend) see the same root-motion-free pose. Stripping only the root body's own
+target (pre-0.4.1) left its children's targets displaced by the clip's root motion.
 
 ### Rig fidelity additions (1.4)
 
@@ -113,7 +130,7 @@ var balance_ratio := clampf(offset / support_radius, 0.0, 1.5)
 
 Used by `ActiveRagdollController` to drive stagger behavior:
 - `balance > balance_ragdoll_threshold (0.85)` → forced ragdoll (tipping over)
-- `balance < balance_recovery_threshold (0.3)` for `balance_recovery_hold_time (0.3s)` → early stagger recovery
+- `balance < balance_recovery_threshold (0.3)` for `balance_recovery_hold_time (0.5s)` → early stagger recovery
 - `balance > balance_stagger_threshold (0.5)` on hit → triggers stagger independently of spring strength
 
 ## Per-bone strength values
@@ -155,18 +172,25 @@ Hips (root, no parent joint)
 
 ## Mass distribution (kg)
 
-| Bone       | Mass | Shape             | Approximate dimensions       |
-|------------|------|-------------------|------------------------------|
-| Hips       | 15   | BoxShape3D        | 0.30 × 0.15 × 0.20          |
-| Spine      | 10   | BoxShape3D        | 0.25 × 0.15 × 0.15          |
-| Chest      | 12   | BoxShape3D        | 0.30 × 0.20 × 0.20          |
-| Head       | 5    | SphereShape3D     | radius 0.10                  |
-| UpperArm   | 3    | CapsuleShape3D    | radius 0.04, height 0.28     |
-| LowerArm   | 2    | CapsuleShape3D    | radius 0.035, height 0.25    |
-| Hand       | 1    | BoxShape3D        | 0.08 × 0.03 × 0.10          |
-| UpperLeg   | 8    | CapsuleShape3D    | radius 0.06, height 0.40     |
-| LowerLeg   | 4    | CapsuleShape3D    | radius 0.045, height 0.38    |
-| Foot       | 2    | BoxShape3D        | 0.10 × 0.05 × 0.22          |
+The shipped Mixamo profile (`RagdollProfile.create_mixamo_default`). `shape_offset` is the
+fraction of the bone→child-bone vector the collision shape is pushed along.
+
+| Bone       | Mass | Shape             | Dimensions                    | shape_offset |
+|------------|------|-------------------|-------------------------------|--------------|
+| Hips       | 15   | BoxShape3D        | 0.35 × 0.20 × 0.25            | 0.5          |
+| Spine      | 10   | BoxShape3D        | 0.30 × 0.18 × 0.18            | 0.5          |
+| Chest      | 12   | BoxShape3D        | 0.35 × 0.22 × 0.22            | 0.5          |
+| Head       | 5    | SphereShape3D     | radius 0.12                   | 0.5          |
+| UpperArm   | 3    | CapsuleShape3D    | radius 0.055, height 0.28     | 0.5          |
+| LowerArm   | 2    | CapsuleShape3D    | radius 0.05, height 0.25      | 0.5          |
+| Hand       | 1    | BoxShape3D        | 0.10 × 0.04 × 0.12            | 0.5          |
+| UpperLeg   | 8    | CapsuleShape3D    | radius 0.08, height 0.40      | 0.5          |
+| LowerLeg   | 4    | CapsuleShape3D    | radius 0.065, height 0.38     | 0.5          |
+| Foot       | 2    | BoxShape3D        | 0.12 × 0.07 × 0.25            | 0.65         |
+
+Auto-detected profiles (`SkeletonDetector.create_profile_from_skeleton`) use the same
+masses (`SkeletonDetector.MASS_TABLE`) and shape types (`SHAPE_TABLE`), but size each shape
+from the skeleton's own bone lengths via `BONE_PROPORTIONS`, so their dimensions differ.
 
 ## Joint angular limits (degrees)
 
@@ -261,7 +285,7 @@ class_name ImpactProfile extends Resource
 @export_range(0.0, 1.0) var upward_bias: float = 0.0              # Extra upward force
 @export_range(0.0, 1.0) var ragdoll_probability: float = 0.0      # Chance of full ragdoll
 @export_range(0.0, 1.0) var strength_reduction: float = 0.4       # Spring strength drop on hit
-@export_range(0, 10) var strength_spread: int = 1                  # Neighbor bones affected
+@export_range(0, 99) var strength_spread: int = 1                  # Neighbor bones affected (99 = whole rig)
 @export_range(0.0, 5.0) var recovery_rate: float = 1.0            # Strength recovery per second
 ```
 
@@ -306,8 +330,16 @@ func reduce_strength(hit_bone: StringName, profile: ImpactProfile):
 ```gdscript
 # Every _physics_process:
 for bone in bones.values():
-    bone.strength = move_toward(bone.strength, bone.base_strength, profile.recovery_rate * delta)
+    bone.strength = move_toward(bone.strength, bone.base_strength, spring.recovery_rate * delta)
 ```
+
+`SpringResolver.recovery_rate` holds one value at a time and has several writers.
+Precedence (from the `RagdollTuning.recovery_rate` doc comment): `RagdollTuning.recovery_rate`
+(0.3/s) is the default the resolver returns to in NORMAL; an `ImpactProfile.recovery_rate`
+replaces it for the reaction to that hit; `stagger_recovery_rate` (0.03/s) applies while
+staggering; 0 while ragdolled; the controller restores the tuning value when the character
+returns to NORMAL. A value you write to the resolver directly survives only until the next
+of those events.
 
 ## Fatigue system
 
@@ -589,23 +621,20 @@ Set on stagger entry, restored to default on stagger exit.
 
 ## Bone name matching
 
-Support common naming conventions (Mixamo, Rigify, etc.):
-
-```gdscript
-func classify_region(bone_name: StringName) -> StringName:
-    var n = bone_name.to_lower()
-    if "hip" in n or "pelvis" in n:       return &"core"
-    if "spine" in n:                       return &"core"
-    if "chest" in n or "upper_chest" in n: return &"core"
-    if "head" in n or "neck" in n:         return &"head"
-    if "upperarm" in n or "upper_arm" in n or "shoulder" in n: return &"upper_limb"
-    if "lowerarm" in n or "lower_arm" in n or "forearm" in n:  return &"upper_limb"
-    if "hand" in n:                        return &"hand"
-    if "upperleg" in n or "upper_leg" in n or "thigh" in n:    return &"upper_leg"
-    if "lowerleg" in n or "lower_leg" in n or "calf" in n or "shin" in n: return &"lower_leg"
-    if "foot" in n or "toe" in n:          return &"foot"
-    return &"core"  # Default
-```
+Done by `SkeletonDetector` (the plugin has no separate region classifier). Bone names are
+tokenised — split at `_ . - :` / space and camelCase boundaries, digit runs dropped, the
+`mixamorig` / `DEF-` namespace tokens and the side token (`l`/`r`/`left`/`right`) removed —
+and the remaining key is matched *exactly* against the tables (`HIPS_KEYS`, `HEAD_KEYS`,
+`LIMB_KEYS`, `TORSO_KEYS`), so `spine_lower` is never a left-side bone and UE's `ik_foot_l`
+is never a foot. Torso slots are then classified by position in the hierarchy: on the
+head→hips chain the bone directly above the hips is Spine, the chain bone the upper arms
+(via their clavicles) hang from is Chest, and everything between (neck included) becomes an
+intermediate bone. Hips fall back to the common ancestor of the thighs and Head to the top
+of the torso chain, which is how Rigify's unnamed `DEF-spine` / `DEF-spine.006` resolve. A
+rig with a single torso bone gets no Chest; `default_joints_for` re-parents the head and
+upper-arm joints to the nearest present torso body. Rig families exercised by
+`test/test_skeleton_detector.gd`: Mixamo (`mixamorig:` and `mixamorig_`), Blender Rigify
+DEF bones, the UE5 Mannequin, generic `Hips/Spine/Chest/Neck/Head` rigs, single-spine rigs.
 
 ## Semantic roles (custom rigs)
 
@@ -621,6 +650,11 @@ canonical convention (`Hips`, `Chest`, `Head`, `Foot_L/R`, `UpperLeg_*`…):
 | `torso_rigs`                    | `get_torso_rigs()`        | torso bend, sway falloff |
 | `foot_rigs`                     | `get_foot_rigs()`         | balance support polygon, foot IK, CoM gizmo |
 | `left_leg_chain`/`right_leg_chain` | `get_leg_chain("L"/"R")` | two-bone foot IK (hip→knee→foot) |
+| `hand_rigs`                     | `get_hand_rigs()`         | arm IK end effectors (fall-reach contact pass) |
+| `left_arm_chain`/`right_arm_chain` | `get_arm_chain("L"/"R")` | two-bone arm IK (shoulder→elbow→hand): windmill, fall reach |
+
+Also: `get_all_leg_rigs()` / `get_all_arm_rigs()`, `is_leg_rig()` / `is_arm_rig()`,
+`get_leg_side()` / `get_arm_side()`.
 
 A profile that follows the convention needs **zero** configuration. For a non-Mixamo
 rig with different rig names, override the role fields to match:
@@ -633,8 +667,9 @@ profile.right_leg_chain = PackedStringArray(["r_thigh", "r_shin", "r_ankle"])
 ```
 
 List accessors filter out names that don't map to a defined bone, so a missing body
-degrades gracefully instead of resolving to a null lookup. `root_bone` (the partial-ragdoll
-recursion guard) derives from `root_rig` when left empty — see `get_root_skeleton_bone()`.
+degrades gracefully instead of resolving to a null lookup. `root_bone` (the bone-chain
+traversal recursion guard) derives from `root_rig` when left empty — see
+`get_root_skeleton_bone()`.
 Run `validate_against_skeleton()` to flag role names that don't reference a defined bone.
 
 ## Animation requirements

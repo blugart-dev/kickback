@@ -4,14 +4,30 @@ The first milestone where the character *actively reacts* to a hit instead of on
 absorbing it or falling. Two behaviors:
 
 1. **Directed stumble** *(shipped)* — a staggering hit visibly **shoves the character**:
-   it lurches in the hit direction, the legs step to follow and keep it upright, and
-   the upper body reacts loosely. It ends up somewhere new, then recovers to idle.
-2. **Arm bracing** *(next)* — arms swing out to windmill for balance during a stumble,
+   the character root is moved along the hit direction, the trailing foot steps to
+   follow, and the upper body reacts loosely. It ends up somewhere new, then recovers
+   to idle.
+2. **Arm bracing** *(shipped)* — arms swing out to windmill for balance during a stumble,
    and reach for the ground when a fall is committed.
 
-This is the start of the active self-preservation layer in the [scorecard](ROADMAP.md) —
-the hard, heavily-weighted part of Euphoria parity. The springs are the muscles; this
-milestone is the first piece of the *brain* telling them what to do.
+> **What this is, plainly (2026-09 [audit](AUDIT_2026-09-12.md) §3.2).** The directed
+> stumble is a **scripted root displacement**: `_update_directed_stumble` moves
+> `_character_root.global_position` along the hit direction each physics tick, and the
+> foot-IK step targets are placed ahead of the hips at fixed intervals of that travel.
+> It is **not balance-driven stepping** — the steps are paced by distance the script has
+> pushed the root, not by the centre of mass leaving the feet; the feet have collision off
+> in NORMAL/STAGGER and the pelvis is position-pinned, so the legs bear no load and do not
+> keep the character upright (the pin does). While it runs, the tip-over check is
+> suspended. On a `CharacterBody3D` root the displacement bypasses collision. The audit
+> recommends replacing it with a balance-driven `Step` behaviour on a torque-bounded
+> muscle layer (ROADMAP.md, 0.5.0–0.6.0) and the scorecard counts it as **0** on the
+> self-preservation row. The windmill is a phase circle whose radius follows the scripted
+> drift decay; the fall reach is a real physics-anchored IK to a raycast ground point.
+
+This milestone was pitched as the start of the active self-preservation layer in the
+[scorecard](ROADMAP.md). As built it is real IK plumbing (foot step animation, arm IK,
+fall reach) under a scripted trigger — useful, art-directable, and honest only when
+described as such.
 
 ## Design note: directed, not emergent
 
@@ -37,10 +53,11 @@ reliable reaction on top of them.
 On a staggering hit (`_start_stagger`), if the hit has a horizontal component, a stumble
 begins, driven entirely by the hit direction:
 
-**1. Knockback displacement.** The character root drifts along the hit direction at
-`stumble_push_speed`, decaying at `stumble_push_decel` (momentum absorbed). Total travel
-≈ `speed² / (2·decel)`. The springs pull the body along, so the whole character
-*displaces* — you stumble where you're shoved. (Root motion happens in
+**1. Knockback displacement.** The character root (`character_root_path`) is moved
+along the hit direction at `stumble_push_speed`, decaying at `stumble_push_decel`
+(momentum absorbed). Total travel ≈ `speed² / (2·decel)`. The springs pull the body
+along, so the whole character *displaces* — you stumble where you're shoved. This is a
+scripted write to `_character_root.global_position`, not a physical push. (It happens in
 `_physics_process`, per the locomotion rule in CLAUDE.md.)
 
 **2. Stepping feet.** Every `stumble_step_length` of travel, the **trailing foot** (the
@@ -68,10 +85,10 @@ The stumble is the middle band — the visible "shoved and recovered" reaction.
 ### New surface
 
 - `RagdollTuning` "Self-Preservation: Stumble Steps" group: `stumble_enabled`,
-  `stumble_step_length`, `stumble_step_reach_max`, `stumble_step_duration`,
-  `stumble_max_steps`, `stumble_brace_strength`, `stumble_push_speed`,
-  `stumble_push_decel`, `stumble_step_lift` (+ `stumble_step_threshold` retained for
-  future balance-driven use).
+  `stumble_step_length`, `stumble_step_duration`, `stumble_max_steps`,
+  `stumble_brace_strength`, `stumble_push_speed`, `stumble_push_decel`,
+  `stumble_step_lift`. (Three further knobs in this group — a balance threshold, a step
+  reach cap and a step cooldown — were exported but never read; removed in 0.4.1.)
 - `FootIKSolver`: `begin_stumble(foot_rig, target, duration)` + `is_stepping()` — the foot
   step animation (lerp + lift arc), reusing the existing stagger pin/IK/override plumbing.
 - Signal: `stumble_step_started(foot_rig, target)`.
@@ -131,7 +148,8 @@ Following the project pattern (drive the *real* classes via `test/helpers/rig_ha
 - **`TwoBoneIK`** (`test/test_two_bone_ik.gd`) — pure math: swing degeneracies, segment-
   length invariants, identity when no adjustment is needed.
 - **`ArmIKSolver`** (`test/test_arm_ik.gd`) — the real solver on a live rig: reach drives the
-  hand to target, unreachable targets no-op, weight blends out on release, and the
+  hand to target, out-of-reach targets clamp onto the arm's reach (the hand lands at the
+  solver's `end`, never popping back to the animation pose), weight blends out on release, and the
   physics-anchored mode reaches from the body pose.
 - **Fall reach** (`test/test_fall_brace.gd`) — drives the real controller: a forward fall
   keeps the leading arm alive while the rest goes limp, a backward fall skips the reach (the

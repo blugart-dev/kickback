@@ -20,15 +20,38 @@ Frame 0   KickbackCharacter._ready() starts
           └── begins 5-frame await
 
 Frame 2   PhysicsRigBuilder._build_rig() runs
-          ├── RigidBody3D nodes created
+          ├── RigidBody3D nodes created (live from creation — runtime bodies are never frozen)
           ├── bodies_built signal emitted
-          └── set_enabled(false) freezes bodies
+          └── set_enabled(false) — a no-op
 
 Frame 5   KickbackCharacter finishes await
-          ├── set_enabled(true) unfreezes bodies
+          ├── set_enabled(true) — first enable only: snaps a BAKED rig to the skeleton and
+          │   unfreezes it (baked bodies are saved frozen); no-op for a runtime-built rig
+          ├── PhysicsRigSync / SpringResolver activated
           ├── setup_complete signal emitted
           └── initial_state applied (if set)
 ```
+
+`set_enabled(false)` does not freeze or stop anything; the rig is always simulated (the
+springs are what hold it to the animation). To take a character out of physics, free the
+rig or use the budget manager.
+
+### Runtime tuning changes
+
+The controllers copy several values out of `RagdollTuning` at configure time (velocity
+clamps, root-motion stripping, chain consistency, feed-forward, protected bones). A bare
+property write on the resource is not seen — call `KickbackCharacter.refresh_tuning()`
+after mutating it at runtime. Build-time settings (collision layer / mask, joint limits,
+`joint_limit_scale`, shapes) still need a rig rebuild.
+
+### Setup warnings
+
+`KickbackCharacter.get_setup_warnings()` returns the list `_ready()` also pushed with
+`push_warning`: Jolt not active, the profile's bones / joints / roles / intermediate bones
+checked against the real `Skeleton3D` (`RagdollProfile.validate_against_skeleton`), the
+tuning checked against the profile, missing controller nodes. Setup is never aborted for
+these — the builder skips bones it cannot find, so a mis-mapped rig runs with fewer bodies;
+this is how to tell.
 
 ### When is it safe to call APIs?
 
@@ -214,8 +237,9 @@ must be right for that to look clean:
 - **`rig_sync_path` must be wired** on the ActiveRagdollController. After the
   teleport the controller forces an immediate skeleton pass (`sync_now`); if
   the path is empty, the character renders one frame with pre-teleport bone
-  poses under the post-teleport root — a visible pop. (The editor setup tool
-  wires it; runtime assemblers must remember to.)
+  poses under the post-teleport root — a visible pop. (The editor setup tool,
+  `KickbackSetup.add_active_rig()`, and the demos' `demo/demo_helpers.gd` all
+  wire it; a hand-rolled runtime assembler must remember to.)
 - **Physics interpolation** (`physics/common/physics_interpolation`) is handled:
   the controller calls `reset_physics_interpolation()` on the root and every
   rig body after the teleport, so no streaking occurs. Nothing to configure —
@@ -286,6 +310,10 @@ Factory methods on `RagdollTuning` for common character archetypes:
 | `create_fragile()`    | Ragdoll-prone — falls under sustained fire  |
 | `create_responsive()` | Fast-paced action — low stagger, snappy reactions |
 | `create_heavy()`      | Realistic sims — high damping, slow recovery |
+
+The KickbackCharacter inspector panel's **Tuning Presets** dropdown lists exactly these:
+it is built from the zero-argument static `create_*` factories on `RagdollTuning`, so a
+new factory shows up there without touching the panel.
 
 ### Composing custom presets
 

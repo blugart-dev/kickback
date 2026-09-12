@@ -15,10 +15,11 @@ PhysicalBone3D is missing critical RigidBody3D functionality (proposal #8008):
 
 RigidBody3D has ALL of these. The active ragdoll layer uses RigidBody3D exclusively.
 
-PhysicalBone3D + PhysicalBoneSimulator3D is used ONLY for the mid-range partial
-ragdoll tier (Step 1), where apply_impulse() and influence blending are sufficient.
+PhysicalBone3D + PhysicalBoneSimulator3D is NOT part of the plugin any more. The
+"partial ragdoll" tier (Step 1) survives only as `demo/partial_ragdoll_controller.gd`,
+the built-in-ragdoll side of the side-by-side comparison demo (`demo/demo.tscn`).
 
-## PhysicalBoneSimulator3D (used in Step 1 only)
+## PhysicalBoneSimulator3D (comparison demo only — historically Step 1)
 
 ### influence is global, not per-bone
 `PhysicalBoneSimulator3D.influence` (0.0-1.0) blends ALL bones between
@@ -62,6 +63,17 @@ Spring equilibrium point has coordinate space issues and flipped axes.
 **DO NOT USE built-in joint springs.** Use the velocity-based spring
 resolver in script instead (Step 4). This is what V-Sekai and Jolt's
 creator recommend.
+
+Note (2026-09, measured by `tools/spike/motor_spike.gd`, see
+[MUSCLE_SPIKE.md](MUSCLE_SPIKE.md)): under Jolt 4.7.2 the 6DOF **motor target
+velocity axes are mirrored** (a +1 rad/s target yields −1 rad/s of child-relative-to-
+parent rotation about each joint-frame axis), and the **angular-spring equilibrium
+point is the inverse relative rotation decomposed with `EULER_ORDER_XYZ`**; the spring
+honours the motor force limit only when `FLAG_ENABLE_MOTOR` is also set. The spring
+(position-motor) path tracks a moving target poorly and degrades with tick rate in
+this binding, so the "do not use" advice above stands for the *springs*; the velocity
+*motors* are the chosen muscle substrate for 0.5.0. Nothing in the plugin uses motors
+yet.
 
 ### Angular motors DO work
 If you need joint-level motors (we don't for the spring resolver approach):
@@ -165,10 +177,17 @@ deprecated `set_bone_global_pose_override`; see
 therefore still safe — do **not** "simplify" it to `get_bone_global_pose()`, which would read
 the modifier's own output back as the target and create a feedback loop.
 
-### Zero gravity when spring active
+### Gravity scales with spring strength
 Angular springs can't lift mass against gravity — they only correct rotation.
-Set `gravity_scale = 0` on all bodies when springs are active. Gravity returns
-when springs weaken (hit reactions in Step 5).
+So the resolver writes each body's `gravity_scale` every tick as
+`RagdollTuning.gravity_scale × (1 − strength / base_strength)`: no gravity at full
+strength (the springs hold the pose), the tuning's full `gravity_scale` (default 1.0 =
+real gravity) when limp, and proportionally in between as hit reactions weaken the
+springs. Pre-0.4.1 a hidden 0.5 multiplier in the resolver replaced the tuning value
+here, so a corpse fell at half gravity and `RagdollTuning.gravity_scale` was dead — that
+multiplier no longer exists. This is also why the body never has to hold itself up under
+the current muscle layer (audit §3.1); the planned motor muscles keep gravity at 1.0
+always.
 
 ### Position pins needed on hips + feet
 Hips pin anchors the character from above, feet pins anchor from below. Without
@@ -178,9 +197,11 @@ bodies prevent drift without making the character robotic.
 ### Damping must scale with spring strength
 Static damping (3.0) kills hit reactions even when spring strength is reduced.
 Scale all physics properties by strength ratio `(strength / base_strength)`:
-- `angular_damp`: 0.2 (hit) → 3.0 (full)
-- `linear_damp`: 0.2 (hit) → 2.0 (full)
-- `gravity_scale`: 0.5 (hit) → 0.0 (full)
+- `angular_damp`: `spring_angular_damp_base + spring_angular_damp_scale × ratio`
+- `linear_damp`: `spring_linear_damp_base + spring_linear_damp_scale × ratio`
+- `gravity_scale`: `RagdollTuning.gravity_scale × (1 − ratio)` — real gravity (1.0)
+  when limp, none at full strength (the old "0.5 (hit) → 0.0 (full)" was the
+  half-gravity bug, fixed in 0.4.1)
 - `position_pin`: base × ratio
 
 This creates a unified system where hitting a bone weakens everything — springs,

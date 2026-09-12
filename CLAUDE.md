@@ -25,11 +25,15 @@ kickback/
 │   ├── EUPHORIA_COMPARISON.md       # Feature-gap analysis vs Euphoria (honest scorecard)
 │   ├── ROADMAP.md                   # Difficulty-weighted parity scorecard + milestones
 │   ├── VERSIONING.md                # What the version numbers mean
+│   ├── SELF_PRESERVATION.md         # 0.4.0 directed stumble + arm bracing (scripted root displacement — see audit)
+│   ├── AUDIT_2026-09-12.md          # Full audit: verdict, defects, docs drift, phase plan (do not edit)
+│   ├── MUSCLE_SPIKE.md              # Phase-2 muscle spike results + the 0.5.0 decision (velocity motors)
 │   └── SKELETON_MODIFIER_MIGRATION.md  # PhysicsRigSync → SkeletonModifier3D record
 ├── addons/
 │   └── kickback/                    # The plugin (distributable)
 │       ├── plugin.cfg
 │       ├── kickback_plugin.gd       # Editor tool: "Add Kickback to Selected"
+│       ├── kickback_setup.gd        # Runtime setup helper: KickbackSetup.add_active_rig / find_skeleton / child_path_to
 │       ├── kickback_character.gd    # Coordinator (detects mode, routes hits)
 │       ├── kickback_manager.gd      # Global budget manager
 │       ├── kickback_raycast.gd      # Hit detection utility (one-liner)
@@ -46,8 +50,7 @@ kickback/
 │       ├── editor/                  # Editor-only tooling
 │       │   ├── kickback_inspector_plugin.gd
 │       │   ├── kickback_status_panel.gd
-│       │   ├── rig_baker.gd         # Bake persistent RigidBody3D + Joint nodes to scene
-│       │   └── strip_root_motion.gd # Tool to strip root motion from animations
+│       │   └── rig_baker.gd         # Bake persistent RigidBody3D + Joint nodes to scene
 │       ├── icons/                   # Scene tree icons (SVG)
 │       ├── presets/                  # Starter ImpactProfile .tres files
 │       │   ├── bullet.tres, shotgun.tres, explosion.tres, melee.tres, arrow.tres
@@ -59,6 +62,9 @@ kickback/
 │           ├── joint_definition.gd
 │           └── intermediate_bone_entry.gd
 ├── demo/                            # Demo scenes (not part of plugin) — 8 scenes
+│   ├── strip_root_motion.gd         # DEMO-ONLY EditorScript: strips root motion from the ybot clips
+│   ├── orbit_camera.gd              # DEMO-ONLY: shared RMB-orbit / scroll-zoom camera rig
+│   ├── demo_helpers.gd              # DEMO-ONLY: runtime rig assembly (wires rig_sync_path), weapon picker, HUD log
 │   ├── partial_ragdoll_controller.gd # DEMO-ONLY: Godot PhysicalBoneSimulator3D ragdoll (the "built-in" side)
 │   ├── hit_event.gd                 # DEMO-ONLY: hit data for partial_ragdoll_controller
 │   ├── demo.tscn/gd                 # Kickback active ragdoll vs Godot's built-in PhysicalBoneSimulator3D
@@ -72,7 +78,10 @@ kickback/
 ├── assets/                          # Demo character (not part of plugin)
 │   ├── characters/ybot/
 │   └── animations/ybot/             # 21 animations (idle, walk, run, flinch, get-up, react, injured, kip-up)
-└── project.godot
+├── test/                            # GUT suite, run headless in CI (helpers/rig_harness.gd drives the real classes)
+├── tools/
+│   └── spike/motor_spike.gd         # Standalone headless muscle spike (audit §8): 6DOF-motor muscle A/B vs SpringResolver — results in docs/MUSCLE_SPIKE.md
+└── project.godot                    # Names 3D physics layers 1-5 (Environment, Projectiles, Characters, Active Ragdoll, Godot Ragdoll)
 ```
 
 ## Architecture
@@ -81,7 +90,7 @@ kickback/
 - **Physics controllers emit signals, don't play animations.** Animation handling is the user's responsibility. Connect to `stagger_started`, `recovery_started`, `recovery_finished`, `hit_absorbed`, `balance_changed`, `fatigue_changed`, `recovery_interrupted`, `pain_changed`, `threat_anticipated`, `region_injured` signals.
 - **Animation-agnostic.** The physics core reads `Skeleton3D.get_bone_pose()` — works with AnimationPlayer, AnimationTree, or custom animation systems.
 - **All configuration via Resources.** `RagdollProfile` (skeleton mapping) and `RagdollTuning` (physics feel) are assignable on `KickbackCharacter`. Null = auto-detected Mixamo defaults.
-- **Always-simulated rig.** Physics bodies never freeze. Springs are always active, driving bodies toward animation poses. Hit reactions reduce spring strength, letting physics take over temporarily.
+- **Always-simulated rig.** Physics bodies never freeze. Springs are always active, driving bodies toward animation poses. Hit reactions reduce spring strength, letting physics take over temporarily. Gravity follows strength: each body's `gravity_scale` is `RagdollTuning.gravity_scale` (default 1.0) × (1 − strength ratio) — none at full strength (the springs hold the pose), real gravity when limp. There is no separate gravity multiplier any more (pre-0.4.1 a hidden 0.5 halved it).
 
 ### Active Ragdoll
 - `PhysicsRigBuilder` creates 16 RigidBody3D + 15 Generic6DOFJoint3D
@@ -101,7 +110,8 @@ kickback/
 - **Velocity-based springs**, not torque PD controllers
 - **Jolt physics required** — GodotPhysics cannot handle ragdoll joints
 - **Animation stays active during ragdoll** — provides target poses for springs
-- **Root motion stripping** — XZ position of root bone is zeroed by SpringResolver to prevent drift from Mixamo animations with root motion
+- **Root motion stripping** — XZ of the root-motion bone's local pose is zeroed inside `SpringResolver.get_animation_bone_global`, so the root body, every descendant, and every other consumer of the animation target (foot/arm IK, the get-up blend) see the same root-motion-free pose — prevents drift from Mixamo animations with root motion
+- **Honest status** — the muscle layer is a velocity-overwrite tracker (not bounded torques) and the 0.4.0 directed stumble is a scripted root displacement; see `docs/AUDIT_2026-09-12.md` for what is real, what is nominal, and the phase plan (muscle spike → motor muscle layer → balance/behaviors → arbiter)
 
 ## Conventions
 - All scripts use `class_name` registration with `@icon()` annotations
@@ -110,7 +120,8 @@ kickback/
 - `SkeletonDetector.detect_humanoid_bones()` for auto-mapping any humanoid skeleton
 - `KickbackRaycast.shoot_from_camera()` for one-line hit detection
 - Collision: layer 4 (active ragdoll bodies); layer 5 (Godot built-in ragdoll, comparison demo only)
-- Setup tool adds the active-ragdoll node set ("Add Kickback to Selected")
+- Setup tool adds the active-ragdoll node set ("Add Kickback to Selected"); the assembly is `KickbackSetup.add_active_rig(root, skeleton, profile, tuning, scene_owner)` (static, editor-free — runtime spawners use the same call; paths are derived with `get_path_to`, so the Skeleton3D may sit at any depth, e.g. `Root/Model/Skeleton3D`)
+- `KickbackCharacter.refresh_tuning()` after mutating a `RagdollTuning` at runtime; `get_setup_warnings()` for the validation list (includes `validate_against_skeleton`)
 
 ## character_root_path architecture
 - `character_root_path` on KickbackCharacter and ActiveRagdollController must point to the gameplay root (the node that represents the character's world position)

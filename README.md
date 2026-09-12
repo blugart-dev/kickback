@@ -43,10 +43,12 @@ but the *active self-preservation* behaviors that define
 [Euphoria](docs/EUPHORIA_COMPARISON.md) (stumble-stepping, arm/wall bracing, grabbing,
 procedural poses) are still ahead.
 
-By difficulty-weighted progress toward that goal, the project is at **~30%** — which is
-exactly what the version `0.3.x` is meant to convey. `1.0.0` is reserved for full
-Euphoria parity. See **[ROADMAP.md](docs/ROADMAP.md)** for the scorecard and milestones,
-and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
+By difficulty-weighted progress toward that goal, the project is at **~20–25%**. The
+2026-09 **[audit](docs/AUDIT_2026-09-12.md)** revised the earlier ~30% figure: the 0.4.0
+"directed stumble" is a scripted root displacement with foot-IK step targets, not
+balance-driven stepping, so it earns nothing on the self-preservation row. `1.0.0` is
+reserved for full Euphoria parity. See **[ROADMAP.md](docs/ROADMAP.md)** for the scorecard
+and milestones, and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 
 > Today it works well as a hit-reaction system for humanoid (Mixamo-style) rigs.
 > General multi-rig robustness and the self-preservation layer are on the roadmap.
@@ -55,7 +57,7 @@ and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 
 - **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.
 - **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
-- **Balance tracking** — center of mass vs foot support polygon drives stagger behavior. Characters that lean too far ragdoll; balanced characters recover early. Physics-informed, not timer-based.
+- **Balance tracking** — mass-weighted center of mass vs the midpoint and half-spread of the feet drives stagger behavior. Characters that lean too far ragdoll; balanced characters recover early. A static estimate (no extrapolated CoM or contact support polygon yet — see the [audit](docs/AUDIT_2026-09-12.md) §3.3), but physics-informed rather than timer-based.
 - **Momentum transfer** — running characters carry their velocity into ragdoll, tumbling forward instead of dropping in place.
 - **Fatigue** — repeated hits degrade effective spring strength over time. Fatigued characters wobble more at baseline and recover to lower maxes. Decays slowly between engagements.
 - **Hit stacking** — rapid consecutive hits escalate via streak multiplier. Hits during recovery can interrupt get-up and re-ragdoll the character.
@@ -71,8 +73,9 @@ and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 
   <img src="https://github.com/user-attachments/assets/55dddf2f-7df1-4c52-8e48-ef6077061cec" alt="Protected vs unprotected bones — same hit, different result" width="640">
-- **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay.
-- **Skeleton auto-detection** — `SkeletonDetector` identifies humanoid bones in Mixamo, Rigify, Unreal Mannequin, and custom skeletons.
+- **Directed stumble + arm bracing (0.4.0)** — a staggering hit shoves the character along the hit direction with foot-IK catch steps, windmilling arms, and a reach-for-ground on a committed fall. Plainly: the stumble is a *scripted root displacement* (`ActiveRagdollController._update_directed_stumble` moves the character root), not balance-driven stepping — see [SELF_PRESERVATION.md](docs/SELF_PRESERVATION.md) and the [audit](docs/AUDIT_2026-09-12.md) §3.2, which recommends replacing it.
+- **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay. Gravity scales with spring strength: `RagdollTuning.gravity_scale` (default 1.0) × (1 − strength), so a limp ragdoll falls at real gravity.
+- **Skeleton auto-detection** — `SkeletonDetector` maps humanoid bones by name tokens plus position in the bone hierarchy. Verified in the test suite against Mixamo (`mixamorig:` / `mixamorig_`), Blender Rigify DEF bones, the Unreal Engine 5 Mannequin, generic `Hips/Spine/Chest/Neck/Head` rigs, and single-spine-bone rigs (no Chest: the head and arm joints re-parent to the nearest torso body). Anything else: author a `RagdollProfile`.
 - **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. Controllers emit signals; animation is the user's responsibility.
 - **Configurable everything** — skeleton mapping (`RagdollProfile`), physics tuning (`RagdollTuning`), impact parameters (`ImpactProfile`) — all via Resources with sensible defaults.
 - **Hit detection utility** — `KickbackRaycast.shoot_from_camera()` handles raycast + routing in one line.
@@ -197,11 +200,15 @@ Run any scene from `demo/` to see the plugin in action:
 
 | Layer | Purpose | Used by |
 |-------|---------|---------|
-| 2 | Environment | StaticBody3D (floors, walls) |
+| 1 | Environment (Godot's default layer) | StaticBody3D (floors, walls); foot-IK and recovery ground rays |
+| 2 | Projectiles / raycasts | Demo ball-throw |
+| 3 | Characters | CharacterBody3D controllers |
 | 4 | Active ragdoll bodies | PhysicsRigBuilder |
 | 5 | Godot built-in ragdoll bones (comparison demo only) | PhysicalBoneSimulator3D |
 
-Use `KickbackRaycast` which targets the active-ragdoll layer (4) automatically.
+Layer names are set in `project.godot`; the constants live in `KickbackLayers`. Ragdoll
+bodies default to mask 15 (layers 1–4). Use `KickbackRaycast`, which targets the
+active-ragdoll layer (4) automatically.
 
 ## Debug Tools
 

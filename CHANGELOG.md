@@ -8,6 +8,125 @@
 
 ## [Unreleased]
 
+### Audit honesty pass — 0.4.1 candidate (branch `audit/honesty-pass`)
+
+Defect + docs pass driven by [docs/AUDIT_2026-09-12.md](docs/AUDIT_2026-09-12.md)
+(§4 defects, §7 docs drift, §8 order of work, step 1). No new behaviour: what the docs
+and the numbers claim is now what the code does.
+
+**Fixed**
+- **Limp ragdoll fell at half gravity** — `SpringResolver` wrote
+  `gravity_scale = (1 - ratio) * spring_gravity_multiplier` (0.5) every tick, so a fully
+  limp bone got 0.5 g and `RagdollTuning.gravity_scale` was overwritten on the first
+  tick (a dead knob). `spring_gravity_multiplier` is gone; the resolver scales
+  `RagdollTuning.gravity_scale` (default now 1.0, was 0.8) by `1 - strength ratio`:
+  full strength = no gravity (the springs hold the pose), limp = real gravity.
+- **Root-motion stripping covers descendants** — the root-motion bone's XZ zeroing moved
+  from the root body's own target into `SpringResolver.get_animation_bone_global`, so
+  every consumer of an animation target (springs, foot/arm IK, the get-up blend) and
+  every child bone sees the same root-motion-free pose. Before, children's targets
+  stayed displaced by the clip's root motion, and the override path skipped the strip
+  whenever the pelvis drop was active.
+- **`set_persistent(true)` / `set_persistent_guided()` emit a single
+  `state_changed(PERSISTENT)`** — `_full_ragdoll()` takes the target state; no transient
+  `state_changed(RAGDOLL)` + `ragdoll_started` before the PERSISTENT announcement.
+- **Physics time, not the wall clock** — hit streaks (`rapid_fire_window`) and
+  `PhysicsCollisionMonitor` cooldowns accumulate `_physics_process` delta instead of
+  `Time.get_ticks_msec()`; pausing and `Engine.time_scale` no longer stretch or shrink
+  the windows.
+- **Face-up detection honours `character_forward_sign`** — new static
+  `ActiveRagdollController.is_face_up(chest_basis, forward_sign)`; −Z-facing models no
+  longer pick the wrong get-up orientation.
+- **IK overrides consumed the same tick** — the controller sets
+  `process_physics_priority = -1`, so its strength writes and foot/arm IK target
+  overrides are read by the SpringResolver in the same physics tick (previously one
+  tick later).
+- **IK** — an unreachable target is clamped onto the chain's reach band instead of
+  dropping the override (the arm popped back to its animation pose every windmill
+  cycle; an over-stretched pinned foot detached from the shin): `TwoBoneIK.solve`
+  returns an extra `end` key (the clamped end-effector position) that callers place
+  the foot / hand at. The bend plane blends toward the fallback axis below
+  `COLINEAR_HINT_SIN`, so a near-straight idle knee cannot flip frame to frame; the
+  fallback knee / elbow axis honours `character_forward_sign`; segment lengths are
+  measured per side (`ArmIKSolver.get_reach(side)`); the foot slope correction goes
+  through the hardened `TwoBoneIK.swing` (a zero or downward ground normal no longer
+  yields NaN); turning `foot_ik_enabled` off at runtime restores the foot bodies'
+  collision masks.
+- **SkeletonDetector rewritten hierarchy-aware** — bone names are tokenised
+  (separators, camelCase, digits dropped, `mixamorig` / `DEF-` namespaces stripped) and
+  matched as whole words, so side detection is token-anchored (`spine_lower` is not a
+  left bone, UE's `ik_foot_l` is not a foot); the torso is classified by position on
+  the head→hips chain (Spine = the bone above the hips, Chest = the chain bone the
+  upper arms hang from, everything between = intermediate). Verified rig families:
+  Mixamo (colon and underscore), Blender Rigify DEF bones (`DEF-spine` / `.003` /
+  `.006` resolve as Hips / Chest / Head, split limb segments become intermediates),
+  the UE5 Mannequin (`spine_02` no longer lands above `spine_03`; IK / twist /
+  corrective bones ignored), generic camelCase / underscore rigs, and single-spine
+  rigs — `default_joints_for` re-parents a joint whose parent body is absent (no
+  Chest) to the nearest present torso body instead of leaving the head and arms
+  unjointed.
+- **`KickbackCharacter`** — `refresh_tuning()` is the public way to re-cache what the
+  controllers copy out of the RagdollTuning at configure time (call it after mutating
+  the resource at runtime); the dead `tuning.changed` hookup is removed (nothing ever
+  emitted it); `get_setup_warnings()` returns the validation list, which now includes
+  `RagdollProfile.validate_against_skeleton()` against the real skeleton (a mis-mapped
+  rig used to run silently with fewer bodies).
+- **Setup tool** — searches for the Skeleton3D recursively (the project's own
+  `Root/Model/Skeleton3D` layout) and derives every NodePath with `get_path_to`, so the
+  generated paths are correct at any depth; duplicate detection checks `is
+  KickbackCharacter` rather than a node name. The assembly is the static
+  `KickbackSetup.add_active_rig(root, skeleton, profile, tuning, scene_owner)` with
+  `KickbackSetup.find_skeleton(root)` and `KickbackSetup.child_path_to(root, target)`
+  (`addons/kickback/kickback_setup.gd`, runtime, editor-free) — the node assembly every
+  runtime spawner needed no longer lives only in `demo/demo_helpers.gd`.
+- **Rig builder / baker** — `PhysicsRigBuilder.build_body()` and `apply_body_tuning()`
+  are static and shared with `RigBaker` (one body construction; the shape offset
+  honours `BoneDefinition.shape_offset` instead of hard-coded 0.65 / 0.5); an adopted
+  baked rig re-applies the current tuning's layer / mask / gravity / damping /
+  `top_level` and the profile's joint limits (scaled by `joint_limit_scale`) instead of
+  keeping bake-time values; a re-bake is one undo action (undo restores the previous
+  bake).
+- **Debug HUD** — targets are re-discovered when a KickbackCharacter enters or leaves
+  the tree and validated (`is_instance_valid`, in tree, not queued for deletion) before
+  every draw; freeing a character with F3 open no longer errors every frame.
+- **Status panel** — the Tuning Presets dropdown is derived from `RagdollTuning`'s
+  zero-argument static `create_*` factories (all seven), not a hand-kept list of five;
+  node-path checks verify the node's class, not just its existence.
+
+**Removed**
+- Dead `RagdollTuning` exports `stumble_step_threshold`, `stumble_step_reach_max`,
+  `stumble_step_cooldown` (exported, never read) and `spring_gravity_multiplier` (see
+  Fixed). `stumble_enabled`'s doc now says what the stumble is: a scripted root
+  displacement, not balance-driven stepping.
+- `test/test_hit_event.gd` (tested a demo-only class).
+- Global `class_name`s `HitEvent` and `PartialRagdollController` — both are demo-only
+  (`demo/hit_event.gd`, `demo/partial_ragdoll_controller.gd`); the demos preload them.
+- `addons/kickback/editor/strip_root_motion.gd` moved to `demo/strip_root_motion.gd`
+  (hard-coded ybot asset paths do not belong in the plugin).
+
+**Demos**
+- The demos' runtime assembly (`demo/demo_helpers.gd`) wires
+  `ActiveRagdollController.rig_sync_path`, so the get-up teleport no longer renders a
+  frame of pre-teleport bone poses (INTEGRATION.md said so; the demos ignored it).
+- Shared `demo/orbit_camera.gd` (RMB orbit + scroll zoom) replaces per-scene copies;
+  weapon picker / HUD-log plumbing consolidated in `demo/demo_helpers.gd`.
+- `project.godot` names the 3D physics layers (1 Environment, 2 Projectiles,
+  3 Characters, 4 Active Ragdoll, 5 Godot Ragdoll).
+
+**Added**
+- `docs/AUDIT_2026-09-12.md` — the full audit: verdict, architecture findings, defect
+  table, docs drift, and the phase plan ROADMAP.md now follows.
+- `tools/spike/motor_spike.gd` — standalone headless spike for the phase-2 muscle
+  decision (`godot --headless --path . -s tools/spike/motor_spike.gd`): calibrates the
+  6DOF angular-motor axis mapping under Jolt, then A/Bs the velocity-overwrite resolver
+  against velocity-motor, position-spring and script-PD muscles on hold / track / hit
+  at 30/60/120 Hz. Not part of the plugin.
+- `docs/MUSCLE_SPIKE.md` — the spike's results and the 0.5.0 decision: velocity-mode
+  motors are the muscle substrate; position springs and script PD are rejected on data;
+  the resolver is evolved, not replaced.
+- Tests: `test_plugin_setup.gd`, `test_rig_baker.gd`, `test_spring_resolver.gd`, plus
+  regressions for the items above in the existing suites.
+
 ### Added
 - **Rig fidelity pass (tracking)** — measured on a 16-body auto-detected rig in a real
   game: a spring-driven idle sat 5-15 deg off its animation and wobbled, and the Jolt
