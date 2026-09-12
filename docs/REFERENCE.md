@@ -104,9 +104,10 @@ frames" below):
 
 ## Muscle layer — JOINT_MOTOR mode (0.5.0)
 
-`RagdollTuning.muscle_mode = MuscleMode.JOINT_MOTOR` swaps the velocity overwrite above
-for **torque-bounded joint motors** while keeping the same command. The legacy mode is
-untouched (bit-identical, still the default until the visual gate passes).
+`RagdollTuning.muscle_mode = MuscleMode.JOINT_MOTOR` (**the default since 0.5.0**) swaps
+the velocity overwrite above for **torque-bounded joint motors** while keeping the same
+command. `VELOCITY_OVERWRITE` is the untouched 0.4.x path (bit-identical), kept for
+comparison and for projects that depend on its exact tracking.
 
 **Per jointed body, every physics tick** (`SpringResolver._drive_joint_motor`):
 
@@ -121,14 +122,24 @@ err   = axis_angle(R_tgt * R_rel^-1)       # rotation vector, frame A, settle de
 ff    = axis_angle(R_tgt * R_tgt_prev^-1) / dt * spring_feed_forward
 w     = clamp(err * muscle_gain / dt + ff, muscle_max_angular_velocity)
 motor.target = -( w.x, (R_rel^-1 * w).y, (R_rel^-1 * w).z )   # see "frames" below
-motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * (strength / base_strength)
+motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio ^ muscle_strength_curve
+                    where ratio = strength / base_strength (root: muscle_root_torque * hold(ratio))
 ```
 
-- **Strength is a torque.** `strength / base_strength` scales the motor force limit;
-  a limp bone (strength ≈ 0) gets a zero limit and the motor lets go. Hit reductions,
-  fatigue, injury and the recovery ramp all still work through strength, now as torque
-  modulation. `strength_map` / `default_spring_strength` no longer set stiffness in this
+- **Strength is a torque.** The strength ratio maps to the motor force limit through
+  `muscle_strength_curve` (default 0.5, i.e. √ratio): the hit / stagger / fatigue
+  reductions were tuned as blend fractions, and as raw torque fractions the 10 % stagger
+  floor collapsed the character into a ragdoll; √ turns it into 32 % torque — visibly
+  weak, still standing. Limp (ratio 0) is still zero torque and full strength is still
+  full torque. `strength_map` / `default_spring_strength` no longer set stiffness in this
   mode — the ratio is what matters.
+- **The root is balance, not muscle.** Its world-joint motor (`muscle_root_torque`) and
+  its position pin (`muscle_root_pin`) stay at full authority while the bone has any real
+  strength (`_root_hold_factor`: full above 5 % ratio, fading to zero below), so a
+  staggered or hit character stays up while its limbs go weak; it releases only when
+  limp. Without this the legacy world-orientation springs' implicit "cannot topple"
+  behaviour was lost and a stagger fell straight over. The balance layer (0.6.0)
+  replaces this with a real controller.
 - **Gravity stays on** for every jointed body (`gravity_scale`, not scaled by strength);
   damping is `muscle_angular_damp` / `muscle_linear_damp`.
 - **Frames.** Two engine facts measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`,
@@ -158,9 +169,9 @@ foot IK on, 2026-09-13):
 | Mode | Hz | IDLE mean / max | REACT mean | HIT peak / recover | resolver ms/tick |
 |---|---:|---|---:|---|---|
 | legacy | 60 | 0.78 / 1.65 | 10.1 | 1.3° / 4 ticks | 0.17 |
-| **JOINT_MOTOR** | 60 | **0.80 / 3.42** | 16.3 | **6.3° / 4 ticks** | 0.19–0.43 (noisy) |
+| **JOINT_MOTOR** | 60 | **0.78 / 3.29** | 16.3 | **6.4° / 4 ticks** | 0.19 (≈1.4× legacy) |
 | legacy | 120 | 0.86 / 1.40 | 13.1 | 1.2° / 4 | 0.25 |
-| JOINT_MOTOR | 120 | 0.71 / 2.28 | 11.6 | 6.2° / 4 | 0.46 |
+| JOINT_MOTOR | 120 | 0.73 / 2.50 | 11.6 | 2.1° / 4 | 0.18 |
 | legacy | 30 | 1.06 / 7.17 | 10.0 | 1.7° / 4 | 0.15 |
 | JOINT_MOTOR, feet off (default) | 30 | 15.0 / 41.8 (rings) | 39.9 | never | 0.19 |
 | JOINT_MOTOR, feet colliding | 30 | 3.64 / 19.4 | 40.4 | never (joint wraps) | 0.18 |
@@ -173,7 +184,7 @@ gives a real hit reaction (4.8× the legacy deflection, muscle recovery in 4 tic
 `foot_ik_disable_foot_collision = false` (feet load-bearing) brings idle to 3.6°, and the
 hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
 tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
-noisy on Windows; the motor path is roughly 1.5–2.5× the legacy path.
+noisy on Windows; a quiet run puts the motor path at ≈1.4× the legacy path.
 
 ## Center of mass balance ratio
 

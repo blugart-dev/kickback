@@ -10,8 +10,16 @@
 
 ### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
 
+**Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and
+every preset now drive the rig through the joint motors; set
+`muscle_mode = VELOCITY_OVERWRITE` for the 0.4.x behaviour. Two consequences were tuned
+on the way: `muscle_strength_curve` (default 0.5) maps the strength ratio to torque as
+√ratio so the 10 % stagger floor is 32 % torque instead of a collapse, and the root's
+world motor + pin hold at full authority until the bone is limp (they stand in for
+balance; a strength-scaled root let a staggered character topple within 0.3 s).
+
 **Added**
-- `RagdollTuning.muscle_mode` (`MuscleMode.VELOCITY_OVERWRITE` default / `JOINT_MOTOR`):
+- `RagdollTuning.muscle_mode` (`MuscleMode.JOINT_MOTOR` default / `VELOCITY_OVERWRITE`):
   in JOINT_MOTOR the SpringResolver executes its command — joint-space rotation error ×
   `muscle_gain` per tick + feed-forward — through each `Generic6DOFJoint3D` angular
   motor (Jolt, velocity mode) with `force limit = BoneDefinition.muscle_torque × strength
@@ -20,8 +28,8 @@
   pelvis is attached to the world by a limit-free joint (`<Root>_world_motor`) whose motor
   drives its orientation (`muscle_root_torque`), with the legacy position pin scaled by
   `muscle_root_pin`. New knobs: `muscle_strength_scale`, `muscle_gain`,
-  `muscle_max_angular_velocity`, `muscle_root_pin`, `muscle_root_torque`,
-  `muscle_angular_damp`, `muscle_linear_damp`.
+  `muscle_max_angular_velocity`, `muscle_strength_curve`, `muscle_root_pin`,
+  `muscle_root_torque`, `muscle_angular_damp`, `muscle_linear_damp`.
 - `BoneDefinition.muscle_torque` (N·m) with `SkeletonDetector.MUSCLE_TORQUE_TABLE`
   defaults (hip 200, knee 150, spine 150, shoulder 60, elbow 40, neck 30, wrist 10,
   ankle 60); set by `create_profile_from_skeleton` and `create_mixamo_default`.
@@ -29,7 +37,8 @@
   `get_last_tick_usec()`.
 - `tools/bench/ybot_bench.gd` — the acceptance bench on the real demo character (idle /
   react_front / bullet on the hand, both modes, `BENCH_HZ`, `BENCH_DIAG`, `BENCH_VARIANT`).
-- `test/test_muscle_layer.gd` (16 tests: wiring, force-limit scaling, limp = zero limit,
+- `test/test_muscle_layer.gd` (19 tests: wiring, force-limit scaling, limp = zero limit,
+  a motor pushing into a joint limit yields a bounded amount, a stagger stays standing,
   gravity on, axis sign end to end on identity and anatomical frames, root yaw, hold under
   gravity, an under-powered shoulder sags, hit deflects and recovers, 30 / 120 Hz holds,
   ragdoll + recovery in motor mode, runtime mode switch).
@@ -39,10 +48,10 @@
 swing about the child frame's Y/Z. Commanding in a single frame leaves every joint of a
 real idle 2–4° short.
 
-**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.80° mean / 3.42° max
-under real gravity (legacy 0.78 / 1.65); react_front 16.3° (legacy 10.1, torque-limited
-by design); bullet on the hand 6.3° peak, muscle recovery in 4 ticks (legacy erases it:
-1.3°). 120 Hz beats legacy on every number. **30 Hz is an open item** (rings with the
+**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.78° mean / 3.29° max
+under real gravity (legacy 0.82 / 1.53); react_front 16.3° (legacy 10.1, torque-limited
+by design); bullet on the hand 6.4° peak, muscle recovery in 4 ticks (legacy erases it:
+1.3°); resolver tick ≈1.4× legacy. 120 Hz beats legacy on idle and react. **30 Hz is an open item** (rings with the
 foot-IK default of non-colliding feet; 3.6° idle with `foot_ik_disable_foot_collision =
 false`; hand-hit recovery wraps a wrist limit).
 

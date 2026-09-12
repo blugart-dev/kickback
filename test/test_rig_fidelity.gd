@@ -11,6 +11,9 @@ const RigHarness := preload("res://test/helpers/rig_harness.gd")
 
 func _tuning(legacy: bool = false) -> RagdollTuning:
 	var t := RagdollTuning.create_default()
+	# These tests characterise the VELOCITY_OVERWRITE resolver (chain consistency,
+	# feed-forward, anchor mismatch); the shipped default is JOINT_MOTOR since 0.5.0.
+	t.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	t.foot_ik_enabled = false
 	if legacy:
 		t.self_collision = true

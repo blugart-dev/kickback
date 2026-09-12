@@ -1,7 +1,7 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://cparw50pp20yj"]
 
-[ext_resource type="Script" path="res://demo/shooting_range.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
+[ext_resource type="Script" uid="uid://dfwcfsir1ykju" path="res://demo/shooting_range.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://b3cjr7oemuta1" path="res://assets/characters/ybot/ybot.tscn" id="2_ybot"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_1"]
 size = Vector2(30, 30)
@@ -15,43 +15,131 @@ albedo_color = Color(0.3, 0.32, 0.35, 1)
 radius = 0.3
 height = 1.8
 
-[node name="ShootingRange" type="Node3D"]
+[node name="ShootingRange" type="Node3D" unique_id=1610305737]
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1630255539]
 transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
 shadow_enabled = true
 
-[node name="Ground" type="StaticBody3D" parent="."]
-collision_layer = 1
+[node name="Ground" type="StaticBody3D" parent="." unique_id=347612773]
 collision_mask = 0
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=852877961]
 mesh = SubResource("PlaneMesh_1")
 surface_material_override/0 = SubResource("Material_1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=1735128629]
 shape = SubResource("WorldBoundary_1")
 
-[node name="Player" type="CharacterBody3D" parent="."]
+[node name="Player" type="CharacterBody3D" parent="." unique_id=2094111840]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 8)
 collision_layer = 3
-collision_mask = 1
 script = ExtResource("1_script")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1389508541]
 shape = SubResource("CapsuleShape_1")
 
-[node name="Camera3D" type="Camera3D" parent="Player"]
+[node name="Camera3D" type="Camera3D" parent="Player" unique_id=424270205]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 
-[node name="Targets" type="Node3D" parent="."]
+[node name="Targets" type="Node3D" parent="." unique_id=1261776335]
 
-[node name="Target1" type="Node3D" parent="Targets"]
+[node name="Target1" type="Node3D" parent="Targets" unique_id=119599197]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0, 0)
 
-[node name="ybot" parent="Targets/Target1" instance=ExtResource("2_ybot")]
+[node name="ybot" parent="Targets/Target1" unique_id=876867513 instance=ExtResource("2_ybot")]
 
-[node name="Label" type="Label3D" parent="Targets/Target1"]
+[node name="Physical Bone mixamorig_Hips" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="0" unique_id=517681688]
+transform = Transform3D(0.46741298, -0.8836902, -0.024836818, 0.030248912, 0.044065278, -0.9985707, 0.88352144, 0.46599358, 0.047327347, 0.014071465, 0.95374715, -0.009275093)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.0524405e-06, -1.20149925e-05, 0.050000466)
+body_offset = Transform3D(0.99999976, -0.0006952286, -8.5983425e-05, 0, 0.12274632, -0.99243826, 0.0007005334, 0.99243796, 0.12274629, 2.3841858e-07, 0.049623847, -0.00612545)
+
+[node name="Physical Bone mixamorig_Spine" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="1" unique_id=100363200]
+transform = Transform3D(0.4850286, -0.85754037, 0.17138216, -0.04213353, -0.2186657, -0.9748898, 0.87348276, 0.4656285, -0.14219032, 0.0052723885, 1.0608509, -0.003301248)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.532373e-07, -4.729038e-07, 0.058658354)
+body_offset = Transform3D(1, 2.9802322e-08, -7.450581e-09, -1.4901161e-08, -5.2154064e-08, -1.0000001, -2.9802322e-08, 1.0000001, -6.7055225e-08, 9.536743e-07, 0.05865836, 4.7683716e-07)
+
+[node name="Physical Bone mixamorig_Spine1" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="2" unique_id=1593913838]
+transform = Transform3D(0.5097265, -0.82767236, 0.23481336, -0.08191035, -0.31837937, -0.94441795, 0.85642844, 0.4621612, -0.23008132, -0.020582676, 1.1815948, 0.020523846)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.4355254e-06, -4.7683716e-07, 0.06729627)
+body_offset = Transform3D(1, 1.1920929e-07, 7.4505806e-08, 8.940697e-08, 7.450581e-09, -1, -2.9802322e-08, 1.0000001, 0, 1.4305115e-06, 0.06729627, 4.7683716e-07)
+
+[node name="Physical Bone mixamorig_Spine2" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="3" unique_id=854765496]
+transform = Transform3D(-0.53818774, 0.7278056, 0.425033, 0.11834128, 0.5645544, -0.81686825, -0.83447546, -0.38932952, -0.38996565, -0.068376064, 1.3066306, 0.0653567)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.024724e-07, 6.3795596e-07, 0.075267896)
+body_offset = Transform3D(-1.0000001, -2.8967857e-05, -1.66893e-06, 2.9802322e-08, 0.058319762, -0.9982981, 2.9027462e-05, -0.99829817, -0.058319718, -4.7683716e-07, 0.07513976, 0.0043902397)
+
+[node name="Physical Bone mixamorig_Neck" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="4" unique_id=1699876439]
+transform = Transform3D(-0.5354974, 0.6155065, 0.57826847, 0.047452323, 0.7055636, -0.70705616, -0.84320277, -0.35118657, -0.4070346, -0.13156843, 1.4062567, 0.11664803)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9011233e-05, -2.286397e-06, 0.05394329)
+body_offset = Transform3D(-0.99999726, -0.0023018718, 2.3156404e-05, -0.00069248676, 0.29124206, -0.95664936, 0.002195239, -0.956647, -0.29124278, -2.026558e-05, 0.051605463, 0.015708447)
+
+[node name="Physical Bone mixamorig_Head" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="5" unique_id=1907428119]
+transform = Transform3D(-0.9899445, -0.00051510695, 0.14145567, -0.12683484, 0.44600138, -0.8859998, -0.062633045, -0.8950321, -0.44158193, -0.17664146, 1.5313603, 0.18196641)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.7473163e-07, -1.4659017e-06, 0.09814725)
+body_offset = Transform3D(-1.0000001, -2.1748245e-05, -7.89389e-06, 3.0733645e-08, 0.33806637, -0.9411225, 2.3346394e-05, -0.9411224, -0.33806628, 0, 0.09236908, 0.033178896)
+
+[node name="Physical Bone mixamorig_LeftArm" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="6" unique_id=176142806]
+transform = Transform3D(0.44380337, -0.70253366, -0.5563138, 0.07432854, -0.589802, 0.8041199, -0.8930363, -0.39822114, -0.2095378, 0.12533236, 1.1723869, 0.23707214)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.711614e-08, 9.822596e-07, 0.13702346)
+body_offset = Transform3D(0.9999999, 4.4703484e-07, -1.1771917e-06, -9.834766e-07, 5.9604645e-08, -0.99999994, -3.2782555e-07, 1, -2.0861626e-07, 2.3841858e-07, 0.13702345, -9.536743e-07)
+
+[node name="Physical Bone mixamorig_LeftForeArm" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="7" unique_id=1147304356]
+transform = Transform3D(0.71294296, -0.6987821, -0.058447096, -0.5323631, -0.59362787, 0.6034862, -0.45640114, -0.39913607, -0.7952285, 0.20963001, 0.9788779, 0.37558234)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.056411e-07, -4.5214782e-07, 0.13807233)
+body_offset = Transform3D(1.0000002, 2.0861626e-07, 2.0861626e-07, 2.3841858e-07, 5.9604645e-08, -0.9999999, 8.940697e-08, 1.0000001, -1.7881393e-07, 4.7683716e-07, 0.13807231, 4.7683716e-07)
+
+[node name="Physical Bone mixamorig_LeftHand" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="8" unique_id=1961723957]
+transform = Transform3D(0.32336885, 0.7187856, 0.615451, 0.76888436, -0.57870287, 0.2718821, 0.5515882, 0.3852924, -0.7397975, 0.20139551, 0.8883519, 0.5049795)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2293458e-07, 7.073395e-07, 0.026490763)
+body_offset = Transform3D(-0.58519495, 0.5798949, 0.56680584, 2.0861626e-07, 0.6989898, -0.71513116, -0.81089264, -0.41849083, -0.40904552, -0.015015602, 0.018943876, 0.010836124)
+
+[node name="Physical Bone mixamorig_RightArm" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="9" unique_id=914700315]
+transform = Transform3D(-0.68341804, 0.7047853, -0.19030894, -0.65491635, -0.47673103, 0.586355, 0.32252815, 0.52536196, 0.787382, -0.13590145, 1.2474691, -0.20449768)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.702379e-07, 7.5452294e-07, 0.1370226)
+body_offset = Transform3D(1, -3.1143427e-06, -1.7881393e-06, -1.8179417e-06, -2.1457672e-06, -1.0000001, 3.233552e-06, 1, -2.026558e-06, 7.1525574e-07, 0.13702261, -4.7683716e-07)
+
+[node name="Physical Bone mixamorig_RightForeArm" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="10" unique_id=1988180732]
+transform = Transform3D(-0.8415911, 0.4822714, 0.24318445, 0.008778752, -0.43797228, 0.8989456, 0.5400438, 0.75867957, 0.36435983, -0.14339018, 1.0429577, -0.36262068)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.1421856e-05, -8.3339495e-05, 0.13808501)
+body_offset = Transform3D(1, 1.7881393e-07, -3.5762787e-07, -4.4703484e-07, -7.4505806e-07, -1, 2.9802322e-08, 1.0000001, -7.748604e-07, 3.1471252e-05, 0.13808501, 8.34465e-05)
+
+[node name="Physical Bone mixamorig_RightHand" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="11" unique_id=129329893]
+transform = Transform3D(0.46104598, 0.2789569, 0.8423893, -0.7227033, -0.43280923, 0.5388656, 0.5149141, -0.8572393, 0.0020580967, -0.1992898, 0.90460825, -0.41306)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.8219074e-06, -3.0985102e-06, 0.02648926)
+body_offset = Transform3D(-0.5851946, -0.57989466, -0.5668064, -5.9604645e-08, 0.6989906, -0.715131, 0.81089306, -0.418491, -0.4090455, 0.015010834, 0.018945456, 0.010836303)
+
+[node name="Physical Bone mixamorig_LeftUpLeg" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="12" unique_id=1633620389]
+transform = Transform3D(-0.747362, -0.6439622, 0.16359319, -0.25925747, 0.5093473, 0.82057965, -0.61174804, 0.5708573, -0.54761887, 0.028403759, 0.6737168, 0.1838959)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0625708e-06, -6.049896e-09, 0.20299762)
+body_offset = Transform3D(0.9999999, -1.7881393e-07, -5.364418e-07, -5.9604645e-07, 5.9604645e-08, -1, 8.940697e-08, 0.9999999, 2.9802322e-08, -9.536743e-07, 0.20299762, 0)
+
+[node name="Physical Bone mixamorig_LeftLeg" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="13" unique_id=548507917]
+transform = Transform3D(-0.6654325, -0.6903135, -0.28401908, -0.2594696, -0.14285515, 0.95512724, -0.6999108, 0.70926696, -0.08405492, 0.054980278, 0.306093, 0.31275347)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2077761e-06, 9.630842e-07, 0.21049455)
+body_offset = Transform3D(0.9999999, 0, -7.4505806e-08, -7.4505806e-08, 7.450581e-09, -0.99999994, 0, 1, -4.4703484e-08, -1.1920929e-06, 0.21049452, -9.536743e-07)
+
+[node name="Physical Bone mixamorig_LeftFoot" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="14" unique_id=362247585]
+transform = Transform3D(-0.6573942, -0.37588304, 0.65310407, -0.051746238, 0.8871789, 0.45851484, -0.7517681, 0.26762927, -0.6026768, 0.06342602, 0.06907219, 0.3778818)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.982715e-05, -8.010159e-05, 0.078609936)
+body_offset = Transform3D(0.9999999, 4.4703484e-08, 2.9802322e-08, 0, -1.4901161e-07, -1.0000001, 2.9802322e-08, 1.0000002, -8.940697e-08, -4.9829483e-05, 0.07860994, 8.010864e-05)
+
+[node name="Physical Bone mixamorig_RightUpLeg" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="15" unique_id=226796414]
+transform = Transform3D(0.059885208, -0.9121361, 0.40548941, 0.31585178, 0.40266174, 0.8591282, -0.94691676, 0.076625496, 0.31221324, -0.10611153, 0.66037536, -0.15182273)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.653266e-07, 2.397798e-06, 0.20299861)
+body_offset = Transform3D(1.0000002, -8.940697e-08, -8.940697e-08, -5.9604645e-08, -3.3527613e-08, -1.0000001, 2.2351742e-08, 1, -6.7055225e-08, 9.834766e-07, 0.20299864, -2.3841858e-06)
+
+[node name="Physical Bone mixamorig_RightLeg" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="16" unique_id=433127597]
+transform = Transform3D(-0.010888227, -0.9718956, -0.23516043, 0.3625993, -0.22300519, 0.9048704, -0.93188155, -0.07541657, 0.3548368, -0.13891983, 0.29550835, -0.28989044)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.6233678e-07, 7.1556938e-06, 0.21049419)
+body_offset = Transform3D(1, -7.4505806e-08, -1.1920929e-07, 0, 2.4214387e-08, -0.99999994, 7.450581e-09, 1, -1.4901161e-08, 3.874302e-07, 0.21049416, -7.1525574e-06)
+
+[node name="Physical Bone mixamorig_RightFoot" parent="Targets/Target1/ybot/Skeleton3D/PhysicalBoneSimulator3D" parent_id_path=PackedInt32Array(876867513, 1780637499) index="17" unique_id=1775877973]
+transform = Transform3D(-0.031171836, -0.45747006, 0.8886785, 0.05175285, 0.8871792, 0.45851356, -0.99817336, 0.060284354, -0.0039796247, -0.15928602, 0.06898844, -0.36426964)
+joint_offset = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5390762e-09, 1.9026893e-06, 0.07861233)
+body_offset = Transform3D(1.0000001, -8.195639e-08, 5.7742e-08, -1.0244548e-08, 1.033186e-09, -1, 1.8626451e-08, 1, 5.926995e-08, 0, 0.07861233, -1.9073486e-06)
+
+[node name="Label" type="Label3D" parent="Targets/Target1" unique_id=1343290522]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "BULLET
@@ -60,12 +148,12 @@ Rapid fire to ragdoll"
 font_size = 28
 outline_size = 8
 
-[node name="Target2" type="Node3D" parent="Targets"]
+[node name="Target2" type="Node3D" parent="Targets" unique_id=1181078578]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 0)
 
-[node name="ybot" parent="Targets/Target2" instance=ExtResource("2_ybot")]
+[node name="ybot" parent="Targets/Target2" unique_id=2111378239 instance=ExtResource("2_ybot")]
 
-[node name="Label" type="Label3D" parent="Targets/Target2"]
+[node name="Label" type="Label3D" parent="Targets/Target2" unique_id=374371156]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "SHOTGUN
@@ -74,11 +162,11 @@ Wide spread, heavy hits
 font_size = 28
 outline_size = 8
 
-[node name="Target3" type="Node3D" parent="Targets"]
+[node name="Target3" type="Node3D" parent="Targets" unique_id=1710846543]
 
-[node name="ybot" parent="Targets/Target3" instance=ExtResource("2_ybot")]
+[node name="ybot" parent="Targets/Target3" unique_id=847845015 instance=ExtResource("2_ybot")]
 
-[node name="Label" type="Label3D" parent="Targets/Target3"]
+[node name="Label" type="Label3D" parent="Targets/Target3" unique_id=1448249121]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "MELEE
@@ -87,12 +175,12 @@ Strong transfer"
 font_size = 28
 outline_size = 8
 
-[node name="Target4" type="Node3D" parent="Targets"]
+[node name="Target4" type="Node3D" parent="Targets" unique_id=297751481]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
-[node name="ybot" parent="Targets/Target4" instance=ExtResource("2_ybot")]
+[node name="ybot" parent="Targets/Target4" unique_id=2015162163 instance=ExtResource("2_ybot")]
 
-[node name="Label" type="Label3D" parent="Targets/Target4"]
+[node name="Label" type="Label3D" parent="Targets/Target4" unique_id=857666033]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "EXPLOSION
@@ -101,12 +189,12 @@ Recovers automatically"
 font_size = 28
 outline_size = 8
 
-[node name="Target5" type="Node3D" parent="Targets"]
+[node name="Target5" type="Node3D" parent="Targets" unique_id=1645864090]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
-[node name="ybot" parent="Targets/Target5" instance=ExtResource("2_ybot")]
+[node name="ybot" parent="Targets/Target5" unique_id=175280060 instance=ExtResource("2_ybot")]
 
-[node name="Label" type="Label3D" parent="Targets/Target5"]
+[node name="Label" type="Label3D" parent="Targets/Target5" unique_id=272171243]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
 billboard = 1
 text = "PERSISTENT
@@ -115,9 +203,9 @@ Press P to release"
 font_size = 28
 outline_size = 8
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=307999757]
 
-[node name="Crosshair" type="Label" parent="HUD"]
+[node name="Crosshair" type="Label" parent="HUD" unique_id=471761249]
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -134,7 +222,7 @@ text = "+"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WeaponLabel" type="Label" parent="HUD"]
+[node name="WeaponLabel" type="Label" parent="HUD" unique_id=509099534]
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -147,7 +235,7 @@ theme_override_font_sizes/font_size = 16
 text = "Weapon: Bullet  [1-5]"
 horizontal_alignment = 2
 
-[node name="ThrowLabel" type="Label" parent="HUD"]
+[node name="ThrowLabel" type="Label" parent="HUD" unique_id=1932244339]
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -160,7 +248,7 @@ theme_override_font_sizes/font_size = 16
 text = "Throw: 15  [scroll]"
 horizontal_alignment = 2
 
-[node name="ControlsLabel" type="Label" parent="HUD"]
+[node name="ControlsLabel" type="Label" parent="HUD" unique_id=467145750]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -174,3 +262,5 @@ text = "WASD: Move    Mouse: Look
 LMB: Shoot weapon    RMB: Throw ball    Scroll: Throw strength
 1-5: Switch weapon    P: Persistent on nearest
 ESC: Release mouse    F3: Debug gizmos"
+
+[editable path="Targets/Target1/ybot"]

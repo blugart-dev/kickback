@@ -27,8 +27,7 @@ func _tuning(motor: bool = true) -> RagdollTuning:
 	t.stagger_sway_strength = 0.0
 	t.stumble_enabled = false
 	t.arm_brace_enabled = false
-	if motor:
-		t.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR
+	t.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR if motor else RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	return t
 
 
@@ -54,7 +53,12 @@ func _error_deg(h, rig: String) -> float:
 
 # ── Wiring ──────────────────────────────────────────────────────────────────
 
-func test_default_mode_is_legacy_and_motors_stay_off():
+func test_default_mode_is_joint_motor():
+	assert_eq(RagdollTuning.create_default().muscle_mode, RagdollTuning.MuscleMode.JOINT_MOTOR,
+		"JOINT_MOTOR is the shipped default since 0.5.0")
+
+
+func test_legacy_mode_keeps_motors_off():
 	var h = await _spawn(_tuning(false), false)
 	await wait_physics_frames(2)
 	assert_false(h.spring.is_motor_mode())
@@ -88,8 +92,9 @@ func test_force_limit_scales_with_strength_and_scale():
 	h.spring.set_bone_strength("LowerArm_L", h.spring.get_base_strength("LowerArm_L") * 0.4)
 	await wait_physics_frames(1)
 	var cmd: Dictionary = h.spring.get_motor_command("LowerArm_L")
-	# torque 40 × scale 0.5 × ratio 0.4 (before the next tick's recovery nudge)
-	assert_almost_eq(float(cmd.limit), 40.0 * 0.5 * 0.4, 0.5, "limit = torque × scale × strength ratio")
+	# torque 40 × scale 0.5 × ratio 0.4 ^ curve 0.5 (before the next tick's recovery nudge)
+	var expected := 40.0 * 0.5 * pow(0.4, t.muscle_strength_curve)
+	assert_almost_eq(float(cmd.limit), expected, 0.5, "limit = torque × scale × ratio^curve")
 
 
 func test_limp_bone_has_zero_force_limit():
@@ -158,6 +163,20 @@ func test_leaving_motor_mode_frees_the_root_world_joint():
 	h.character.refresh_tuning()
 	await wait_physics_frames(3)
 	assert_null(h.rig_builder.find_child("Hips_world_motor", false, false), "world joint freed on leaving motor mode")
+
+
+func test_motor_pushing_into_a_limit_yields_a_bounded_amount():
+	# An unreachable target (elbow hyperextension -60 vs the -10 bound): the motor
+	# pushes with its full 40 N.m and Jolt's limit yields some degrees under that
+	# sustained torque. It must stay bounded (measured ~16 deg past the bound).
+	var h = await _spawn(_tuning(), false)
+	await wait_physics_frames(5)
+	var idx: int = h.skeleton.find_bone("mixamorig_LeftForeArm")
+	h.skeleton.set_bone_pose_rotation(idx, Quaternion(Vector3.DOWN, deg_to_rad(-60.0)))
+	await wait_physics_frames(120)
+	var a: Vector3 = h.rig_builder.get_joint_angles("LowerArm_L")
+	assert_gt(a.x, -35.0, "limit yields at most ~25 deg under a 40 N.m push (%.1f)" % a.x)
+	assert_lt(a.x, 0.0, "...on the hyperextension side")
 
 
 # ── Hold under real gravity ─────────────────────────────────────────────────
@@ -244,6 +263,22 @@ func test_ragdoll_and_recovery_cycle_in_motor_mode():
 	await wait_physics_frames(60)
 	var cmd: Dictionary = h.spring.get_motor_command("Chest")
 	assert_gt(float(cmd.limit), 100.0, "muscles are back at full torque after recovery")
+
+
+func test_stagger_stays_on_its_feet_and_recovers_in_motor_mode():
+	# The stagger floor (10 % strength) is 32 % torque through the strength curve:
+	# weak but standing. Linear torque collapsed the character into a ragdoll.
+	var t := _tuning()
+	t.stagger_duration = 1.0
+	t.stumble_enabled = false
+	var h = await _spawn(t, true)
+	await wait_physics_frames(5)
+	watch_signals(h.controller)
+	h.controller.trigger_stagger(Vector3.FORWARD)
+	var finished: bool = await wait_for_signal(h.controller.stagger_finished, 5.0)
+	assert_true(finished, "stagger recovers to NORMAL")
+	assert_signal_not_emitted(h.controller, "ragdoll_started")
+	assert_gt(h.get_body("Hips").global_position.y, 0.6, "still standing")
 
 
 func test_switching_mode_at_runtime_disables_motors():

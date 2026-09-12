@@ -50,7 +50,7 @@ test or a PR does not back.
 |---|---|---|---|
 | 0.4.1 Honesty pass | ✅ merged | PR #98 | visually verified 2026-09-12 |
 | Muscle spike | ✅ done | `docs/MUSCLE_SPIKE.md` | — |
-| **0.5.0 Muscle layer** | 🔧 PR open | `feat/muscle-layer` | pending visual gate |
+| **0.5.0 Muscle layer** | 🔧 PR #100 open, `JOINT_MOTOR` is the default | `feat/muscle-layer` | visual gate: user testing |
 | 0.6.0 Balance + behaviors | ⬜ | | |
 | 0.7.0 Arbiter + API cut | ⬜ | | |
 | 0.8.0 Environmental behaviors | ⬜ | | |
@@ -104,9 +104,15 @@ profile (`BoneDefinition.muscle_torque`, N·m), scaled by strength and by
 visibly flinches and recovers; a corpse falls and settles at real gravity; stress test with
 20 characters holds 60 fps on the dev machine.
 
-**Known open items to resolve during the milestone** (from the spike): light-body limit
-cycle at kp > ~10–20 (candidate fixes: lower kp on low-inertia joints, chain-consistent
-relative commands); 30 Hz stability; swing-twist wrap after violent hits.
+**Resolved during the milestone**: the light-body limit cycle (gain 0.10 per tick, root as a
+bounded motor); the frame of the motor command (swing-twist: twist in the parent frame,
+swing in the child frame — the spike's remaining TRACK deficit was partly this); the
+stagger floor as a raw torque fraction collapsed the character → `muscle_strength_curve`
+0.5 (√ratio); a strength-scaled root pin/motor let a stagger topple → the root holds at
+full authority until limp (`_root_hold_factor`), the stand-in for balance.
+**Still open** (carried to 0.6.0): 30 Hz with non-colliding feet; 30 Hz hand-hit wrist
+wrap; resolver CPU (≈1.4× on a quiet run, noisy); the visual gate (user), then
+`plugin.cfg` 0.5.0 + tag.
 
 ---
 

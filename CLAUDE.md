@@ -115,7 +115,7 @@ kickback/
 
 ### Key technical decisions
 - **RigidBody3D + Generic6DOFJoint3D** for active ragdoll (NOT PhysicalBone3D — see GODOT_CONSTRAINTS.md for why)
-- **Two muscle modes** (`RagdollTuning.muscle_mode`): the legacy velocity-overwrite resolver (default) and 0.5.0's JOINT_MOTOR — the same command executed through Jolt 6DOF velocity motors with force limit = `muscle_torque` × strength ratio, gravity on (see docs/REFERENCE.md "Muscle layer"); script torque PD was measured and rejected (docs/MUSCLE_SPIKE.md)
+- **Two muscle modes** (`RagdollTuning.muscle_mode`): 0.5.0's JOINT_MOTOR (default) and the legacy velocity-overwrite resolver — the same command executed through Jolt 6DOF velocity motors with force limit = `muscle_torque` × strength ratio, gravity on (see docs/REFERENCE.md "Muscle layer"); script torque PD was measured and rejected (docs/MUSCLE_SPIKE.md)
 - **Jolt physics required** — GodotPhysics cannot handle ragdoll joints
 - **Animation stays active during ragdoll** — provides target poses for springs
 - **Root motion stripping** — XZ of the root-motion bone's local pose is zeroed inside `SpringResolver.get_animation_bone_global`, so the root body, every descendant, and every other consumer of the animation target (foot/arm IK, the get-up blend) see the same root-motion-free pose — prevents drift from Mixamo animations with root motion

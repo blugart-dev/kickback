@@ -301,20 +301,24 @@ pattern is still wrong. Use `body_impact` for scoring and VFX; use
 
 `RagdollTuning.muscle_mode` selects how the rig is driven:
 
-- `VELOCITY_OVERWRITE` (default): the 0.4.x resolver — exact tracking, gravity scaled
-  out at full strength, hits erased unless strength drops.
-- `JOINT_MOTOR`: every joint's Jolt angular motor drives the same command with a force
-  limit of `BoneDefinition.muscle_torque × strength ratio × muscle_strength_scale`;
-  gravity stays on; a hit produces a real, torque-bounded reaction; a limp bone has a
-  zero force limit. The pelvis gets a world joint for its orientation
-  (`muscle_root_torque`) and keeps a scaled position pin (`muscle_root_pin`).
+- `JOINT_MOTOR` (**default since 0.5.0**): every joint's Jolt angular motor drives the
+  same command with a force limit of `BoneDefinition.muscle_torque ×
+  muscle_strength_scale × strength ratio ^ muscle_strength_curve`; gravity stays on; a
+  hit produces a real, torque-bounded reaction; a limp bone has a zero force limit. The
+  pelvis gets a world joint for its orientation (`muscle_root_torque`) and keeps a
+  scaled position pin (`muscle_root_pin`); both hold at full authority until the bone is
+  limp (they stand in for balance until 0.6.0).
+- `VELOCITY_OVERWRITE`: the 0.4.x resolver — exact tracking, gravity scaled out at full
+  strength, hits erased unless strength drops. Set it on your `RagdollTuning` if you
+  need the old feel exactly.
 
 ```gdscript
+# Opt back into the 0.4.x resolver:
 var tuning := RagdollTuning.create_default()
-tuning.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR
-kickback.ragdoll_tuning = tuning          # before setup, or:
-kickback.ragdoll_tuning.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR
-kickback.refresh_tuning()                 # at runtime — the resolver switches modes on its next tick
+tuning.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
+kickback.ragdoll_tuning = tuning          # before setup, or at runtime:
+kickback.ragdoll_tuning.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
+kickback.refresh_tuning()                 # the resolver switches modes on its next tick
 ```
 
 What changes for you: `strength_map` no longer sets stiffness (the strength *ratio*

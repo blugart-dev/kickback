@@ -9,6 +9,9 @@ const RigHarness := preload("res://test/helpers/rig_harness.gd")
 
 func _tuning() -> RagdollTuning:
 	var t := RagdollTuning.create_default()
+	# Gravity-follows-strength is the VELOCITY_OVERWRITE contract (JOINT_MOTOR keeps
+	# gravity on and is covered by test_muscle_layer.gd).
+	t.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	t.foot_ik_enabled = false
 	t.stagger_sway_strength = 0.0
 	return t

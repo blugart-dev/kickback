@@ -519,11 +519,19 @@ enum MuscleMode {
 }
 
 @export_group("Muscle Layer")
-## See [enum MuscleMode]. Default is the legacy resolver until JOINT_MOTOR meets its
-## acceptance numbers on the demo character (docs/PLAN.md, 0.5.0).
-@export var muscle_mode: MuscleMode = MuscleMode.VELOCITY_OVERWRITE
+## See [enum MuscleMode]. JOINT_MOTOR is the default since 0.5.0 (acceptance numbers in
+## docs/REFERENCE.md "Muscle layer"); VELOCITY_OVERWRITE is the 0.4.x behaviour, kept
+## for comparison and for projects that depend on its exact tracking.
+@export var muscle_mode: MuscleMode = MuscleMode.JOINT_MOTOR
 ## Global multiplier on every bone's [member BoneDefinition.muscle_torque].
 @export_range(0.0, 5.0) var muscle_strength_scale: float = 1.0
+## Maps a bone's strength ratio (strength / base, 0..1) to its torque fraction:
+## torque × ratio^curve. The hit / stagger / fatigue reductions were tuned as blend
+## fractions for the velocity resolver, where 10 % strength still tracks; as a raw
+## torque fraction 10 % collapses the body (a staggered character fell straight into a
+## ragdoll). 0.5 (square root) keeps limp = 0 and full = 1, and turns the 10 % stagger
+## floor into 32 % torque — visibly weak, still standing. 1.0 = linear.
+@export_range(0.25, 2.0) var muscle_strength_curve: float = 0.5
 ## Fraction of the joint-space rotation error the motor is commanded to close PER
 ## PHYSICS TICK (the motor target velocity is error × gain / tick). Kept a per-tick
 ## fraction, not a per-second rate, because the stability of a velocity motor driven

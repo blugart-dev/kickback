@@ -526,8 +526,14 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 	var w: Vector3 = err * (gain * inv_dt) + ff
 	if w.length_squared() > w_max * w_max:
 		w = w.normalized() * w_max
-	var torque: float = _tuning.muscle_root_torque if parent_rig.is_empty() else float(state.torque)
-	var limit: float = torque * torque_scale * ratio
+	var limit: float
+	if parent_rig.is_empty():
+		# The root's world motor is the stand-in for BALANCE (docs/PLAN.md 0.6.0), not a
+		# muscle: it holds the pelvis through a stagger or a hit (the limbs go weak, the
+		# character stays up) and only lets go when the bone is limp (ragdoll).
+		limit = _tuning.muscle_root_torque * torque_scale * _root_hold_factor(ratio)
+	else:
+		limit = float(state.torque) * torque_scale * pow(clampf(ratio, 0.0, 1.0), _tuning.muscle_strength_curve)
 	# Jolt's 6DOF angular motor is solved on its swing-twist axes: the twist axis is
 	# the X of the PARENT's constraint frame (A), the two swing axes are the Y / Z of
 	# the CHILD's (B = A * r_rel). Hand each component in its own frame.
@@ -548,7 +554,7 @@ func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, tar
 		ff_lin = (target_xform.origin - (state.prev_target as Transform3D).origin) * _feed_forward
 	state.prev_target = target_xform
 	state.has_prev_target = true
-	var pin := _get_pin_strength(rig_name) * ratio * _tuning.muscle_root_pin
+	var pin := _get_pin_strength(rig_name) * _root_hold_factor(ratio) * _tuning.muscle_root_pin
 	var pin_injury: float = _pin_injury_modifiers.get(rig_name, 0.0)
 	if pin_injury > 0.0:
 		pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
@@ -592,6 +598,12 @@ func _drive_root_body(rig_name: String, state: Dictionary, body: RigidBody3D, ta
 		lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
 	lin_target += ff_lin / maxf(delta, 1e-6)
 	body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
+
+
+## Root authority vs strength ratio in JOINT_MOTOR mode: full while the bone has any
+## real strength, fading to zero only over the last 5 % (limp / a guided death ramp).
+static func _root_hold_factor(ratio: float) -> float:
+	return clampf(ratio / 0.05, 0.0, 1.0)
 
 
 static func _set_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float) -> void:

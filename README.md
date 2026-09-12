@@ -55,7 +55,7 @@ and milestones, and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers
 
 ## Features
 
-- **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation via velocity-based springs. Hits reduce spring strength so physics temporarily wins. Full ragdoll with automatic get-up recovery.
+- **Active ragdoll** — 16 RigidBody3D physics skeleton tracks animation through torque-bounded Jolt joint motors (since 0.5.0; the 0.4.x velocity-spring resolver is still available as `muscle_mode = VELOCITY_OVERWRITE`). Hits weaken the muscles and add real impulses, so physics wins in proportion. Full ragdoll with automatic get-up recovery.
 - **Stagger state** — between absorption and full ragdoll. Character visibly wobbles but stays on feet. Configurable threshold, duration, and escalation on follow-up hits.
 - **Balance tracking** — mass-weighted center of mass vs the midpoint and half-spread of the feet drives stagger behavior. Characters that lean too far ragdoll; balanced characters recover early. A static estimate (no extrapolated CoM or contact support polygon yet — see the [audit](docs/AUDIT_2026-09-12.md) §3.3), but physics-informed rather than timer-based.
 - **Momentum transfer** — running characters carry their velocity into ragdoll, tumbling forward instead of dropping in place.
