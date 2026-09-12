@@ -193,6 +193,28 @@ func test_motors_hold_the_pose_under_gravity():
 		assert_lt(e, 4.0, "%s holds within 4 deg under gravity (%.2f)" % [rig_name, e])
 
 
+func test_pelvis_stands_at_its_target_height():
+	# The root is held by the world joint's LINEAR motor (a bounded force inside the
+	# solver): the standing pelvis sits within the settle deadband of its target and
+	# does not bounce. A velocity pin written to the pelvis alone was diluted by the
+	# joint solve across the ~55 kg hanging from it (3.5 cm low, bouncing at ~3 Hz on
+	# the demo idle — the user-visible whole-body wobble).
+	var h = await _spawn(_tuning(), false)
+	await wait_physics_frames(90)
+	var hips: RigidBody3D = h.get_body("Hips")
+	var st: Dictionary = h.spring._bones["Hips"]
+	var target_y: float = (st.target_xform as Transform3D).origin.y
+	var sag := target_y - hips.global_position.y
+	assert_lt(absf(sag), 0.006, "pelvis within 6 mm of its target (sag %.1f mm)" % (sag * 1000.0))
+	var ymin := INF
+	var ymax := -INF
+	for i in 60:
+		await wait_physics_frames(1)
+		ymin = minf(ymin, hips.global_position.y)
+		ymax = maxf(ymax, hips.global_position.y)
+	assert_lt(ymax - ymin, 0.004, "no pelvis bounce (%.1f mm peak-to-peak over 1 s)" % ((ymax - ymin) * 1000.0))
+
+
 func test_weak_muscle_cannot_hold_a_horizontal_arm():
 	# Physical honesty: a 3 N.m shoulder (60 × 0.05) is far below what a straight
 	# horizontal arm needs, so it sags where a 60 N.m one holds within 4 deg (test

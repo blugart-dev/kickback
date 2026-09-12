@@ -216,6 +216,13 @@ active-ragdoll layer (4) automatically.
 
   <img src="https://github.com/user-attachments/assets/0626bdec-faa5-47ea-8cb9-d2c3bf39cf7e" alt="Debug gizmos — bone dots, wireframe, full dashboard with CoM and velocity vectors" width="640">
 
+- **F5** — Record a trace: `KickbackTraceRecorder` writes every character's per-tick state (state, balance, pelvis position / velocity / target, worst body error, lowest body point, root motor command, frame pacing) to `user://kickback_traces/trace_<time>.jsonl`. Press again to stop; the path is printed. Then:
+
+  ```
+  python tools/bench/trace_report.py "<path>/trace_123.jsonl" [--char Target1] [--from 2 --to 8]
+  ```
+
+  reports state time, pelvis sag and bounce frequency, error spikes with timestamps, ground clipping, root-motor saturation and frame-pacing anomalies — the way to turn "it wobbled in the editor" into numbers. The demos add the recorder next to the HUD; add a `KickbackTraceRecorder` node to any scene to get the same.
 - **Inspector** — Select KickbackCharacter to see setup status and validation
 - **Visible Collision Shapes** (Debug menu) — See ragdoll collision shapes
 

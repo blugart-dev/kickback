@@ -19,6 +19,23 @@ world motor + pin hold at full authority until the bone is limp (they stand in f
 balance; a strength-scaled root let a staggered character topple within 0.3 s).
 
 **Added**
+- **Root held by the world joint's linear motor** (`muscle_root_force`, 2500 N): the pelvis
+  position is a bounded force inside the solver instead of a velocity written to the
+  pelvis. The velocity pin was diluted by the joint solve across the ~55 kg hanging from
+  the pelvis — the character stood 3.5 cm low and bounced at ~3 Hz (visible whole-body
+  wobble, feet clipping the floor in `shooting_range.tscn`); now it sits within 1 mm of
+  its target with no bounce. The root's torque and force are not scaled by
+  `muscle_strength_scale` (balance, not muscle).
+- **Balance tip-over off in JOINT_MOTOR mode**: the root's world motors hold the pelvis
+  until limp, so `balance_ragdoll_threshold` → RAGDOLL no longer fires in that mode (a
+  staggered character was ragdolled by CoM-vs-feet spikes of 1.0–1.5 while standing);
+  knockdowns come from `ragdoll_probability` / pain / explicit triggers until 0.6.0's
+  balance layer owns the decision.
+- `KickbackTraceRecorder` (F5 in the demos): per-tick trace of every character to
+  `user://kickback_traces/*.jsonl`; `tools/bench/trace_report.py` summarises sag, bounce
+  frequency, error spikes, ground clipping, root-motor saturation and frame pacing.
+  `tools/bench/scene_probe.gd` loads any demo scene headless and logs the characters with
+  no input (`PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS`).
 - `RagdollTuning.muscle_mode` (`MuscleMode.JOINT_MOTOR` default / `VELOCITY_OVERWRITE`):
   in JOINT_MOTOR the SpringResolver executes its command — joint-space rotation error ×
   `muscle_gain` per tick + feed-forward — through each `Generic6DOFJoint3D` angular
@@ -29,7 +46,7 @@ balance; a strength-scaled root let a staggered character topple within 0.3 s).
   drives its orientation (`muscle_root_torque`), with the legacy position pin scaled by
   `muscle_root_pin`. New knobs: `muscle_strength_scale`, `muscle_gain`,
   `muscle_max_angular_velocity`, `muscle_strength_curve`, `muscle_root_pin`,
-  `muscle_root_torque`, `muscle_angular_damp`, `muscle_linear_damp`.
+  `muscle_root_torque`, `muscle_root_force`, `muscle_angular_damp`, `muscle_linear_damp`.
 - `BoneDefinition.muscle_torque` (N·m) with `SkeletonDetector.MUSCLE_TORQUE_TABLE`
   defaults (hip 200, knee 150, spine 150, shoulder 60, elbow 40, neck 30, wrist 10,
   ankle 60); set by `create_profile_from_skeleton` and `create_mixamo_default`.
@@ -37,7 +54,8 @@ balance; a strength-scaled root let a staggered character topple within 0.3 s).
   `get_last_tick_usec()`.
 - `tools/bench/ybot_bench.gd` — the acceptance bench on the real demo character (idle /
   react_front / bullet on the hand, both modes, `BENCH_HZ`, `BENCH_DIAG`, `BENCH_VARIANT`).
-- `test/test_muscle_layer.gd` (19 tests: wiring, force-limit scaling, limp = zero limit,
+- `test/test_muscle_layer.gd` (20 tests: wiring, force-limit scaling, limp = zero limit,
+  the pelvis stands within millimetres of its target without bouncing,
   a motor pushing into a joint limit yields a bounded amount, a stagger stays standing,
   gravity on, axis sign end to end on identity and anatomical frames, root yaw, hold under
   gravity, an under-powered shoulder sags, hit deflects and recovers, 30 / 120 Hz holds,
@@ -48,10 +66,11 @@ balance; a strength-scaled root let a staggered character topple within 0.3 s).
 swing about the child frame's Y/Z. Commanding in a single frame leaves every joint of a
 real idle 2–4° short.
 
-**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.78° mean / 3.29° max
-under real gravity (legacy 0.82 / 1.53); react_front 16.3° (legacy 10.1, torque-limited
-by design); bullet on the hand 6.4° peak, muscle recovery in 4 ticks (legacy erases it:
-1.3°); resolver tick ≈1.4× legacy. 120 Hz beats legacy on idle and react. **30 Hz is an open item** (rings with the
+**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.76° mean / 5.1° max
+under real gravity (legacy 0.81 / 1.73); react_front 18.8° (legacy 10.1, torque-limited
+by design); bullet on the hand 4.5° peak, muscle recovery in 4 ticks (legacy erases it:
+1.3°); resolver tick ≈1.2× legacy. 120 Hz beats legacy on idle and react; 30 Hz idle
+4.9° (was a 15° ring). **30 Hz is an open item** (rings with the
 foot-IK default of non-colliding feet; 3.6° idle with `foot_ik_disable_foot_collision =
 false`; hand-hit recovery wraps a wrist limit).
 

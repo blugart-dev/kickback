@@ -71,6 +71,9 @@ var _last_tick_usec: int = 0
 ## a +1 rad/s motor target on each axis yields -1 rad/s of child-relative-to-parent
 ## rotation about that joint-frame axis.
 const MOTOR_AXIS_SIGN := -1.0
+## Sign of the world joint's LINEAR motor target relative to the desired root velocity
+## (world axes; the joint frame is the identity). Calibrated in test_muscle_layer.gd.
+const ROOT_LINEAR_MOTOR_SIGN := 1.0
 ## Measured on the ybot idle (tools/bench/ybot_bench.gd, BENCH_DIAG=1): commanding the
 ## motor entirely in the parent frame left every joint 2-4 deg short on the swing
 ## axes, entirely in the child frame fixed the swing axes but tripled the twist (X)
@@ -426,6 +429,7 @@ func _create_root_world_joint() -> void:
 		joint.set_flag_x(axis_flag, false)
 		joint.set_flag_y(axis_flag, false)
 		joint.set_flag_z(axis_flag, false)
+	_set_linear_motor(joint, Vector3.ZERO, 0.0)
 	_root_world_joint = joint
 	_motor_joints[root_rig] = {
 		"joint": joint,
@@ -529,9 +533,10 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 	var limit: float
 	if parent_rig.is_empty():
 		# The root's world motor is the stand-in for BALANCE (docs/PLAN.md 0.6.0), not a
-		# muscle: it holds the pelvis through a stagger or a hit (the limbs go weak, the
-		# character stays up) and only lets go when the bone is limp (ragdoll).
-		limit = _tuning.muscle_root_torque * torque_scale * _root_hold_factor(ratio)
+		# muscle: not scaled by muscle_strength_scale, it holds the pelvis through a
+		# stagger or a hit (the limbs go weak, the character stays up) and only lets go
+		# when the bone is limp (ragdoll).
+		limit = _tuning.muscle_root_torque * _root_hold_factor(ratio)
 	else:
 		limit = float(state.torque) * torque_scale * pow(clampf(ratio, 0.0, 1.0), _tuning.muscle_strength_curve)
 	# Jolt's 6DOF angular motor is solved on its swing-twist axes: the twist axis is
@@ -542,12 +547,24 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 	_set_motor(joint, w_cmd * MOTOR_AXIS_SIGN, limit)
 
 
-## The root's position pin in JOINT_MOTOR mode (orientation comes from its world
-## joint motor): the legacy linear spring scaled by muscle_root_pin.
+## The root's position hold in JOINT_MOTOR mode (orientation comes from the same
+## world joint's angular motor): the world joint's LINEAR motor is given the legacy
+## pin's velocity command (position error × 60 Hz × pin, past the settle deadband,
+## plus the target's own motion) with a force limit of muscle_root_force. Being a
+## constraint inside Jolt's solve, it moves the whole rig consistently — a velocity
+## written to the pelvis alone was diluted by the joint solve across the ~55 kg
+## hanging from it (3.5 cm low, bouncing at ~3 Hz on the demo idle), and a velocity
+## shift broadcast to every body cancelled gravity for all of them and discarded any
+## impulse applied between ticks. A bounded force also means a big enough hit can
+## move the character, which a velocity overwrite never allowed.
 func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, target_xform: Transform3D,
 		strength: float, ratio: float, delta: float) -> void:
+	var joint: Generic6DOFJoint3D = _root_world_joint
+	if not joint:
+		return
 	if strength < 0.001:
 		state.has_prev_target = false
+		_set_linear_motor(joint, Vector3.ZERO, 0.0)
 		return
 	var ff_lin := Vector3.ZERO
 	if _feed_forward > 0.0 and state.has_prev_target:
@@ -560,11 +577,24 @@ func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, tar
 		pin *= (1.0 - pin_injury * _tuning.injury_pin_impact)
 	var pos_error := target_xform.origin - body.global_position
 	var dist := pos_error.length()
-	var lin_target := Vector3.ZERO
+	var v_cmd := Vector3.ZERO
 	if dist > 0.0001:
-		lin_target = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ
-	lin_target += ff_lin / maxf(delta, 1e-6)
-	body.linear_velocity = body.linear_velocity.lerp(lin_target, _fr_weight(pin, delta))
+		v_cmd = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ * pin
+	v_cmd += ff_lin / maxf(delta, 1e-6)
+	var force: float = _tuning.muscle_root_force * _root_hold_factor(ratio)
+	_set_linear_motor(joint, v_cmd * ROOT_LINEAR_MOTOR_SIGN, force)
+
+
+static func _set_linear_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float) -> void:
+	joint.set_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
+	joint.set_flag_y(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
+	joint.set_flag_z(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
+	joint.set_param_x(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.x)
+	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.y)
+	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.z)
+	joint.set_param_x(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
+	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
+	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
 
 
 ## The root (and any body without a registered joint): the legacy velocity spring

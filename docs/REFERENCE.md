@@ -133,13 +133,25 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
   weak, still standing. Limp (ratio 0) is still zero torque and full strength is still
   full torque. `strength_map` / `default_spring_strength` no longer set stiffness in this
   mode — the ratio is what matters.
-- **The root is balance, not muscle.** Its world-joint motor (`muscle_root_torque`) and
-  its position pin (`muscle_root_pin`) stay at full authority while the bone has any real
-  strength (`_root_hold_factor`: full above 5 % ratio, fading to zero below), so a
-  staggered or hit character stays up while its limbs go weak; it releases only when
-  limp. Without this the legacy world-orientation springs' implicit "cannot topple"
-  behaviour was lost and a stagger fell straight over. The balance layer (0.6.0)
-  replaces this with a real controller.
+- **The root is balance, not muscle.** Its world joint carries BOTH motors: the angular
+  motor (`muscle_root_torque`, 400 N·m) for orientation and the LINEAR motor
+  (`muscle_root_force`, 2500 N) for position — target velocity = position error × 60 Hz
+  × `muscle_root_pin` past the settle deadband, plus the target's own motion. Neither is
+  scaled by `muscle_strength_scale`; both stay at full authority while the bone has any
+  real strength (`_root_hold_factor`: full above 5 % ratio, fading to zero below) and
+  release when limp. Two things this replaced, both measured on the demo idle: a velocity
+  pin written to the pelvis alone was diluted by the joint solve across the ~55 kg
+  hanging from it (3.5 cm low, bouncing at ~3 Hz — the "whole body wobble" seen in the
+  editor, feet clipping the floor), and a velocity shift broadcast to every body
+  cancelled gravity for all of them and discarded impulses applied between ticks. As a
+  bounded force inside the solver the pelvis sits within 1 mm of its target with no
+  bounce, and a hit above ~2500 N can move the character. The balance layer (0.6.0)
+  replaces this with feet that carry the weight. Consequence: **the balance-driven
+  tip-over (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held
+  pelvis cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the
+  body, not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5
+  while standing perfectly well). Falls come from `ragdoll_probability`, pain, or explicit
+  triggers until the balance layer owns the decision.
 - **Gravity stays on** for every jointed body (`gravity_scale`, not scaled by strength);
   damping is `muscle_angular_damp` / `muscle_linear_damp`.
 - **Frames.** Two engine facts measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`,
@@ -169,22 +181,23 @@ foot IK on, 2026-09-13):
 | Mode | Hz | IDLE mean / max | REACT mean | HIT peak / recover | resolver ms/tick |
 |---|---:|---|---:|---|---|
 | legacy | 60 | 0.78 / 1.65 | 10.1 | 1.3° / 4 ticks | 0.17 |
-| **JOINT_MOTOR** | 60 | **0.78 / 3.29** | 16.3 | **6.4° / 4 ticks** | 0.19 (≈1.4× legacy) |
+| **JOINT_MOTOR** | 60 | **0.76 / 5.08** | 18.8 | **4.5° / 4 ticks** | 0.17 (≈1.2× legacy) |
 | legacy | 120 | 0.86 / 1.40 | 13.1 | 1.2° / 4 | 0.25 |
-| JOINT_MOTOR | 120 | 0.73 / 2.50 | 11.6 | 2.1° / 4 | 0.18 |
+| JOINT_MOTOR | 120 | 0.73 / 2.43 | 10.6 | 2.1° / 4 | 0.18 |
 | legacy | 30 | 1.06 / 7.17 | 10.0 | 1.7° / 4 | 0.15 |
-| JOINT_MOTOR, feet off (default) | 30 | 15.0 / 41.8 (rings) | 39.9 | never | 0.19 |
+| JOINT_MOTOR, feet off (default) | 30 | 4.85 / 15.5 | 38.1 | never | 0.20 |
 | JOINT_MOTOR, feet colliding | 30 | 3.64 / 19.4 | 40.4 | never (joint wraps) | 0.18 |
 
 Read: at 60 Hz the motor layer matches the legacy cheat on idle under real gravity with
-bounded torques, tracks a violent react clip 1.6× worse (torque-limited, by design), and
-gives a real hit reaction (4.8× the legacy deflection, muscle recovery in 4 ticks). At
-120 Hz it beats legacy everywhere. **30 Hz is an open item**: with foot IK's default
-(feet don't collide in NORMAL) the body hangs from the pelvis pin and rings at 30 Hz;
-`foot_ik_disable_foot_collision = false` (feet load-bearing) brings idle to 3.6°, and the
+bounded torques, tracks a violent react clip 1.9× worse (torque-limited, by design:
+with the pelvis now firmly on its target the limbs have to follow the clip's full
+motion), and gives a real hit reaction (3.5× the legacy deflection, muscle recovery in
+4 ticks). At 120 Hz it beats legacy on idle and react. **30 Hz is an open item**: the
+force-driven root brought the default (feet not colliding) from a 15° ring down to 4.9°;
+`foot_ik_disable_foot_collision = false` (feet load-bearing) is the other lever, and the
 hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
 tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
-noisy on Windows; a quiet run puts the motor path at ≈1.4× the legacy path.
+noisy on Windows; quiet runs put the motor path at ≈1.2–1.4× the legacy path.
 
 ## Center of mass balance ratio
 

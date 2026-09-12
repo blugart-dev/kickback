@@ -92,6 +92,12 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.muscle_root_pin = 0.0
 	if "pin03" in variant:
 		tuning.muscle_root_pin = 0.3
+	if "pin10" in variant:
+		tuning.muscle_root_pin = 1.0
+	if "rootforce5k" in variant:
+		tuning.muscle_root_force = 5000.0
+	if "rootforce10k" in variant:
+		tuning.muscle_root_force = 10000.0
 	if "footcol" in variant:
 		tuning.foot_ik_disable_foot_collision = false
 	if "gain05" in variant:

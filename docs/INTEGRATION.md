@@ -324,9 +324,26 @@ kickback.refresh_tuning()                 # the resolver switches modes on its n
 What changes for you: `strength_map` no longer sets stiffness (the strength *ratio*
 scales torque); tune `muscle_torque` per bone in the profile and `muscle_strength_scale`
 globally; `muscle_gain` (per-tick fraction, default 0.10) is the tracking stiffness — do
-not raise it past ~0.15. Measured numbers, tick-rate caveats (30 Hz needs
+not raise it past ~0.15. The balance-driven tip-over (`balance_ragdoll_threshold`) does
+not fire in this mode: the held pelvis cannot topple, so knockdowns come from
+`ragdoll_probability`, `pain_ragdoll_threshold`, or `trigger_ragdoll()` /
+`set_persistent()` until the balance layer (0.6.0) owns the decision. A stagger stays on
+its feet with the torso visibly weak (the strength floor is 32 % torque). Measured numbers, tick-rate caveats (30 Hz needs
 `foot_ik_disable_foot_collision = false`) and the open items are in REFERENCE.md
 "Muscle layer" and docs/PLAN.md.
+
+## Recording a Trace (debugging what you see)
+
+`KickbackTraceRecorder` (the demos add one next to the F3 HUD; add the node to your own
+scene) records every Kickback character per physics tick to
+`user://kickback_traces/trace_<time>.jsonl`: state, balance, pelvis position / velocity /
+target, worst body error and which body, lowest body point, root motor command and limit,
+foot-IK pelvis offset, fatigue / pain, plus process fps and physics steps per frame. F5
+starts and stops it (or `start()` / `stop()` from code; `record_joints = true` adds every
+joint's command and force limit). `tools/bench/trace_report.py <file>` prints the summary
+(sag, bounce frequency, error spikes with timestamps, ground clipping, root-motor
+saturation, frame-pacing anomalies). When something looks wrong in the editor and a headless
+run does not reproduce it, record it and attach the file — the report is what to look at.
 
 ## Tuning Presets
 

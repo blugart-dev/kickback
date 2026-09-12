@@ -54,6 +54,7 @@ kickback/
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)
+│       ├── kickback_trace_recorder.gd # F5 per-tick trace of every character to user://kickback_traces/*.jsonl (analyse with tools/bench/trace_report.py)
 │       ├── editor/                  # Editor-only tooling
 │       │   ├── kickback_inspector_plugin.gd
 │       │   ├── kickback_status_panel.gd
@@ -88,7 +89,9 @@ kickback/
 ├── test/                            # GUT suite, run headless in CI (helpers/rig_harness.gd drives the real classes)
 ├── tools/
 │   ├── spike/motor_spike.gd         # Standalone headless muscle spike (audit §8): 6DOF-motor muscle A/B vs SpringResolver — results in docs/MUSCLE_SPIKE.md
-│   └── bench/ybot_bench.gd         # 0.5.0 acceptance bench on the ybot: both muscle modes, idle/react/hit, BENCH_HZ/DIAG/VARIANT
+│   ├── bench/ybot_bench.gd         # 0.5.0 acceptance bench on the ybot: both muscle modes, idle/react/hit, BENCH_HZ/DIAG/VARIANT
+│   ├── bench/scene_probe.gd        # Loads any demo scene as-is and logs every character with no input (PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS)
+│   └── bench/trace_report.py       # Summarises a KickbackTraceRecorder trace: sag, bounce frequency, error spikes, clipping, pacing
 └── project.godot                    # Names 3D physics layers 1-5 (Environment, Projectiles, Characters, Active Ragdoll, Godot Ragdoll)
 ```
 

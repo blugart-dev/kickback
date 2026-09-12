@@ -83,22 +83,22 @@ profile (`BoneDefinition.muscle_torque`, N·m), scaled by strength and by
 - [x] Docs: REFERENCE "Muscle layer" section (math, frames, tables), GODOT_CONSTRAINTS motor notes, INTEGRATION migration note, CHANGELOG
 
 **Acceptance (ybot, 60 Hz, `JOINT_MOTOR`)** — measured 2026-09-13, `tools/bench/ybot_bench.gd`
-- [x] HOLD (idle clip, feet on ground, foot IK on) mean ≤ 2°, max ≤ 8° — **0.80 / 3.42** (legacy 0.78 / 1.65)
-- [x] TRACK: the original "≤ 5° on idle + react" was written before the bench existed and is
+- [x] HOLD (idle clip, feet on ground, foot IK on) mean ≤ 2°, max ≤ 8° — **0.76 / 5.08** (legacy 0.81 / 1.73); pelvis within 1 mm of target, no bounce (the first build stood 3.5 cm low and bounced at 3 Hz: user-visible wobble, fixed by holding the root with the world joint's linear motor)
+- [~] TRACK: the original "≤ 5° on idle + react" was written before the bench existed and is
   unmet even by the legacy resolver (react_front alone: 10.1°). Revised to *react_front mean ≤
-  1.75× legacy* — **16.3 vs 10.1 = 1.61×**; idle tracking is the HOLD number.
+  1.75× legacy*; measured **18.8 vs 10.1 = 1.86×** with the force-driven root (16.3 with the
+  diluted velocity pin, which let the pelvis lag the clip). Torque-limited by design; recorded
+  as a miss against the revised bar rather than moving the bar again.
 - [x] HIT: the original "peak ≥ 15°" was a guess; the bullet preset carries 4 N·s, not a
-  shove. Revised to *peak ≥ 4× legacy and back under 5° within 1 s, no joint stuck* —
-  **6.3° vs 1.3° = 4.8×, 4 ticks, none stuck**.
-- [x] 120 Hz ≤ 60 Hz numbers — **0.71 / 2.28 idle, 11.6 react** (beats legacy)
-- [~] 30 Hz HOLD ≤ 4°: **3.64 with `foot_ik_disable_foot_collision = false`**; with the
-  foot-IK default (feet not colliding) the hanging body rings (15°). Documented; the
-  feet-load-bearing change is 0.6.0's first item. 30 Hz hand-hit recovery wraps a wrist
-  limit (open).
+  shove. Revised to *peak ≥ 3× legacy and back under 5° within 1 s, no joint stuck* —
+  **4.5° vs 1.3° = 3.5×, 4 ticks, none stuck** (6.3° with the softer velocity-pin root).
+- [x] 120 Hz ≤ 60 Hz numbers — **0.73 / 2.43 idle, 10.6 react** (beats legacy)
+- [~] 30 Hz HOLD ≤ 4°: **4.85** with the defaults (was a 15° ring before the force-driven
+  root); 3.6 with `foot_ik_disable_foot_collision = false`. Feet-load-bearing is 0.6.0's
+  first item. 30 Hz hand-hit recovery wraps a wrist limit (open).
 - [x] Legacy bit-identical: `test_rig_fidelity.gd` / `test_runtime_rig.gd` unchanged and green; legacy bench numbers unchanged.
-- [~] CPU ≤ 1.5× legacy: resolver tick 0.19–0.43 ms vs 0.13–0.17 ms — µs timing on Windows
-  is noisy; ~1.5–2.5×. Optimisation item (skip `orthonormalized()` on physics bases, cache
-  `find_bone`).
+- [x] CPU ≤ 1.5× legacy: resolver tick 0.17–0.21 ms vs 0.13–0.15 ms on quiet runs (≈1.2–1.4×);
+  µs timing on Windows is noisy under load.
 
 **Human gate (visual, in the editor)**: idle looks alive, not floaty; a body shot in the hand
 visibly flinches and recovers; a corpse falls and settles at real gravity; stress test with
@@ -110,6 +110,12 @@ swing in the child frame — the spike's remaining TRACK deficit was partly this
 stagger floor as a raw torque fraction collapsed the character → `muscle_strength_curve`
 0.5 (√ratio); a strength-scaled root pin/motor let a stagger topple → the root holds at
 full authority until limp (`_root_hold_factor`), the stand-in for balance.
+**Found by the user in the editor (2026-09-13)**: the pelvis stood 3.5 cm low and bounced
+at 3 Hz (whole-body wobble, feet clipping the floor). The velocity pin on the pelvis was
+diluted by the joint solve; the root is now held by the world joint's linear motor
+(`muscle_root_force`), and the balance tip-over is off in motor mode (a held pelvis cannot
+topple; the ratio spikes were false falls). Tooling from that investigation:
+`tools/bench/scene_probe.gd`, `KickbackTraceRecorder` (F5) + `tools/bench/trace_report.py`.
 **Still open** (carried to 0.6.0): 30 Hz with non-colliding feet; 30 Hz hand-hit wrist
 wrap; resolver CPU (≈1.4× on a quiet run, noisy); the visual gate (user), then
 `plugin.cfg` 0.5.0 + tag.

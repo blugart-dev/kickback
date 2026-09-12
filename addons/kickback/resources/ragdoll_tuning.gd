@@ -552,8 +552,15 @@ enum MuscleMode {
 ## Generic6DOFJoint3D whose angular motor drives the pelvis toward the animation's
 ## world orientation — the "upright authority" the balance layer (0.6.0) will replace.
 ## Bounded so the spine / hip motors' reaction torques can still rock the pelvis
-## instead of being absorbed by an infinite root.
+## instead of being absorbed by an infinite root. Not scaled by
+## [member muscle_strength_scale] (balance, not muscle); released when limp.
 @export_range(0.0, 2000.0) var muscle_root_torque: float = 400.0
+## Force limit (N) of the pelvis' POSITION motor in JOINT_MOTOR mode: the world
+## joint's linear motor holds the pelvis at the animation's (foot-IK-shifted) position
+## with at most this force — the balance stand-in for the whole body's weight (~700 N
+## for the default rig) plus a margin. A hit stronger than this moves the character.
+## Not scaled by [member muscle_strength_scale]; released when limp.
+@export_range(0.0, 20000.0) var muscle_root_force: float = 2500.0
 ## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
 ## the tracking damping; this only bleeds free rotation).
 @export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5
