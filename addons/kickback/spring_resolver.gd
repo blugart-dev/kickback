@@ -42,6 +42,12 @@ var _max_angular_vel_sq: float = 400.0
 var _max_linear_vel_sq: float = 100.0
 var _strip_root_motion: bool = true
 var _root_motion_bone: String = "Hips"
+## Skeleton bone index of the root-motion rig bone (-1 = none). Resolved from the
+## rig name in [method _init_bones] / [method refresh_tuning]; the XZ of THIS bone's
+## local pose is zeroed inside [method get_animation_bone_global], so every
+## consumer of the animation target (springs, foot/arm IK, the get-up blend) sees
+## the same root-motion-free pose — children included.
+var _root_motion_bone_idx: int = -1
 
 const PROPERTY_THRESHOLD := 0.01
 ## Spring tuning is calibrated at 60 Hz. Per-tick blend weights and velocity
@@ -68,6 +74,7 @@ func refresh_tuning() -> void:
 		_root_motion_bone = _tuning.root_motion_bone
 		_chain_consistency = _tuning.spring_chain_consistency
 		_feed_forward = _tuning.spring_feed_forward
+		_resolve_root_motion_bone()
 
 
 func _ready() -> void:
@@ -115,6 +122,16 @@ func _init_bones() -> void:
 	# avoids rebuilding it from _bones.keys() on each call.
 	_bone_names = PackedStringArray(_bones.keys())
 	_init_chain()
+	_resolve_root_motion_bone()
+
+
+func _resolve_root_motion_bone() -> void:
+	_root_motion_bone_idx = -1
+	if not _skeleton or not _rig_builder:
+		return
+	var bone_name := _rig_builder.get_bone_name_for_body(_root_motion_bone)
+	if bone_name != "":
+		_root_motion_bone_idx = _skeleton.find_bone(bone_name)
 
 
 ## Builds the joint chain (parent links + anchors) and the parent-first update
@@ -186,8 +203,9 @@ func _physics_process(delta: float) -> void:
 			state.strength = move_toward(state.strength, state.base_strength, recovery_rate * delta)
 		var ratio := _strength_ratio(state)
 
-		# Property updates: gravity + damping scale with strength ratio
-		var new_gravity := (1.0 - ratio) * _tuning.spring_gravity_multiplier
+		# Property updates: gravity + damping scale with strength ratio. A limp bone
+		# (ratio 0) gets the tuning's full gravity_scale; a bone at full strength none.
+		var new_gravity := (1.0 - ratio) * _tuning.gravity_scale
 		var new_ang_damp := _tuning.spring_angular_damp_base + _tuning.spring_angular_damp_scale * ratio
 		var new_lin_damp := _tuning.spring_linear_damp_base + _tuning.spring_linear_damp_scale * ratio
 		if absf(body.gravity_scale - new_gravity) > PROPERTY_THRESHOLD:
@@ -207,11 +225,8 @@ func _physics_process(delta: float) -> void:
 		if has_overrides and rig_name in _target_overrides:
 			target_xform = _target_overrides[rig_name]
 		else:
-			var anim_pose := get_animation_bone_global(state.bone_idx)
-			if _strip_root_motion and rig_name == _root_motion_bone:
-				anim_pose.origin.x = 0.0
-				anim_pose.origin.z = 0.0
-			target_xform = skel_global * anim_pose
+			# Root motion (if stripped) is removed inside get_animation_bone_global.
+			target_xform = skel_global * get_animation_bone_global(state.bone_idx)
 		var current_xform := body.global_transform
 
 		# Feed-forward: how the target itself moved since last tick (world rotation
@@ -334,14 +349,27 @@ func _get_pin_strength(rig_name: String) -> float:
 
 
 ## Computes the skeleton-local global transform for a bone by walking the
-## parent chain, since Skeleton3D doesn't expose this directly.
+## parent chain of ANIMATION poses (get_bone_pose — never the modifier output).
+## When [member RagdollTuning.strip_root_motion] is on, the XZ translation of the
+## root-motion bone's local pose is zeroed on the way up, so the bone AND every
+## descendant are returned without the clip's horizontal root motion. Stripping
+## only the root body's target (pre-0.4.1) left its children's targets displaced
+## by the root motion, leaning the whole rig off its pinned pelvis.
 func get_animation_bone_global(bone_idx: int) -> Transform3D:
-	var xform := _skeleton.get_bone_pose(bone_idx)
+	var xform := _local_anim_pose(bone_idx)
 	var parent_idx := _skeleton.get_bone_parent(bone_idx)
 	while parent_idx >= 0:
-		xform = _skeleton.get_bone_pose(parent_idx) * xform
+		xform = _local_anim_pose(parent_idx) * xform
 		parent_idx = _skeleton.get_bone_parent(parent_idx)
 	return xform
+
+
+func _local_anim_pose(bone_idx: int) -> Transform3D:
+	var pose := _skeleton.get_bone_pose(bone_idx)
+	if _strip_root_motion and bone_idx == _root_motion_bone_idx:
+		pose.origin.x = 0.0
+		pose.origin.z = 0.0
+	return pose
 
 
 # --- Public API ---

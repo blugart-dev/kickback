@@ -84,8 +84,10 @@ func test_persistent_holds_until_released():
 	h.controller.set_persistent(true)
 	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT)
 
-	# Persistent ragdoll must NOT auto-recover while it is held.
-	await wait_physics_frames(20)
+	# Persistent ragdoll must NOT auto-recover while it is held. Wait well past
+	# ragdoll_force_recovery_time (0.4 s = 24 frames), which would have stood a
+	# plain RAGDOLL back up.
+	await wait_physics_frames(45)
 	assert_eq(h.controller.get_state(), ActiveRagdollController.State.PERSISTENT,
 		"persistent ragdoll stays down")
 
@@ -145,9 +147,13 @@ func test_knockdown_disabled_downgrades_ragdoll_to_stagger():
 
 
 func test_recovery_facing_honors_forward_sign():
-	# The get-up teleport yaws the root so the MODEL faces the way the body lies:
-	# the same landing pose under a flipped forward convention must yaw 180° apart
-	# (a -Z-forward Godot character otherwise stands up facing backwards).
+	# The get-up teleport yaws the root so the MODEL faces the way the body lies.
+	# The same PHYSICAL situation — face up, head a metre toward +Z — is authored
+	# under both forward conventions (face up means the model's own forward axis
+	# points at the sky: chest +Z up for a +Z model, chest -Z up for a -Z model),
+	# and the two must recover with the model facing the same world direction, i.e.
+	# root yaws 180 degrees apart (a -Z-forward Godot character otherwise stands up
+	# facing backwards).
 	var t := _fast_tuning()
 	t.ragdoll_force_recovery_time = 10.0  # recovery is driven manually below
 	t.settle_duration = 10.0
@@ -155,24 +161,30 @@ func test_recovery_facing_honors_forward_sign():
 	h.controller.trigger_ragdoll()
 	await wait_physics_frames(2)
 
-	# Lay the head a clear metre forward (+Z) of the hips so the landing pose has
-	# an unambiguous facing for the head-hip computation.
 	var hips: RigidBody3D = h.get_body("Hips")
+	var chest: RigidBody3D = h.get_body("Chest")
 	h.get_body("Head").global_position = hips.global_position + Vector3(0.0, -0.4, 1.0)
+	watch_signals(h.controller)
 
 	t.character_forward_sign = 1
+	chest.global_basis = Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0))  # +Z up
 	h.controller._start_recovery()
 	var yaw_plus_z: float = h.global_rotation.y
+	assert_eq(get_signal_parameters(h.controller, "recovery_started", 0), [true],
+		"+Z model with chest +Z up is face up")
 
 	t.character_forward_sign = -1
+	chest.global_basis = Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))  # -Z up
 	h.controller._start_recovery()
 	var yaw_minus_z: float = h.global_rotation.y
+	assert_eq(get_signal_parameters(h.controller, "recovery_started", 1), [true],
+		"-Z model with chest -Z up is face up")
 
 	assert_almost_eq(absf(wrapf(yaw_plus_z - yaw_minus_z, -PI, PI)), PI, 0.01,
-		"flipping the forward convention flips the recovered yaw 180 degrees")
+		"same physical landing under a flipped convention yaws the root 180 degrees apart")
+	# Face up + head toward +Z: you sit up facing your feet (-Z). +Z model: root +Z -> -Z.
+	assert_almost_eq(absf(wrapf(yaw_plus_z, -PI, PI)), PI, 0.01, "+Z model faces its feet")
 
-
-# ── Enum / tuning invariants (not re-implemented formulas) ──────────────────
 
 func test_state_enum():
 	assert_eq(ActiveRagdollController.State.NORMAL, 0)
@@ -199,3 +211,55 @@ func test_balance_thresholds_ordered():
 func test_injury_threshold_default():
 	var t := RagdollTuning.create_default()
 	assert_eq(t.injury_threshold, 0.3)
+
+
+# set_persistent(true) announces exactly one transition (PERSISTENT) — no
+# transient RAGDOLL for listeners that key animations off state_changed.
+func test_set_persistent_emits_single_state_change():
+	var h = await _spawn(_fast_tuning())
+	watch_signals(h.controller)
+	h.controller.set_persistent(true)
+	assert_signal_emit_count(h.controller, "state_changed", 1)
+	assert_eq(get_signal_parameters(h.controller, "state_changed", 0),
+		[ActiveRagdollController.State.PERSISTENT])
+	assert_signal_emitted(h.controller, "ragdoll_started")
+
+
+func test_set_persistent_guided_emits_single_state_change():
+	var h = await _spawn(_fast_tuning())
+	watch_signals(h.controller)
+	h.controller.set_persistent_guided(0.5, 0.3, 1.0)
+	assert_signal_emit_count(h.controller, "state_changed", 1)
+	assert_eq(get_signal_parameters(h.controller, "state_changed", 0),
+		[ActiveRagdollController.State.PERSISTENT])
+
+
+# Face-up detection honours the model's forward convention.
+func test_is_face_up_respects_forward_sign():
+	# Chest lying with local +Z pointing up.
+	var z_up := Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0))
+	assert_true(ActiveRagdollController.is_face_up(z_up, 1), "+Z-forward model: chest +Z up = face up")
+	assert_false(ActiveRagdollController.is_face_up(z_up, -1), "-Z-forward model: chest +Z up = face DOWN")
+	var z_down := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
+	assert_false(ActiveRagdollController.is_face_up(z_down, 1))
+	assert_true(ActiveRagdollController.is_face_up(z_down, -1))
+
+
+# Hit streaks are measured in physics time: two hits 1 frame apart escalate,
+# and the streak resets once the rapid-fire window has elapsed in physics frames.
+func test_hit_streak_uses_physics_time():
+	var t := _fast_tuning()
+	t.rapid_fire_window = 0.2
+	var h = await _spawn(t)
+	var profile := ImpactProfile.new()
+	profile.strength_reduction = 0.05
+	profile.ragdoll_probability = 0.0
+	profile.base_impulse = 0.0
+	var hand: RigidBody3D = h.get_body("Hand_L")
+	h.controller.apply_hit(hand, Vector3.FORWARD, hand.global_position, profile)
+	await wait_physics_frames(1)
+	h.controller.apply_hit(hand, Vector3.FORWARD, hand.global_position, profile)
+	assert_eq(h.controller.get_hit_streak(), 1, "second hit inside the window escalates")
+	await wait_physics_frames(20)  # 0.33 s > window
+	h.controller.apply_hit(hand, Vector3.FORWARD, hand.global_position, profile)
+	assert_eq(h.controller.get_hit_streak(), 0, "hit after the window starts a new streak")

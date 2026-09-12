@@ -112,9 +112,143 @@ func test_solver_reads_leg_lengths_from_rest():
 	var h = await _spawn_with_foot_ik()
 	var solver = h.controller._foot_ik
 	assert_not_null(solver)
-	# Lengths are derived from the skeleton's rest poses (0.42 m + 0.40 m).
-	assert_almost_eq(solver._upper_leg_len, 0.42, 0.02, "upper leg length read from rest")
-	assert_almost_eq(solver._lower_leg_len, 0.40, 0.02, "lower leg length read from rest")
+	# Lengths are derived from the skeleton's rest poses (0.42 m + 0.40 m), per side.
+	assert_almost_eq(solver._upper_leg_len_l, 0.42, 0.02, "left upper leg length read from rest")
+	assert_almost_eq(solver._lower_leg_len_l, 0.40, 0.02, "left lower leg length read from rest")
+	assert_almost_eq(solver._upper_leg_len_r, 0.42, 0.02, "right upper leg length read from rest")
+	assert_almost_eq(solver._lower_leg_len_r, 0.40, 0.02, "right lower leg length read from rest")
+
+
+# Skeletons are not guaranteed symmetric: each leg must be measured on its own bones.
+func test_solver_measures_each_leg_separately():
+	var t := RagdollTuning.create_default()
+	t.foot_ik_enabled = false  # keep the controller from building its own solver
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(t, null, true)
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "Kickback setup completed within frame budget")
+	# Lengthen the RIGHT thigh only (rest pose), then initialise a fresh solver.
+	var knee_r := h.bone_idx("mixamorig_RightLeg")
+	h.skeleton.set_bone_rest(knee_r, Transform3D(Basis.IDENTITY, Vector3(0.0, -0.52, 0.0)))
+	var solver := FootIKSolver.new()
+	assert_true(solver.initialize(h.spring, h.tuning, h, h.rig_builder, h.profile),
+		"solver initialised against the asymmetric rig")
+	assert_almost_eq(solver._upper_leg_len_l, 0.42, 0.005, "left thigh keeps its own length")
+	assert_almost_eq(solver._upper_leg_len_r, 0.52, 0.005, "right thigh measured on the right bones")
+	assert_almost_eq(solver._lower_leg_len_r, 0.40, 0.005, "right shin unchanged")
+
+
+# ── Fallback bend direction honours character_forward_sign ─────────────────
+
+# The harness legs are perfectly straight, so the animation knee gives no bend plane
+# and the solver must fall back to "knee bends forward". On flat ground the target
+# foot sits ankle_height above the animation foot, forcing a real bend, so the knee
+# override is displaced along the character's forward — whichever way that is.
+func _knee_forward_displacement(sign: int) -> float:
+	var t := RagdollTuning.create_default()
+	t.character_forward_sign = sign
+	var h = RigHarness.new()
+	add_child_autoqfree(h)
+	h.setup(t, null, true)
+	var ok: bool = await h.await_ready(40)
+	assert_true(ok, "Kickback setup completed within frame budget")
+	await wait_physics_frames(35)
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	assert_gt(solver._ik_weight_l, 0.4, "left foot planted (leg bending)")
+	assert_true(solver._overrides_buf.has("LowerLeg_L"), "knee override written")
+	var knee_override: Transform3D = solver._overrides_buf["LowerLeg_L"]
+	var knee_idx: int = h.spring.get_bone_idx("LowerLeg_L")
+	var knee_anim: Vector3 = (h.skeleton.global_transform * h.spring.get_animation_bone_global(knee_idx)).origin
+	# The harness root has an identity basis, so forward = +Z * sign.
+	var forward := Vector3(0, 0, 1) * float(sign)
+	return (knee_override.origin - knee_anim).dot(forward)
+
+
+func test_straight_leg_knee_bends_forward_plus_z_model():
+	var along_forward: float = await _knee_forward_displacement(1)
+	assert_gt(along_forward, 0.02,
+		"+Z model: straight-leg knee bends toward +Z (got %.3f m)" % along_forward)
+
+
+func test_straight_leg_knee_bends_forward_minus_z_model():
+	var along_forward: float = await _knee_forward_displacement(-1)
+	assert_gt(along_forward, 0.02,
+		"-Z model: straight-leg knee bends toward -Z (got %.3f m)" % along_forward)
+
+
+# ── Slope correction hardened against degenerate ground normals ────────────
+
+# Leg chain in the harness layout: hip 0.85, knee 0.43, foot 0.03 (x = 0.1).
+const _UPPER_L := Transform3D(Basis.IDENTITY, Vector3(0.1, 0.85, 0.0))
+const _LOWER_L := Transform3D(Basis.IDENTITY, Vector3(0.1, 0.43, 0.0))
+const _FOOT_L := Transform3D(Basis.IDENTITY, Vector3(0.1, 0.03, 0.0))
+
+
+func test_zero_ground_normal_is_no_correction_and_no_engine_error():
+	var h = await _spawn_with_foot_ik()
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	var ik: Dictionary = solver._solve_two_bone_ik(0.42, 0.40, _UPPER_L, _LOWER_L, _FOOT_L,
+		Vector3(0.1, 0.065, 0.0), Vector3.ZERO, Vector3.ZERO)
+	assert_false(ik.is_empty(), "solve succeeds with a zero normal")
+	var foot: Transform3D = ik["foot"]
+	assert_true(foot.basis.is_finite(), "foot basis is finite")
+	assert_true(foot.basis.is_equal_approx(_FOOT_L.basis),
+		"a zero normal applies no slope correction")
+	# The bare Quaternion(UP, normal) constructor raises "The vectors must not be zero".
+	assert_engine_error_count(0, "no engine error from the slope correction")
+
+
+func test_downward_ground_normal_gives_valid_flip():
+	var h = await _spawn_with_foot_ik()
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	var ik: Dictionary = solver._solve_two_bone_ik(0.42, 0.40, _UPPER_L, _LOWER_L, _FOOT_L,
+		Vector3(0.1, 0.065, 0.0), Vector3.DOWN, Vector3.ZERO)
+	assert_false(ik.is_empty(), "solve succeeds with a downward normal")
+	var foot: Transform3D = ik["foot"]
+	assert_true(foot.basis.is_finite(), "foot basis is finite for an antiparallel normal")
+	var up_after: Vector3 = foot.basis * Vector3.UP
+	assert_almost_eq(up_after.y, -1.0, 0.001, "foot up is rotated onto the downward normal")
+	assert_engine_error_count(0, "no engine error from the slope correction")
+
+
+# ── Over-stretched pin keeps the foot attached (clamped solve) ─────────────
+
+func test_overstretched_target_keeps_foot_on_shin():
+	var h = await _spawn_with_foot_ik()
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	# A target 1.5 m below the hip: beyond the 0.82 m leg.
+	var ik: Dictionary = solver._solve_two_bone_ik(0.42, 0.40, _UPPER_L, _LOWER_L, _FOOT_L,
+		Vector3(0.1, 0.85 - 1.5, 0.0), Vector3.UP, Vector3.ZERO)
+	assert_false(ik.is_empty(), "over-stretched target still solves")
+	var foot: Transform3D = ik["foot"]
+	var knee: Vector3 = ik["knee"]
+	assert_almost_eq(foot.origin.distance_to(knee), 0.40, 0.001,
+		"foot stays one shin length from the knee (leg fully extended toward the target)")
+
+
+# ── Runtime toggle-off restores foot collision masks ───────────────────────
+
+func test_disabling_foot_ik_at_runtime_restores_foot_masks():
+	var h = await _spawn_with_foot_ik(35)
+	var solver = h.controller._foot_ik
+	assert_not_null(solver)
+	var foot_l: RigidBody3D = h.get_body("Foot_L")
+	var foot_r: RigidBody3D = h.get_body("Foot_R")
+	assert_not_null(foot_l)
+	assert_ne(solver._foot_mask_l, 0, "sanity: the rig gave the foot a real mask to restore")
+	# While foot IK solves, the feet are masked out of collision (architectural choice).
+	assert_eq(foot_l.collision_mask, 0, "foot mask cleared while foot IK is solving")
+	# Toggle off at runtime: the next NORMAL tick must hand the masks back.
+	h.tuning.foot_ik_enabled = false
+	await wait_physics_frames(2)
+	assert_eq(foot_l.collision_mask, solver._foot_mask_l, "left foot mask restored")
+	assert_eq(foot_r.collision_mask, solver._foot_mask_r, "right foot mask restored")
+	assert_false(solver.is_active(), "IK influence dropped on toggle-off")
 
 
 func test_feet_plant_over_ground():

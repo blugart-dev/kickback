@@ -37,7 +37,10 @@ var _rig_builder: PhysicsRigBuilder
 var _connected: bool = false
 var _body_to_rig_name: Dictionary = {}       # RigidBody3D → rig_name (monitored bodies)
 var _own_bodies: Dictionary = {}             # RigidBody3D → true, EVERY body of this rig
-var _cooldown_timestamps: Dictionary = {}    # rig_name → last emit time (msec)
+var _cooldown_timestamps: Dictionary = {}    # rig_name → last emit time (physics seconds)
+## Accumulated physics time (seconds). Cooldowns are measured against this, not
+## the wall clock, so pausing or Engine.time_scale don't leak through.
+var _physics_time: float = 0.0
 var _ragdoll_layer_mask: int = 0
 
 
@@ -114,14 +117,18 @@ func _on_body_entered(other_body: Node3D, this_body: RigidBody3D) -> void:
 	if speed < velocity_threshold:
 		return
 
-	# Filter by cooldown
-	var now: float = Time.get_ticks_msec()
-	var last_time: float = _cooldown_timestamps.get(rig_name, 0.0)
-	if (now - last_time) < cooldown * 1000.0:
+	# Filter by cooldown (physics time)
+	var now: float = _physics_time
+	var last_time: float = _cooldown_timestamps.get(rig_name, -INF)
+	if (now - last_time) < cooldown:
 		return
 	_cooldown_timestamps[rig_name] = now
 
 	body_impact.emit(rig_name, speed, other_body)
+
+
+func _physics_process(delta: float) -> void:
+	_physics_time += delta
 
 
 func _exit_tree() -> void:

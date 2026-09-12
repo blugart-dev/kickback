@@ -62,8 +62,7 @@ func _build_rig() -> void:
 
 		var bone_global := _get_bone_global(bone_def.skeleton_bone)
 		var body := _create_body(bone_def, bone_global)
-		add_child(body)
-		body.global_transform = bone_global
+		add_child(body)  # top_level: the transform build_body set IS the world pose
 		_bodies[bone_def.rig_name] = body
 		_rig_to_bone[bone_def.rig_name] = bone_def.skeleton_bone
 
@@ -102,24 +101,41 @@ func _adopt_baked_rig() -> bool:
 		push_warning("PhysicsRigBuilder: Baked rig is missing %d bones (%s) — falling back to runtime generation" % [missing.size(), ", ".join(missing)])
 		return false
 
-	# Baked rigs predate (or may have been saved without) the world-space
-	# flag — enforce it on adopt, same rationale as _create_body.
+	# The baked nodes carry the layer / mask / gravity / damping / limits of
+	# whatever tuning was assigned WHEN THEY WERE BAKED. The tuning is the
+	# source of truth at runtime, exactly as for a generated rig — re-apply
+	# everything the runtime path sets from it, so a tuning change after the
+	# bake is not silently ignored (top_level included: older bakes were saved
+	# without it, same rationale as in apply_body_tuning).
 	for body: RigidBody3D in baked_bodies.values():
-		body.top_level = true
+		apply_body_tuning(body, _tuning)
 
 	_bodies = baked_bodies
 	_rig_to_bone = baked_bones
 
-	# Baked joints: recover the parent→child topology from node_a/node_b.
+	# Baked joints: recover the parent→child topology from node_a/node_b, and
+	# re-apply the matching JointDefinition (limits scaled by the CURRENT
+	# tuning's joint_limit_scale) on top of the baked values.
 	var body_to_rig: Dictionary = {}
 	for rig_name: String in _bodies:
 		body_to_rig[_bodies[rig_name]] = rig_name
+	var joint_defs: Dictionary = {}  # "parent→child" → JointDefinition
+	for joint_def: JointDefinition in _profile.joints:
+		joint_defs["%s→%s" % [joint_def.parent_rig, joint_def.child_rig]] = joint_def
+	var unmatched := PackedStringArray()
 	for child in get_children():
 		if child is Generic6DOFJoint3D:
 			var a := child.get_node_or_null(child.node_a)
 			var b := child.get_node_or_null(child.node_b)
 			if a in body_to_rig and b in body_to_rig:
+				var key := "%s→%s" % [body_to_rig[a], body_to_rig[b]]
+				if key in joint_defs:
+					(joint_defs[key] as JointDefinition).apply_to(child, _tuning.joint_limit_scale)
+				else:
+					unmatched.append(key)
 				_register_joint(body_to_rig[a], body_to_rig[b], child)
+	if not unmatched.is_empty():
+		push_warning("PhysicsRigBuilder: %d baked joint(s) have no JointDefinition in the profile (%s) — keeping their baked limits; re-bake the rig to match the profile" % [unmatched.size(), ", ".join(unmatched)])
 	_apply_self_collision()
 	return true
 
@@ -146,30 +162,36 @@ func _get_bone_global(bone_name: String) -> Transform3D:
 
 
 func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBody3D:
+	var child_global := NO_CHILD_BONE
+	if bone_def.child_bone != "" and _skeleton.find_bone(bone_def.child_bone) >= 0:
+		child_global = _get_bone_global(bone_def.child_bone)
+	return build_body(bone_def, bone_global, child_global, _tuning)
+
+
+## Sentinel for [method build_body]'s [code]child_global[/code]: the bone has no
+## child bone to offset its collision shape toward (shape stays at the bone origin).
+const NO_CHILD_BONE := Transform3D(Basis(), Vector3.INF)
+
+
+## Builds the RigidBody3D (with its CollisionShape3D child) for [param bone_def],
+## placed at [param bone_global] (world) with the shape offset toward
+## [param child_global] (the child bone's world transform; [constant NO_CHILD_BONE]
+## for none) by [member BoneDefinition.shape_offset], and every physics property
+## taken from [param tuning] (see [method apply_body_tuning]). Single source of
+## truth for body construction — the runtime rig and the editor RigBaker both
+## build their bodies here, so they cannot diverge. The body is not yet in the
+## tree; it is world-space ([code]top_level[/code]), so its transform is final
+## wherever it is parented.
+static func build_body(bone_def: BoneDefinition, bone_global: Transform3D, child_global: Transform3D, tuning: RagdollTuning) -> RigidBody3D:
 	var body := RigidBody3D.new()
 	body.name = bone_def.rig_name
 	body.mass = bone_def.mass
-	body.collision_layer = _tuning.collision_layer
-	body.collision_mask = _tuning.collision_mask
-	body.can_sleep = false
-	body.gravity_scale = _tuning.gravity_scale
-	body.angular_damp = _tuning.angular_damp
-	body.linear_damp = _tuning.linear_damp
-	# World-space, immune to ancestor transform writes. Without this, a
-	# character root that moves every physics frame (CharacterBody3D
-	# move_and_slide, nav-driven NPCs) re-teleports each body to
-	# parent_xform * local every frame, silently discarding that frame's
-	# integration: the rig visibly freezes while springs pump clamp-level
-	# velocities into it — which then release all at once the moment the
-	# root stops (death), as an explosive ragdoll. The springs are what
-	# carry the rig along with the character (their targets already move
-	# with the skeleton); parent inheritance was never load-bearing.
-	body.top_level = true
+	apply_body_tuning(body, tuning)
+	body.transform = bone_global
 
 	# Shape is offset locally along the bone direction (toward child bone)
 	var col_shape := SkeletonDetector.create_collision_shape(bone_def)
-	if bone_def.child_bone != "":
-		var child_global := _get_bone_global(bone_def.child_bone)
+	if child_global.origin.is_finite():
 		var bone_to_child_local := bone_global.affine_inverse() * child_global
 		col_shape.position = bone_to_child_local.origin * bone_def.shape_offset
 	# Box shapes on bones need rotation: bone Y points along bone direction,
@@ -180,6 +202,29 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	body.add_child(col_shape)
 
 	return body
+
+
+## Applies every RigidBody3D property the rig takes from [param tuning] —
+## collision layer / mask, gravity scale, damping, sleeping, and world-space
+## placement. Called at build time and again when a baked rig is adopted, so the
+## tuning (not the bake) is what the bodies run with.
+static func apply_body_tuning(body: RigidBody3D, tuning: RagdollTuning) -> void:
+	body.collision_layer = tuning.collision_layer
+	body.collision_mask = tuning.collision_mask
+	body.can_sleep = false
+	body.gravity_scale = tuning.gravity_scale
+	body.angular_damp = tuning.angular_damp
+	body.linear_damp = tuning.linear_damp
+	# World-space, immune to ancestor transform writes. Without this, a
+	# character root that moves every physics frame (CharacterBody3D
+	# move_and_slide, nav-driven NPCs) re-teleports each body to
+	# parent_xform * local every frame, silently discarding that frame's
+	# integration: the rig visibly freezes while springs pump clamp-level
+	# velocities into it — which then release all at once the moment the
+	# root stops (death), as an explosive ragdoll. The springs are what
+	# carry the rig along with the character (their targets already move
+	# with the skeleton); parent inheritance was never load-bearing.
+	body.top_level = true
 
 
 func _create_joint(joint_def: JointDefinition) -> void:

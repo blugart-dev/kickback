@@ -140,7 +140,11 @@ extends Resource
 # ── Recovery ────────────────────────────────────────────────────────────────
 
 @export_group("Recovery")
-## Base spring strength recovery rate per second.
+## Default spring strength recovery rate per second (the rate SpringResolver
+## returns to in NORMAL). Precedence at runtime: an ImpactProfile's recovery_rate
+## replaces it for the reaction to that hit, [member stagger_recovery_rate] while
+## staggering, 0 while ragdolled; the controller restores this value when the
+## character returns to NORMAL.
 @export var recovery_rate: float = 0.3
 ## Total duration of the get-up recovery sequence in seconds.
 @export var recovery_duration: float = 2.5
@@ -226,9 +230,6 @@ extends Resource
 # ── Advanced: Spring Dynamics ───────────────────────────────────────────────
 
 @export_group("Advanced: Spring Dynamics")
-## Gravity multiplier when springs are active. Formula: (1 - ratio) * multiplier.
-## Higher = more gravity pull on weakened bones. 0.0 = no gravity during spring mode.
-@export var spring_gravity_multiplier: float = 0.5
 ## Base angular damping when springs are active. Formula: base + scale * ratio.
 @export var spring_angular_damp_base: float = 1.0
 ## Angular damping scale factor per strength ratio.
@@ -297,8 +298,12 @@ extends Resource
 # ── Advanced: Physics ───────────────────────────────────────────────────────
 
 @export_group("Advanced: Physics")
-## Gravity scale for ragdoll bodies when springs are inactive (full ragdoll).
-@export var gravity_scale: float = 0.8
+## Gravity scale of a fully limp bone (strength 0). The resolver scales it by
+## (1 - strength ratio), so a bone at full strength has no gravity (the springs
+## hold the pose) and a limp ragdoll falls at exactly this scale. 1.0 = real
+## gravity. Pre-0.4.1 this knob was overwritten by a separate 0.5 multiplier, so
+## corpses fell at half gravity; that multiplier is gone.
+@export var gravity_scale: float = 1.0
 ## Angular damping for ragdoll bodies when springs are inactive.
 @export var angular_damp: float = 8.0
 ## Linear damping for ragdoll bodies when springs are inactive.
@@ -410,30 +415,18 @@ var character_forward_sign: int = 1
 # ── Self-Preservation: Stumble Steps ────────────────────────────────────────
 
 @export_group("Self-Preservation: Stumble Steps")
-## Enable procedural stumble stepping: during STAGGER, the trailing foot swings in
-## the fall direction to catch a loss of balance before it becomes a fall.
-## Requires foot IK (the step is executed through the foot IK solver). 0.4.0.
+## Enable the directed stumble: a staggering hit drifts the character root along
+## the hit direction ([member stumble_push_speed]) and the trailing foot steps to
+## follow. NOTE: this is a scripted displacement, not balance-driven stepping
+## (see docs/AUDIT_2026-09-12.md). Requires foot IK (the step is executed through
+## the foot IK solver). 0.4.0.
 @export var stumble_enabled: bool = true
-## Balance ratio above which a stumble catch begins. Sits BETWEEN
-## [member balance_recovery_threshold] and [member balance_ragdoll_threshold]:
-## the character is past wobbling and heading toward a fall, but a step could still
-## save it. Set low enough that the catch STARTS before the centre-of-mass is already
-## lost — once a catch is in progress the tip-over→ragdoll transition is suspended
-## (the character commits to the attempt) until balance recovers or the step budget
-## ([member stumble_max_steps]) runs out.
-@export_range(0.0, 1.0) var stumble_step_threshold: float = 0.45
-## Base horizontal step distance (meters), scaled by balance ratio so a harder tip
-## takes a bigger step.
+## Horizontal distance (meters) the root drifts between consecutive stumble
+## steps, and the distance ahead of the hips each step lands.
 @export_range(0.0, 1.0) var stumble_step_length: float = 0.24
-## Maximum horizontal reach of a step target from the foot's current position
-## (meters). Clamps the balance-scaled step so the leg never overstretches.
-@export_range(0.1, 1.5) var stumble_step_reach_max: float = 0.6
 ## Time for the stepping foot to travel from its current position to the step
 ## target (seconds).
 @export_range(0.05, 1.0) var stumble_step_duration: float = 0.24
-## Minimum time between consecutive stumble steps (seconds). Produces discrete
-## catch-steps rather than a foot sliding continuously.
-@export_range(0.0, 1.0) var stumble_step_cooldown: float = 0.3
 ## Maximum number of catch-steps in one stagger before giving up and ragdolling.
 @export_range(1, 5) var stumble_max_steps: int = 3
 ## Spring strength (as a fraction of each bone's base) applied WHILE stumbling. A

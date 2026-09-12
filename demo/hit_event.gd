@@ -1,6 +1,7 @@
-## Data object describing a single hit event. Passed to partial ragdoll and
-## flinch controllers to communicate hit location, direction, and magnitude.
-class_name HitEvent
+## Data object describing a single hit event in the comparison DEMO. Passed to
+## the demo-only PartialRagdollController (demo/partial_ragdoll_controller.gd)
+## to communicate hit location, direction, and magnitude. Not part of the plugin:
+## preload this script instead of relying on a global class name.
 extends RefCounted
 
 ## World-space position where the hit landed.
@@ -17,7 +18,8 @@ var hit_bone: PhysicalBone3D
 var hit_bone_region: String = "torso"
 
 
-## Classifies a bone name into a body region for flinch animation selection.
+## Classifies a bone name into a coarse body region so a consumer can pick a
+## reaction per region.
 static func classify_region(bone_name: String) -> String:
 	var n := bone_name.to_lower()
 	if "head" in n:                                          return "head"

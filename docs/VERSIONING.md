@@ -30,7 +30,9 @@ goal, not whether the plugin works.
 Kickback previously climbed to `0.8.5`, which read as ~85% complete. Against the
 objective above that was misleading — the entire active self-preservation layer (the
 part that *is* Euphoria) was unbuilt (~0%). Difficulty-weighted, the project was closer
-to **~30%**.
+to **~30%**. (The 2026-09 [audit](AUDIT_2026-09-12.md) revised that to **~20–25%** —
+the muscle layer and the 0.4.0 stumble turned out to be scripted rather than physical;
+see the ROADMAP scorecard.)
 
 To make the number honest, the project was **re-baselined `0.8.5` → `0.3.0`**:
 

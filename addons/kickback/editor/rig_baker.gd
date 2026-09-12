@@ -6,7 +6,9 @@ class_name RigBaker
 
 
 ## Bakes the physics rig as persistent scene nodes under [param rig_builder].
-## Returns true on success. Uses undo/redo so the operation is reversible.
+## Returns true on success. The whole operation — removing a previous bake and
+## adding the new nodes — is ONE undo/redo action, so undoing a re-bake restores
+## the previous bake and redoing it re-applies the new one.
 static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManager, scene_owner: Node) -> bool:
 	var skeleton := rig_builder.get_node_or_null(rig_builder.skeleton_path) as Skeleton3D
 	if not skeleton:
@@ -21,12 +23,53 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		push_error("RigBaker: RagdollProfile has no bones — cannot bake")
 		return false
 
-	# Clean re-bake if already baked
-	if is_baked(rig_builder):
-		_unbake_immediate(rig_builder)
+	var new_nodes := build_rig_nodes(skeleton, profile, tuning, rig_builder.global_transform)
+	if new_nodes.is_empty():
+		push_error("RigBaker: no profile bone matched the skeleton — cannot bake")
+		return false
+	var previous: Array[Node] = _get_baked_children(rig_builder)
 
 	undo_redo.create_action("Bake Kickback Physics Rig")
 
+	# Do: drop the previous bake (if any), then add the new nodes. Undo runs the
+	# undo methods in reverse registration order: the new nodes come out first,
+	# then the previous bake goes back in with its ownership restored.
+	for node: Node in previous:
+		undo_redo.add_do_method(rig_builder, "remove_child", node)
+		undo_redo.add_undo_method(rig_builder, "add_child", node)
+		undo_redo.add_undo_method(node, "set_owner", scene_owner)
+		for child in node.get_children():
+			undo_redo.add_undo_method(child, "set_owner", scene_owner)
+		undo_redo.add_undo_reference(node)
+
+	# Bodies precede joints in new_nodes, so a joint's node_a/node_b ("../Rig")
+	# resolve the moment it enters the tree.
+	for node: Node in new_nodes:
+		undo_redo.add_do_method(rig_builder, "add_child", node)
+		undo_redo.add_do_method(node, "set_owner", scene_owner)
+		for child in node.get_children():
+			undo_redo.add_do_method(child, "set_owner", scene_owner)
+		undo_redo.add_undo_method(rig_builder, "remove_child", node)
+		undo_redo.add_do_reference(node)
+
+	undo_redo.commit_action()
+	return true
+
+
+## Builds the baked node set for [param skeleton] at its REST pose: one
+## RigidBody3D per profile bone found in the skeleton (built by
+## [method PhysicsRigBuilder.build_body] — the same construction as the runtime
+## rig, tuning included), then one Generic6DOFJoint3D per profile joint whose
+## bodies exist. Bodies carry the [code]kickback_baked[/code] /
+## [code]kickback_rig_name[/code] / [code]kickback_skeleton_bone[/code] metadata
+## the runtime adopt path reads and start frozen (the builder snaps and unfreezes
+## them on first enable); joints reference their bodies by sibling path
+## ([code]../Rig[/code]) and are placed local to a parent at
+## [param rig_builder_global]. Nothing is added to the tree, so this is usable
+## without the editor. Returns bodies first, then joints — the order they must
+## be parented in.
+static func build_rig_nodes(skeleton: Skeleton3D, profile: RagdollProfile, tuning: RagdollTuning, rig_builder_global: Transform3D) -> Array[Node]:
+	var nodes: Array[Node] = []
 	var body_nodes: Dictionary = {}  # rig_name → RigidBody3D (for joint wiring)
 
 	# --- Create bodies ---
@@ -37,46 +80,23 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 			continue
 
 		var bone_global := skeleton.global_transform * skeleton.get_bone_global_rest(bone_idx)
+		var child_global := PhysicsRigBuilder.NO_CHILD_BONE
+		if bone_def.child_bone != "":
+			var child_idx := skeleton.find_bone(bone_def.child_bone)
+			if child_idx >= 0:
+				child_global = skeleton.global_transform * skeleton.get_bone_global_rest(child_idx)
 
-		var body := RigidBody3D.new()
-		body.name = bone_def.rig_name
-		body.mass = bone_def.mass
-		body.collision_layer = tuning.collision_layer
-		body.collision_mask = tuning.collision_mask
-		body.can_sleep = false
-		body.gravity_scale = tuning.gravity_scale
-		body.angular_damp = tuning.angular_damp
-		body.linear_damp = tuning.linear_damp
+		var body := PhysicsRigBuilder.build_body(bone_def, bone_global, child_global, tuning)
 		body.freeze = true
-
 		body.set_meta("kickback_baked", true)
 		body.set_meta("kickback_rig_name", bone_def.rig_name)
 		body.set_meta("kickback_skeleton_bone", bone_def.skeleton_bone)
 
-		# Collision shape with offset toward child bone
-		var col_shape := _create_collision_shape(bone_def)
-		if bone_def.child_bone != "":
-			var child_idx := skeleton.find_bone(bone_def.child_bone)
-			if child_idx >= 0:
-				var child_global := skeleton.global_transform * skeleton.get_bone_global_rest(child_idx)
-				var bone_to_child_local := bone_global.affine_inverse() * child_global
-				var offset_ratio := 0.65 if bone_def.shape_type == "box" else 0.5
-				col_shape.position = bone_to_child_local.origin * offset_ratio
-		if bone_def.shape_type == "box":
-			col_shape.rotation.x = PI / 2.0
-		body.add_child(col_shape)
-
-		# Undo/redo: add body to rig_builder
-		undo_redo.add_do_method(rig_builder, "add_child", body)
-		undo_redo.add_do_method(body, "set_owner", scene_owner)
-		undo_redo.add_do_method(col_shape, "set_owner", scene_owner)
-		undo_redo.add_do_method(body, "set", "global_transform", bone_global)
-		undo_redo.add_undo_method(rig_builder, "remove_child", body)
-		undo_redo.add_do_reference(body)
-
 		body_nodes[bone_def.rig_name] = body
+		nodes.append(body)
 
 	# --- Create joints ---
+	var to_local := rig_builder_global.affine_inverse()
 	for joint_def: JointDefinition in profile.joints:
 		if joint_def.parent_rig not in body_nodes or joint_def.child_rig not in body_nodes:
 			push_warning("RigBaker: joint '%s→%s' references missing body — skipping" % [joint_def.parent_rig, joint_def.child_rig])
@@ -98,6 +118,7 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 		var joint := Generic6DOFJoint3D.new()
 		joint.name = "%s_to_%s" % [joint_def.parent_rig, joint_def.child_rig]
 		joint.set_meta("kickback_baked", true)
+		joint.transform = to_local * joint_global
 
 		# node_a/node_b as relative paths (deterministic, no tree required)
 		joint.node_a = NodePath("../%s" % joint_def.parent_rig)
@@ -105,15 +126,9 @@ static func bake(rig_builder: PhysicsRigBuilder, undo_redo: EditorUndoRedoManage
 
 		# Lock linear axes + apply angular limits/compliance (typed, shared with PhysicsRigBuilder)
 		joint_def.apply_to(joint, tuning.joint_limit_scale)
+		nodes.append(joint)
 
-		undo_redo.add_do_method(rig_builder, "add_child", joint)
-		undo_redo.add_do_method(joint, "set_owner", scene_owner)
-		undo_redo.add_do_method(joint, "set", "global_transform", joint_global)
-		undo_redo.add_undo_method(rig_builder, "remove_child", joint)
-		undo_redo.add_do_reference(joint)
-
-	undo_redo.commit_action()
-	return true
+	return nodes
 
 
 ## Removes all baked nodes from [param rig_builder] with undo/redo support.
@@ -176,36 +191,9 @@ static func _resolve_config(rig_builder: Node) -> Array:
 	return [profile, tuning]
 
 
-static func _create_collision_shape(bone_def: BoneDefinition) -> CollisionShape3D:
-	var col := CollisionShape3D.new()
-	match bone_def.shape_type:
-		"box":
-			var box := BoxShape3D.new()
-			box.size = bone_def.box_size
-			col.shape = box
-		"capsule":
-			var capsule := CapsuleShape3D.new()
-			capsule.radius = bone_def.capsule_radius
-			capsule.height = bone_def.capsule_height
-			col.shape = capsule
-		"sphere":
-			var sphere := SphereShape3D.new()
-			sphere.radius = bone_def.sphere_radius
-			col.shape = sphere
-	return col
-
-
 static func _get_baked_children(rig_builder: PhysicsRigBuilder) -> Array[Node]:
 	var result: Array[Node] = []
 	for child in rig_builder.get_children():
 		if child.has_meta("kickback_baked"):
 			result.append(child)
 	return result
-
-
-## Immediate unbake without undo/redo (used internally before re-bake).
-static func _unbake_immediate(rig_builder: PhysicsRigBuilder) -> void:
-	var to_remove: Array[Node] = _get_baked_children(rig_builder)
-	for node: Node in to_remove:
-		rig_builder.remove_child(node)
-		node.queue_free()

@@ -12,8 +12,10 @@ and systems with difficulty ratings and implementation notes for Godot 4.7+.
 
 > ⚠️ **Honest accounting.** Counting features equally suggests Kickback is ~67% of the
 > way to Euphoria. That overstates it: several "implemented" items are scalar knobs, not
-> behaviors, and every *active self-preservation* behavior is absent. Difficulty-weighted,
-> real parity is **~30%** (see the [ROADMAP.md](ROADMAP.md) scorecard).
+> behaviors, and every *active self-preservation* behavior is absent — the 0.4.0 directed
+> stumble is a scripted root displacement, not balance-driven stepping. Difficulty-weighted,
+> real parity is **~20–25%** (see the [ROADMAP.md](ROADMAP.md) scorecard and the 2026-09
+> [audit](AUDIT_2026-09-12.md)).
 
 ## What's actually built
 

@@ -5,25 +5,38 @@
 extends Node3D
 
 const DemoHelpers := preload("res://demo/demo_helpers.gd")
+const OrbitCamera := preload("res://demo/orbit_camera.gd")
 
 const WALK_SPEED := 1.5
 const WAYPOINT_A := Vector3(-6, 0, 0)
 const WAYPOINT_B := Vector3(6, 0, 0)
-const GROUND_MASK := 1
+const GROUND_MASK := KickbackLayers.ENVIRONMENT_LAYER
+
+
+## One walking NPC of the comparison: its nodes, Kickback handles and walk state.
+## The signal lambdas in _init_npc capture this record, so the walk flag is a
+## plain bool on it rather than a closure cell.
+class Npc extends RefCounted:
+	var label: String
+	var char_root: Node3D
+	var kickback: KickbackCharacter
+	var active_ctrl: ActiveRagdollController
+	var anim: AnimationPlayer
+	var can_walk: bool = true
+	var walk_target: Vector3
+	var home_z: float
+
 
 var _profiles: Array[ImpactProfile] = []
 var _weapon_names := PackedStringArray(["Bullet", "Melee", "Shotgun"])
 var _weapon_idx: int = 0
 
-var _npc_ik: Dictionary = {}
-var _npc_no_ik: Dictionary = {}
+var _npc_ik: Npc
+var _npc_no_ik: Npc
 
 # Camera
 var _cam: Camera3D
-var _cam_distance: float = 7.0
-var _cam_yaw: float = 0.0
-var _cam_pitch: float = -20.0
-var _dragging: bool = false
+var _orbit: OrbitCamera
 
 # HUD
 var _status_label: Label
@@ -31,6 +44,7 @@ var _status_label: Label
 
 func _ready() -> void:
 	_cam = $Camera3D
+	_orbit = OrbitCamera.new(_cam, 7.0, -20.0, 0.5, 2.0, 15.0)
 
 	# IK character (Z=0)
 	_npc_ik = _init_npc($NPC_IK, "Foot IK: ON", true)
@@ -54,51 +68,42 @@ func _ready() -> void:
 # NPC SETUP
 # =============================================================================
 
-func _init_npc(char_root: Node3D, label: String, ik_enabled: bool) -> Dictionary:
+func _init_npc(char_root: Node3D, label: String, ik_enabled: bool) -> Npc:
 	if not char_root:
-		return {}
+		return null
 
 	var tuning := RagdollTuning.create_default()
 	tuning.foot_ik_enabled = ik_enabled
 	var kc := DemoHelpers.build_active_rig(char_root, "", tuning)
 	if not kc:
-		return {}
-	var ac := kc.get_active_controller()
+		return null
 
-	# Find anim player + skeleton
-	var anim: AnimationPlayer
-	var skeleton: Skeleton3D
-	for child in char_root.get_children():
-		var a := DemoHelpers.find_descendant_of_type(child, "AnimationPlayer") as AnimationPlayer
-		if a:
-			anim = a
-		var s := DemoHelpers.find_descendant_of_type(child, "Skeleton3D") as Skeleton3D
-		if s:
-			skeleton = s
+	var npc := Npc.new()
+	npc.label = label
+	npc.char_root = char_root
+	npc.kickback = kc
+	npc.active_ctrl = kc.get_active_controller()
+	npc.anim = DemoHelpers.find_descendant_of_type(char_root, "AnimationPlayer")
+	npc.walk_target = WAYPOINT_B
+	npc.home_z = char_root.global_position.z
 
 	# Wire signals
-	var can_walk := [true]
-	ac.stagger_started.connect(func(_d: Vector3) -> void: can_walk[0] = false)
-	ac.stagger_finished.connect(func() -> void: can_walk[0] = true; if anim: anim.play("walk"))
-	ac.ragdoll_started.connect(func() -> void: can_walk[0] = false)
+	var ac := npc.active_ctrl
+	ac.stagger_started.connect(func(_d: Vector3) -> void: npc.can_walk = false)
+	ac.stagger_finished.connect(func() -> void:
+		npc.can_walk = true
+		if npc.anim: npc.anim.play("walk"))
+	ac.ragdoll_started.connect(func() -> void: npc.can_walk = false)
 	ac.recovery_started.connect(func(fu: bool) -> void:
-		if anim: anim.play("get_up_face_up" if fu else "get_up_face_down"))
-	ac.recovery_finished.connect(func() -> void: can_walk[0] = true; if anim: anim.play("walk"))
+		if npc.anim: npc.anim.play("get_up_face_up" if fu else "get_up_face_down"))
+	ac.recovery_finished.connect(func() -> void:
+		npc.can_walk = true
+		if npc.anim: npc.anim.play("walk"))
 
-	if anim:
-		anim.play.call_deferred("walk")
+	if npc.anim:
+		npc.anim.play.call_deferred("walk")
 
-	return {
-		"label": label,
-		"char_root": char_root,
-		"kickback": kc,
-		"active_ctrl": ac,
-		"anim": anim,
-		"skeleton": skeleton,
-		"can_walk": can_walk,
-		"walk_target": WAYPOINT_B,
-		"home_z": char_root.global_position.z,
-	}
+	return npc
 
 
 # =============================================================================
@@ -106,28 +111,28 @@ func _init_npc(char_root: Node3D, label: String, ik_enabled: bool) -> Dictionary
 # =============================================================================
 
 func _physics_process(delta: float) -> void:
-	if not _npc_ik.is_empty():
+	if _npc_ik:
 		_walk_npc(_npc_ik, delta)
-	if not _npc_no_ik.is_empty():
+	if _npc_no_ik:
 		_walk_npc(_npc_no_ik, delta)
 
 	_update_camera()
 	_update_status()
 
 
-func _walk_npc(npc: Dictionary, delta: float) -> void:
-	if not npc.can_walk[0]:
+func _walk_npc(npc: Npc, delta: float) -> void:
+	if not npc.can_walk:
 		return
-	var root: Node3D = npc.char_root
+	var root := npc.char_root
 	var pos := root.global_position
-	var home_z: float = npc.home_z
-	var tgt: Vector3 = npc.walk_target
+	var home_z := npc.home_z
+	var tgt := npc.walk_target
 	var lane_tgt := Vector3(tgt.x, 0, home_z)
 	var dir := (lane_tgt - pos)
 	dir.y = 0
 	if dir.length() < 0.3:
 		tgt = WAYPOINT_B if tgt == WAYPOINT_A else WAYPOINT_A
-		npc["walk_target"] = tgt
+		npc.walk_target = tgt
 		lane_tgt = Vector3(tgt.x, 0, home_z)
 		dir = (lane_tgt - pos)
 		dir.y = 0
@@ -156,10 +161,9 @@ func _raycast_ground(origin: Vector3, distance: float) -> Dictionary:
 # =============================================================================
 
 func _update_camera() -> void:
-	if not _cam or _npc_ik.is_empty():
+	if not _npc_ik:
 		return
-	var pivot: Vector3 = _npc_ik.char_root.global_position + Vector3(0, 1.0, 1.25)
-	DemoHelpers.orbit_camera(_cam, _cam_yaw, _cam_pitch, _cam_distance, pivot)
+	_orbit.update(_npc_ik.char_root.global_position + Vector3(0, 1.0, 1.25))
 
 
 # =============================================================================
@@ -167,37 +171,24 @@ func _update_camera() -> void:
 # =============================================================================
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _orbit.handle_input(event):
+		return
+
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		match mb.button_index:
-			MOUSE_BUTTON_LEFT:
-				if mb.pressed:
-					KickbackRaycast.shoot_from_camera(
-						get_viewport(), mb.position, _profiles[_weapon_idx])
-			MOUSE_BUTTON_RIGHT:
-				_dragging = mb.pressed
-			MOUSE_BUTTON_WHEEL_UP:
-				if mb.pressed:
-					_cam_distance = maxf(_cam_distance - 0.5, 2.0)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if mb.pressed:
-					_cam_distance = minf(_cam_distance + 0.5, 15.0)
-	elif event is InputEventMouseMotion and _dragging:
-		var mm := event as InputEventMouseMotion
-		_cam_yaw -= mm.relative.x * 0.3
-		_cam_pitch = clampf(_cam_pitch - mm.relative.y * 0.3, -80.0, 80.0)
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			KickbackRaycast.shoot_from_camera(
+				get_viewport(), mb.position, _profiles[_weapon_idx])
 	elif event is InputEventKey and event.pressed:
-		match (event as InputEventKey).keycode:
-			KEY_1: _weapon_idx = 0
-			KEY_2: _weapon_idx = 1
-			KEY_3: _weapon_idx = 2
+		var key := (event as InputEventKey).keycode
+		_weapon_idx = DemoHelpers.select_weapon_by_key(key, _weapon_idx, _weapon_names, null)
+		match key:
 			KEY_R:
-				if not _npc_ik.is_empty():
-					(_npc_ik.kickback as KickbackCharacter).trigger_ragdoll()
+				if _npc_ik:
+					_npc_ik.kickback.trigger_ragdoll()
 			KEY_T:
-				if not _npc_ik.is_empty():
-					(_npc_ik.kickback as KickbackCharacter).trigger_stagger(
-						-_cam.global_basis.z)
+				if _npc_ik:
+					_npc_ik.kickback.trigger_stagger(-_cam.global_basis.z)
 
 
 # =============================================================================
@@ -224,9 +215,9 @@ func _setup_hud() -> void:
 
 
 func _update_status() -> void:
-	if not _status_label or _npc_ik.is_empty():
+	if not _status_label or not _npc_ik:
 		return
-	var ac: ActiveRagdollController = _npc_ik.active_ctrl
+	var ac := _npc_ik.active_ctrl
 	var state_name := ac.get_state_name() if ac else "N/A"
 	var w := _weapon_names[_weapon_idx] if _weapon_idx < _weapon_names.size() else "?"
 	_status_label.text = "FOOT IK DEMO\n\nLeft (Z=0): IK ON  |  State: %s\nRight (Z=2.5): IK OFF\n\nWeapon: %s" % [
@@ -253,6 +244,3 @@ func _add_3d_labels() -> void:
 	label_no_ik.modulate = Color(1.0, 0.4, 0.4)
 	add_child(label_no_ik)
 	label_no_ik.position = Vector3(0, 2.5, 2.5)
-
-
-# (skeleton/anim lookup now lives in demo_helpers.gd)

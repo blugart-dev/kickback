@@ -9,8 +9,13 @@ pose overrides that contaminate `get_bone_global_pose()` during
 feedback loop with one-frame latency.
 
 **Solution:** Direct two-bone IK math computed in `_physics_process`, fed
-directly to `SpringResolver.set_target_overrides()`. Zero latency,
-full control over the solve.
+directly to `SpringResolver.set_target_overrides()`, with full control over
+the solve. The overrides are consumed in the **same physics tick**:
+`ActiveRagdollController` runs at `process_physics_priority = -1`, ahead of
+the `SpringResolver` (priority 0). Historically this was one tick of latency
+— the setup tool created the resolver before the controller, so the resolver
+read the previous tick's solve; the priority ordering (0.4.1) is what makes
+it same-tick.
 
 ## How It Works
 
@@ -44,8 +49,24 @@ Uses the law of cosines to find the knee angle given:
 - **Foot target** (ground hit + ankle height offset)
 - **Knee hint** (animation knee position for bend direction)
 
-The solver handles degenerate cases (fully extended, over-compressed)
-by clamping the chain length and using fallback knee directions.
+Reach is never a reason to drop the solve: a target outside the leg's
+reach band is **clamped** onto it (no further than full extension, no closer
+than full fold) and the chain is always solved — the leg extends fully toward
+the target and the foot is placed at the solver's `end` position (the clamped
+target, returned by `TwoBoneIK.solve`) so it stays attached to the shin.
+Returning nothing for such targets used to make the caller write no override,
+snapping the foot to the animation pose.
+
+Segment lengths are measured **per side** from the rest pose (`_rest_length`),
+so an asymmetric or retargeted skeleton's right leg is not solved with the
+left leg's lengths.
+
+When the animation knee is too close to the hip→foot line to define a bend
+plane (a near-straight idle leg), the plane blends toward a fallback axis —
+the character's forward, honouring `RagdollTuning.character_forward_sign`, so
+knees fold forward whichever way the mesh was authored. The blend
+(`TwoBoneIK.COLINEAR_HINT_SIN`) is continuous, so the plane cannot flip from
+one frame to the next.
 
 ### Foot Target Sources
 
