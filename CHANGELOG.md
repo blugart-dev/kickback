@@ -73,6 +73,28 @@ behavior's job (next). 30 Hz regressed (4.85 → 5.45 idle) and stays open.
 balance and foot XZ error on the ybot idle); `tools/bench/scene_probe.gd
 PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s, +3 s).
 
+**Step 2 — self-collision on (the ragdoll look).** Limbs no longer fold through the torso.
+
+**Changed**
+- **`RagdollTuning.self_collision` defaults to `true`.** Jointed pairs are excluded by
+  their joint; any non-adjacent pair already overlapping in the build pose is excluded
+  for good by a new safety net (`PhysicsRigBuilder.get_self_collision_exclusions()`, run
+  one physics tick after the build); everything else collides. It was off for the
+  velocity-overwrite resolver, whose commands every contact impulse rewrote; under bounded
+  joint motors the ybot has no non-adjacent overlaps in the idle, the react clip or a 4 s
+  ragdoll, and the bench is bit-identical on and off (`tools/bench/overlap_probe.gd`). The
+  shooting-range get-up still lands within 2–5°. `find_overlapping_pairs()` is the space
+  query behind the probe and the tests.
+- **Joint limits were NOT tightened**, on evidence: `tools/bench/limit_envelope.gd` samples
+  all 21 ybot clips against the authored limits and finds 17 axes already exceeded by the
+  animations (spine X −75° vs ±35, elbow lateral ±58° vs ±20, knee 149° vs 140, shoulder
+  twist 158° vs ±90, …). The table is not generous for this character; the folding limbs
+  were a self-collision problem. Recorded in REFERENCE.md "Self-collision".
+- Tests: `test_self_collision.gd` (6) — defaults, jointed-pair exclusion, the safety net
+  on an oversized Hips box, and a limp hand shoved at the chest that is blocked with
+  self-collision on and passes inside with it off. `test_rig_fidelity.gd` pins its legacy
+  numbers with `self_collision = false` explicitly.
+
 ### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
 
 **Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and

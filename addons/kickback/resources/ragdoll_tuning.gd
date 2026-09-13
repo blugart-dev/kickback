@@ -217,15 +217,19 @@ extends Resource
 ## Bones whose collision_mask is set to 0 during NORMAL state and restored on
 ## STAGGER/RAGDOLL. Prevents clipping from animation poses (crossed arms, etc.).
 @export var normal_state_disabled_collision: PackedStringArray = []
-## Whether the bodies of ONE rig collide with each other. Off by default: the
-## auto-generated torso boxes and limb capsules overlap in ordinary animation
-## poses (measured on a hunched idle: Chest-Hips in contact 170 of 180 frames,
-## forearms inside the chest box, upper arms in the spine box), and each of
-## those contacts is a solver impulse that rewrites the spring commands every
-## tick — the largest source of the rig lagging / wobbling behind its animation.
-## Bodies still collide with everything else on [member collision_mask]
-## (environment, OTHER ragdolls). Enable to reproduce the pre-1.4 behaviour.
-@export var self_collision: bool = false
+## Whether the bodies of ONE rig collide with each other. On since 0.6.0: the torso
+## blocks a limp arm, one leg blocks the other, so a ragdoll keeps a body's volume
+## instead of folding limbs through the chest. Jointed pairs never collide (the joint
+## excludes them) and any non-adjacent pair already overlapping in the pose the rig is
+## built in is excluded for good (a torso box that interpenetrates by construction —
+## see [method PhysicsRigBuilder.get_self_collision_exclusions]). It was off for the
+## velocity-overwrite resolver, whose commands every contact impulse rewrote (a hunched
+## game idle had Chest-Hips in contact 170 of 180 frames — the rig lagged and wobbled);
+## under bounded joint motors the contacts are part of the solve, and on the demo rig the
+## idle / react / ragdoll numbers are identical on and off. Bodies always collide with
+## everything else on [member collision_mask] (environment, OTHER ragdolls). Read at
+## build time only.
+@export var self_collision: bool = true
 
 # ── Advanced: Spring Dynamics ───────────────────────────────────────────────
 

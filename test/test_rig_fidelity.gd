@@ -15,6 +15,7 @@ func _tuning(legacy: bool = false) -> RagdollTuning:
 	# feed-forward, anchor mismatch); the shipped default is JOINT_MOTOR since 0.5.0.
 	t.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	t.foot_ik_enabled = false
+	t.self_collision = false  # the 0.4.1 configuration these numbers were pinned on (on by default since 0.6.0)
 	if legacy:
 		t.self_collision = true
 		t.spring_chain_consistency = 0.0
@@ -60,7 +61,9 @@ func test_builder_registers_joint_topology_and_anchors():
 
 
 func test_self_collision_off_excludes_every_body_pair():
-	var h = await _spawn()
+	var t := _tuning()
+	t.self_collision = false  # on by default since 0.6.0; this is the opt-out
+	var h = await _spawn(t)
 	var bodies: Dictionary = h.rig_builder.get_bodies()
 	# Non-adjacent pairs (no joint between them) — exactly the ones that used to
 	# collide in ordinary poses (Chest-Hips, forearm-chest, hand-thigh...).
@@ -75,10 +78,11 @@ func test_self_collision_on_keeps_legacy_contacts():
 	var t := _tuning()
 	t.self_collision = true
 	var h = await _spawn(t)
+	await wait_physics_frames(2)  # the build-pose safety net runs a tick after the build
 	var chest: RigidBody3D = h.get_body("Chest")
 	var hips: RigidBody3D = h.get_body("Hips")
 	# Jointed pairs are still excluded by the joints themselves; a non-adjacent
-	# pair (Chest-Hips) is not — the legacy behaviour.
+	# pair (Chest-Hips, not overlapping in the harness pose) is not.
 	assert_false(hips in chest.get_collision_exceptions() or chest in hips.get_collision_exceptions(),
 		"self_collision=true leaves non-adjacent pairs colliding")
 
@@ -185,7 +189,7 @@ func test_feed_forward_tracks_a_moving_target_tighter_than_legacy():
 
 func test_new_tuning_fields_default_to_the_fidelity_pass():
 	var t := RagdollTuning.create_default()
-	assert_false(t.self_collision, "self_collision off by default")
+	assert_true(t.self_collision, "self_collision ON by default since 0.6.0 (the motor substrate tolerates the contacts)")
 	assert_almost_eq(t.spring_chain_consistency, 1.0, 0.001)
 	assert_almost_eq(t.spring_feed_forward, 1.0, 0.001)
 	assert_almost_eq(t.spring_angular_settle_deadband, 0.01, 0.0001)

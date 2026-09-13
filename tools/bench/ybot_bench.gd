@@ -12,7 +12,7 @@
 ##   SAG    : mean pelvis height below the resolver's own target during IDLE (mm);
 ##   FEET   : share of IDLE ticks on which both feet reported a ground contact
 ## Env: BENCH_HZ=30|60|120, BENCH_DIAG=1 (per-joint dump), BENCH_VARIANT=nofootik,
-## nofootcol,support025,support05,support1,nopin,pin03,gain05,gain15,gain20,gain30,
+## selfcol,noselfcol,nofootcol,support025,support05,support1,nopin,pin03,gain05,gain15,gain20,gain30,
 ## damp2,noff (comma-separated).
 ##
 ##   godot --headless --path . -s tools/bench/ybot_bench.gd
@@ -102,6 +102,10 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.muscle_root_force = 5000.0
 	if "rootforce10k" in variant:
 		tuning.muscle_root_force = 10000.0
+	if "selfcol" in variant:
+		tuning.self_collision = true
+	if "noselfcol" in variant:
+		tuning.self_collision = false
 	if "nofootcol" in variant:
 		tuning.foot_ik_disable_foot_collision = true  # pre-0.6.0: feet masked out, anchor carries the body
 	if "support1" in variant:

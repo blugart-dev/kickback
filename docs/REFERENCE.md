@@ -64,7 +64,8 @@ velocity every tick (a head's came back reversed). Diagnosis and defaults:
    collision exception for every body pair). Only jointed pairs were excluded before;
    the auto-generated torso boxes and limb capsules overlap in ordinary poses (Chest-Hips
    in contact 170 of 180 idle frames, forearms inside the chest box), and every contact is
-   a solver impulse against the springs.
+   a solver impulse against the springs. **Reverted for the motor substrate in 0.6.0:
+   `self_collision` is on by default** — see "Self-collision" below.
 2. **Chain-consistent linear commands** (`spring_chain_consistency`, 0..1, default 1).
    Bodies update parent-first (`PhysicsRigBuilder.get_joints()` gives the topology and
    the joint anchor in both bodies' local frames). A jointed child's linear velocity is
@@ -247,6 +248,39 @@ controller sets the support override to 1 and makes the feet frictionless for th
 then restores friction and fades the support to the tuning's value over 0.75 s once
 NORMAL is reached. Shooting range, all five targets: ≤ 8° at `recovery_finished`, 1–4°
 after 3 s, pelvis at its target height on its own legs.
+
+### Self-collision (0.6.0)
+
+`RagdollTuning.self_collision` is **on** by default since 0.6.0: the torso blocks a limp
+arm, one leg blocks the other, a ragdoll keeps its volume instead of folding limbs through
+the chest. Rules (`PhysicsRigBuilder._apply_self_collision`):
+
+- jointed pairs never collide — the `Generic6DOFJoint3D` excludes its two bodies;
+- any NON-adjacent pair whose shapes already overlap in the pose the rig is built in is
+  excluded for good one physics tick after the build (`get_self_collision_exclusions()`
+  lists them) — a torso box that interpenetrates by construction would otherwise spend the
+  whole game pushing itself apart and fighting the muscles;
+- everything else collides. `find_overlapping_pairs()` is the space query the probes and
+  tests use (exceptions do not hide anything from it).
+
+Why it was off: the velocity-overwrite resolver's commands were rewritten by every contact
+impulse (a hunched game idle had Chest-Hips in contact 170 of 180 frames). Under bounded
+joint motors the contacts are part of the solve. Measured on the ybot
+(`tools/bench/overlap_probe.gd`): no non-adjacent pair overlaps in the build pose, the
+idle, or a 4 s ragdoll; the bench is bit-identical on and off; the shooting-range get-up
+still lands within 2–5°. Off = every pair excluded (the pre-0.6.0 behaviour).
+
+**Joint limits vs the animations** (`tools/bench/limit_envelope.gd`, the 21 ybot clips
+sampled at 30 Hz, angles in the joint limit frame): the anatomical table is *not*
+generous for this character — 17 axes are exceeded by at least one clip, mostly by the
+get-up, kip-up and injured clips. Spine X reaches −75° (limit ±35), Head X −82° (±70),
+shoulder twist −113°/158° (±90), shoulder lateral −139° (±120), **elbow lateral ±58° (±20)**,
+wrist lateral 81° (±60), hip twist 65° (±40), knee flexion 149° (140). A motor driven past
+a limit pushes into a hard wall (Jolt ignores limit softness), so these clips are tracked
+short there. The limits were therefore **not tightened** to fix the ragdoll look (that is
+self-collision's job); `joint_limit_scale` widens them for a project whose clips need it,
+and the elbow-lateral reading is a frame question to revisit (a forearm-twist bone the
+detector folds into the elbow would show exactly this).
 
 **What this exposes.** After the react clip the 60 Hz idle no longer converges (SETTLE
 10.2° mean, balance ratio 0.57, legacy 0.96°): the loaded feet stay where friction planted

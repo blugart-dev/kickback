@@ -11,6 +11,7 @@ extends Node3D
 var _skeleton: Skeleton3D
 var _bodies: Dictionary = {}         # rig_name → RigidBody3D
 var _rig_to_bone: Dictionary = {}    # rig_name → skeleton bone name
+var _self_collision_exclusions: Array = []  # [rig_a, rig_b] pairs excluded by the build-pose safety net
 ## child rig_name → {parent: String, joint: Generic6DOFJoint3D,
 ##   anchor_parent: Vector3, anchor_child: Vector3, frame_parent: Transform3D,
 ##   frame_child: Transform3D} — the joint anchor / limit frame expressed in each
@@ -142,13 +143,18 @@ func _adopt_baked_rig() -> bool:
 	return true
 
 
-## Excludes every body pair of this rig from colliding unless the tuning asks
-## for self-collision (RagdollTuning.self_collision). Jointed pairs are already
-## excluded by the joints; the non-adjacent pairs (Chest-Hips, forearm-chest,
-## upper arm-spine, ...) overlap in ordinary poses and would otherwise fight
-## the springs with contact impulses every tick.
+## Self-collision (RagdollTuning.self_collision, on since 0.6.0): jointed pairs are
+## excluded by their joint, pairs already overlapping in the build pose are excluded as
+## a safety net (_exclude_build_pose_overlaps), everything else collides — the torso
+## blocks a limp arm, one leg blocks the other. Off: every pair is excluded, the
+## pre-0.6.0 behaviour for the velocity-overwrite resolver, whose commands the contact
+## impulses used to fight (measured on a stocky game rig: Chest-Hips in contact 170 of
+## 180 idle frames). Under bounded joint motors the same contacts are harmless: the ybot
+## idle / react / ragdoll have no non-adjacent overlaps and the bench is bit-identical.
 func _apply_self_collision() -> void:
+	_self_collision_exclusions = []
 	if _tuning.self_collision:
+		_exclude_build_pose_overlaps()
 		return
 	var list: Array = _bodies.values()
 	for i in list.size():
@@ -208,21 +214,100 @@ static func build_body(bone_def: BoneDefinition, bone_global: Transform3D, child
 	body.transform = bone_global
 
 	var col_shape := SkeletonDetector.create_collision_shape(bone_def)
-	if bone_def.sole_aligned and bone_def.shape_type == "box":
-		col_shape.transform = sole_shape_transform(bone_def, bone_global, child_global, tuning.foot_ik_ankle_height, up)
-	else:
-		# Shape is offset locally along the bone direction (toward child bone)
-		if child_global.origin.is_finite():
-			var bone_to_child_local := bone_global.affine_inverse() * child_global
-			col_shape.position = bone_to_child_local.origin * bone_def.shape_offset
-		# Box shapes on bones need rotation: bone Y points along bone direction,
-		# but box Y should be height (thin). Rotate 90° on X so box Z (length)
-		# aligns with bone Y (forward) and box Y (height) aligns with bone Z (up).
-		if bone_def.shape_type == "box":
-			col_shape.rotation.x = PI / 2.0
+	col_shape.transform = shape_local_transform(bone_def, bone_global, child_global, tuning, up)
 	body.add_child(col_shape)
 
 	return body
+
+
+## The body-local transform of [param bone_def]'s collision shape (see [method build_body]
+## for the arguments): a sole-aligned foot box is level with [param up] with its bottom on
+## the foot IK sole; every other shape is offset along the bone toward the child bone by
+## [member BoneDefinition.shape_offset], boxes rotated 90° on X so their Z runs along the
+## bone (bone Y) and their Y is the thin height.
+static func shape_local_transform(bone_def: BoneDefinition, bone_global: Transform3D, child_global: Transform3D, tuning: RagdollTuning, up: Vector3 = Vector3.UP) -> Transform3D:
+	if bone_def.sole_aligned and bone_def.shape_type == "box":
+		return sole_shape_transform(bone_def, bone_global, child_global, tuning.foot_ik_ankle_height, up)
+	var origin := Vector3.ZERO
+	if child_global.origin.is_finite():
+		var bone_to_child_local := bone_global.affine_inverse() * child_global
+		origin = bone_to_child_local.origin * bone_def.shape_offset
+	var basis := Basis.IDENTITY
+	if bone_def.shape_type == "box":
+		basis = Basis(Vector3.RIGHT, PI / 2.0)
+	return Transform3D(basis, origin)
+
+
+## The pairs of NON-adjacent rig bodies (no joint between them) whose collision shapes
+## geometrically overlap RIGHT NOW, as sorted [rig_a, rig_b] arrays. A space query per
+## body shape, so collision exceptions do not hide anything — this is what the probes
+## and tests use to check that a pose (idle, ragdoll) does not interpenetrate. Needs the
+## bodies to be registered in the physics space (one physics tick after they enter the
+## tree). Adjacent pairs overlap by construction (the shapes meet at the joint) and are
+## excluded by the joint itself, so they are not reported.
+func find_overlapping_pairs() -> Array:
+	var out: Array = []
+	if _bodies.is_empty() or not is_inside_tree():
+		return out
+	var rig_of: Dictionary = {}
+	for rig: String in _bodies:
+		rig_of[(_bodies[rig] as RigidBody3D).get_rid()] = rig
+	var ss := get_world_3d().direct_space_state
+	var seen: Dictionary = {}
+	var names: Array = _bodies.keys()
+	names.sort()
+	for rig: String in names:
+		var body: RigidBody3D = _bodies[rig]
+		var shape := body.get_child(0) as CollisionShape3D
+		if not shape or not shape.shape:
+			continue
+		var q := PhysicsShapeQueryParameters3D.new()
+		q.shape = shape.shape
+		q.transform = shape.global_transform
+		q.collision_mask = body.collision_layer
+		q.exclude = [body.get_rid()]
+		q.collide_with_bodies = true
+		q.collide_with_areas = false
+		for hit: Dictionary in ss.intersect_shape(q, 32):
+			var other: String = rig_of.get(hit.rid, "")
+			if other == "" or _are_adjacent(rig, other):
+				continue
+			var a := rig if rig < other else other
+			var b := other if rig < other else rig
+			var key := "%s+%s" % [a, b]
+			if not seen.has(key):
+				seen[key] = true
+				out.append([a, b])
+	return out
+
+
+## True when a joint connects the two rig bodies.
+func _are_adjacent(a: String, b: String) -> bool:
+	return (a in _joints and _joints[a].parent == b) or (b in _joints and _joints[b].parent == a)
+
+
+## Self-collision safety net (RagdollTuning.self_collision on): any NON-adjacent pair
+## whose shapes already overlap in the pose the rig was built in is excluded for good —
+## a pair that interpenetrates by construction (an oversized torso box on a stocky rig)
+## would otherwise spend the whole game pushing itself apart and fighting the muscles.
+## Runs one physics tick after the build so the space knows the bodies. The excluded
+## pairs are listed by get_self_collision_exclusions().
+func _exclude_build_pose_overlaps() -> void:
+	await get_tree().physics_frame
+	if not is_inside_tree() or _bodies.is_empty():
+		return
+	_self_collision_exclusions = find_overlapping_pairs()
+	for pair: Array in _self_collision_exclusions:
+		var a: RigidBody3D = _bodies.get(pair[0])
+		var b: RigidBody3D = _bodies.get(pair[1])
+		if a and b:
+			a.add_collision_exception_with(b)
+
+
+## The non-adjacent body pairs the self-collision safety net excluded at build (see
+## _exclude_build_pose_overlaps); empty when self_collision is off or nothing overlapped.
+func get_self_collision_exclusions() -> Array:
+	return _self_collision_exclusions
 
 
 ## The body-local transform of a [member BoneDefinition.sole_aligned] foot box: level

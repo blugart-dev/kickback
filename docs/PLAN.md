@@ -159,6 +159,14 @@ it; the scripted stumble and the sine sway are deleted.
   faded back over 0.75 s). **Exposed**: SETTLE after react_front 10.2° @60 Hz (legacy
   0.96) — loaded feet stay where friction planted them; the step behavior must move them.
   30 Hz idle regressed 4.85 → 5.45 (open).
+- [x] **Self-collision on** (2026-09-13, maintainer asked for the ragdoll look first; `test_self_collision.gd`,
+  6 tests): `self_collision` default true; jointed pairs excluded by the joint, build-pose
+  overlaps excluded by a safety net (`get_self_collision_exclusions`), everything else
+  collides. Measured: ybot has no non-adjacent overlaps in idle / react / 4 s ragdoll, bench
+  bit-identical on/off, get-up 2–5°. **Limits not tightened**: `tools/bench/limit_envelope.gd`
+  shows 17 axes already exceeded by the 21 clips (elbow lateral ±58 vs ±20, spine X −75 vs
+  ±35, knee 149 vs 140). Open: the elbow-lateral reading looks like a frame/twist-bone
+  question; a stagger/ragdoll with a leg swinging through the other is now blocked.
 - [ ] `BalanceState` (new file): CoM, CoM velocity, XCoM (`CoM + v / √(g / leg_length)`), support polygon from **foot contact** (feet collide in all states ✅; contact from the foot bodies' `contact_monitor` ✅ — the polygon itself is still to build), loaded foot, signed XCoM distance to the polygon edge, computed once per physics tick
 - [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
 - [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
