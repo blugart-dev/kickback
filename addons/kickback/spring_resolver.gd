@@ -198,6 +198,11 @@ func _init_bones() -> void:
 	_bone_names = PackedStringArray(_bones.keys())
 	_init_chain()
 	_resolve_root_motion_bone()
+	# JOINT_MOTOR: build the root anchors and enable the motors now, so the rig is
+	# complete when setup finishes rather than on the first physics tick (which on a
+	# fast headless run can come after the caller's first look at the rig).
+	if _motor_mode and not _motors_enabled:
+		_apply_motor_mode(true)
 
 
 func _resolve_root_motion_bone() -> void:

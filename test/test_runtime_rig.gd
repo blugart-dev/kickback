@@ -48,6 +48,7 @@ func test_rig_builds_all_bodies():
 
 func test_rig_builds_all_joints():
 	var h = await _spawn()
+	await wait_physics_frames(2)  # the resolver may still be a tick away from its first solve
 	var joints := 0
 	var world_joints := 0
 	var names := PackedStringArray()
