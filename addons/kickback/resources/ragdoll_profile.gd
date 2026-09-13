@@ -201,10 +201,10 @@ static func create_mixamo_default() -> RagdollProfile:
 		["Hand_R",     "mixamorig_RightHand",      "",                          1.0, "box",     Vector3(0.10, 0.04, 0.12),  0.5],
 		["UpperLeg_L", "mixamorig_LeftUpLeg",      "mixamorig_LeftLeg",         8.0, "capsule", Vector3(0.08, 0.40, 0.0),   0.5],
 		["LowerLeg_L", "mixamorig_LeftLeg",        "mixamorig_LeftFoot",        4.0, "capsule", Vector3(0.065, 0.38, 0.0),  0.5],
-		["Foot_L",     "mixamorig_LeftFoot",       "mixamorig_LeftToeBase",     2.0, "box",     Vector3(0.12, 0.07, 0.25),  0.65],
+		["Foot_L",     "mixamorig_LeftFoot",       "mixamorig_LeftToeBase",     2.0, "box",     Vector3(0.12, 0.065, 0.325), SkeletonDetector.FOOT_SOLE_OFFSET],
 		["UpperLeg_R", "mixamorig_RightUpLeg",     "mixamorig_RightLeg",        8.0, "capsule", Vector3(0.08, 0.40, 0.0),   0.5],
 		["LowerLeg_R", "mixamorig_RightLeg",       "mixamorig_RightFoot",       4.0, "capsule", Vector3(0.065, 0.38, 0.0),  0.5],
-		["Foot_R",     "mixamorig_RightFoot",      "mixamorig_RightToeBase",    2.0, "box",     Vector3(0.12, 0.07, 0.25),  0.65],
+		["Foot_R",     "mixamorig_RightFoot",      "mixamorig_RightToeBase",    2.0, "box",     Vector3(0.12, 0.065, 0.325), SkeletonDetector.FOOT_SOLE_OFFSET],
 	]
 
 	for entry: Array in bone_data:
@@ -225,6 +225,7 @@ static func create_mixamo_default() -> RagdollProfile:
 			"sphere":
 				bone_def.sphere_radius = dims.x
 		bone_def.shape_offset = entry[6]
+		bone_def.sole_aligned = entry[0] in SkeletonDetector.SOLE_ALIGNED_SLOTS
 		profile.bones.append(bone_def)
 
 	# --- Joint definitions --- (the shared humanoid table, ANATOMICAL frame)

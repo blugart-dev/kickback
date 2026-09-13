@@ -86,7 +86,7 @@ static func build_rig_nodes(skeleton: Skeleton3D, profile: RagdollProfile, tunin
 			if child_idx >= 0:
 				child_global = skeleton.global_transform * skeleton.get_bone_global_rest(child_idx)
 
-		var body := PhysicsRigBuilder.build_body(bone_def, bone_global, child_global, tuning)
+		var body := PhysicsRigBuilder.build_body(bone_def, bone_global, child_global, tuning, skeleton.global_basis.y.normalized())
 		body.freeze = true
 		body.set_meta("kickback_baked", true)
 		body.set_meta("kickback_rig_name", bone_def.rig_name)

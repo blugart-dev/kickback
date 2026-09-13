@@ -15,10 +15,12 @@ extends Node3D
 
 ## Bone table: [name, parent_name, local_position]. Parents precede children.
 ## Identity bases throughout — a plain standing pose is enough to exercise the
-## spring/ragdoll/IK math, which is orientation-agnostic. Hips at 0.9 m, feet at
-## ~0.03 m above the origin (the character root), legs 0.42 m + 0.40 m long.
+## spring/ragdoll/IK math, which is orientation-agnostic. Hips at 0.935 m, ankles at
+## 0.065 m above the origin (the character root) = RagdollTuning.foot_ik_ankle_height,
+## so the sole-aligned foot boxes rest exactly on the y = 0 ground; legs 0.42 m +
+## 0.40 m long.
 const _BONES: Array = [
-	["mixamorig_Hips", "", Vector3(0.0, 0.9, 0.0)],
+	["mixamorig_Hips", "", Vector3(0.0, 0.935, 0.0)],
 	["mixamorig_Spine", "mixamorig_Hips", Vector3(0.0, 0.12, 0.0)],
 	["mixamorig_Spine1", "mixamorig_Spine", Vector3(0.0, 0.12, 0.0)],
 	["mixamorig_Spine2", "mixamorig_Spine1", Vector3(0.0, 0.12, 0.0)],

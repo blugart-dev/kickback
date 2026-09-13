@@ -372,7 +372,10 @@ var character_forward_sign: int = 1
 ## When enabled, a foot IK solver adjusts leg targets based on ground raycasts.
 @export var foot_ik_enabled: bool = true
 ## Distance from ankle joint center to the bottom of the foot sole (meters).
-## Offsets the IK target upward so feet don't sink into the ground.
+## Offsets the IK target upward so feet don't sink into the ground, and is the depth
+## of the sole-aligned foot collider's bottom face below the ankle (the rig is built
+## with it — see [member BoneDefinition.sole_aligned]), so the planted foot's box rests
+## exactly on the ground and can carry the body's weight.
 @export_range(0.0, 0.2) var foot_ik_ankle_height: float = 0.065
 ## Maximum distance the pelvis can drop to accommodate the lowest foot (meters).
 ## Prevents unrealistic leg stretching when one foot is much lower than the other.
@@ -399,10 +402,14 @@ var character_forward_sign: int = 1
 ## Physics collision layers used for foot IK ground raycasts.
 ## Must include layers that your terrain/ground uses.
 @export_flags_3d_physics var foot_ik_collision_mask: int = 1
-## Disable foot body collision with ground during NORMAL state.
-## IK plants feet precisely so physics collision is redundant and causes jitter.
-## Collision is restored during STAGGER/RAGDOLL/GETTING_UP.
-@export var foot_ik_disable_foot_collision: bool = true
+## Mask the foot bodies out of collision while foot IK is solving (NORMAL / STAGGER;
+## restored for RAGDOLL / GETTING_UP). Off by default since 0.6.0: the feet are
+## load-bearing — the sole-aligned foot collider rests on the ground and the legs
+## carry the body (see [member muscle_root_support]). Before 0.6.0 the pitched foot
+## box sat several cm below the floor and had to be masked out (it was pushing the
+## whole character up); turn this on only for a rig whose foot collider cannot be
+## made to sit on the sole.
+@export var foot_ik_disable_foot_collision: bool = false
 ## Pin feet to their ground contact positions during STAGGER state.
 ## Prevents foot sliding while the upper body wobbles from sway forces.
 ## Leg bone spring strengths are boosted to keep feet planted.
@@ -561,6 +568,14 @@ enum MuscleMode {
 ## for the default rig) plus a margin. A hit stronger than this moves the character.
 ## Not scaled by [member muscle_strength_scale]; released when limp.
 @export_range(0.0, 20000.0) var muscle_root_force: float = 2500.0
+## Share of [member muscle_root_force] the root position motor may spend along the
+## world's UP axis (0 = none: the legs carry the whole body through their joint motors
+## and the feet on the ground; 1 = the motor may hold the pelvis up by itself, as
+## before 0.6.0 — the default rig weighs ~800 N, so anything above ~0.35 can still
+## carry it all). Sideways and orientation authority are unaffected. The
+## feet-load-bearing lever of docs/PLAN.md 0.6.0: with the anchor carrying the weight
+## the feet touched the floor with ~2 % of it.
+@export_range(0.0, 1.0) var muscle_root_support: float = 0.0
 ## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
 ## the tracking damping; this only bleeds free rotation).
 @export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5

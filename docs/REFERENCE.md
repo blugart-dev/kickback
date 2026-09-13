@@ -155,8 +155,10 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
   of them, discards impulses applied between ticks), and the fixed world joint above. As
   a bounded force inside the solver the pelvis sits within 1 mm of its target with no
   bounce, a hit above ~2500 N moves the character, and after a ragdoll on the ground the
-  character gets up upright with ~2° error. The balance layer (0.6.0) replaces this with
-  feet that carry the weight. Consequence: **the balance-driven tip-over
+  character gets up upright with ~2° error. **Since 0.6.0 the anchor does not carry the
+  body's weight**: `muscle_root_support` (default 0) caps the position motor along the
+  world's UP axis, so the legs hold the pelvis up through their joint motors and the feet
+  on the ground — see "Feet load-bearing" below. Consequence: **the balance-driven tip-over
   (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held pelvis
   cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the body,
   not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5 while
@@ -214,6 +216,44 @@ force-driven root brought the default (feet not colliding) from a 15° ring down
 hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
 tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
 noisy on Windows; quiet runs put the motor path at ≈1.2–1.4× the legacy path.
+
+### Feet load-bearing (0.6.0, step 1)
+
+Three things had to be true before the legs could carry the body:
+
+1. **The foot collider sits on the sole.** `BoneDefinition.sole_aligned` (on for the
+   feet in both profile factories) builds the foot box LEVEL with the character's up axis
+   at rig-build time, bottom face exactly `foot_ik_ankle_height` below the ankle, its
+   length along the flattened ankle→toe direction with `FOOT_HEEL_RATIO` (0.3) of the
+   ankle→toe extent added behind the ankle (`shape_offset` = the share of the box length
+   ahead of the ankle, `FOOT_SOLE_OFFSET` ≈ 0.77). The bone-aligned box it replaces
+   followed the Mixamo foot bone 27° down toward the toes; its corner sat 7 cm below the
+   sole, a colliding foot was pushed 15° off its pose and the whole character up — the
+   reason the feet used to be masked out of collision. `PhysicsRigBuilder.sole_shape_transform`
+   is the geometry; `build_body` takes the character's up.
+2. **The feet collide** (`foot_ik_disable_foot_collision = false` by default) and report
+   contacts (`contact_monitor`, 4 contacts) for the balance layer.
+3. **The anchor stops lifting.** The position motor runs on a second, world-aligned anchor
+   (`<Root>_anchor_lin`) so its force limits are world axes: `(muscle_root_force,
+   muscle_root_force × muscle_root_support, muscle_root_force)`. With `muscle_root_support`
+   0 the anchor has no vertical authority. Measured: the feet went from carrying ~2 % of
+   the 804 N body to all of it (with the feet masked the body sinks until the shins hit the
+   floor — `test_feet_load_bearing.gd`); pelvis sag on the legs 6 mm at 60 Hz, 0.8 mm at
+   120 Hz, 9 mm at 30 Hz; no bounce.
+
+**Get-up.** The canned get-up blend needs the pelvis lifted (folded legs cannot push a
+body up through a pose blend) and the feet free to reach their standing spots: the
+controller sets the support override to 1 and makes the feet frictionless for the blend,
+then restores friction and fades the support to the tuning's value over 0.75 s once
+NORMAL is reached. Shooting range, all five targets: ≤ 8° at `recovery_finished`, 1–4°
+after 3 s, pelvis at its target height on its own legs.
+
+**What this exposes.** After the react clip the 60 Hz idle no longer converges (SETTLE
+10.2° mean, balance ratio 0.57, legacy 0.96°): the loaded feet stay where friction planted
+them while the animation returns to idle. A load-bearing foot cannot be dragged into
+place — it has to be unloaded and stepped, which is the balance layer's step behavior
+(next). The static CoM-vs-ankle-midpoint ratio also reads 0.5–0.6 for such a stance, so
+until `BalanceState` owns the decision a hit from that stance triggers a stagger.
 
 ## Center of mass balance ratio
 

@@ -90,7 +90,8 @@ kickback/
 ├── tools/
 │   ├── spike/motor_spike.gd         # Standalone headless muscle spike (audit §8): 6DOF-motor muscle A/B vs SpringResolver — results in docs/MUSCLE_SPIKE.md
 │   ├── bench/ybot_bench.gd         # 0.5.0 acceptance bench on the ybot: both muscle modes, idle/react/hit, BENCH_HZ/DIAG/VARIANT
-│   ├── bench/scene_probe.gd        # Loads any demo scene as-is and logs every character with no input (PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS)
+│   ├── bench/scene_probe.gd        # Loads any demo scene as-is and logs every character with no input (PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS; PROBE_ACTION=ragdoll adds a get-up timeline)
+│   ├── bench/foot_probe.gd         # Foot collider vs floor, contacts, balance ratio and foot XZ error on the ybot idle (feet load-bearing)
 │   └── bench/trace_report.py       # Summarises a KickbackTraceRecorder trace: sag, bounce frequency, error spikes, clipping, pacing
 └── project.godot                    # Names 3D physics layers 1-5 (Environment, Projectiles, Characters, Active Ragdoll, Godot Ragdoll)
 ```

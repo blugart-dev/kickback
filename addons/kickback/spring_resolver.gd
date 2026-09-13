@@ -70,6 +70,15 @@ var _motor_joints: Dictionary = {}
 ## down), and rebuilding the constraint to re-anchor it broke the other joints.
 var _root_anchor: RigidBody3D = null
 var _root_world_joint: Generic6DOFJoint3D = null
+## World-aligned twin of the anchor for the root's POSITION motor: same origin, identity
+## basis, so the linear motor's per-axis force limits are world axes and the up-axis
+## limit (muscle_root_support × weight) is exactly vertical. The orientation anchor's
+## frame is the pelvis target frame and cannot serve: its tilted axes each carry a
+## vertical component (measured: the "sideways" limits still lifted ~500 N).
+var _root_anchor_lin: RigidBody3D = null
+var _root_lin_joint: Generic6DOFJoint3D = null
+## Controller override of muscle_root_support (negative = none); see set_root_support_override.
+var _root_support_override: float = -1.0
 ## Microseconds the last resolver tick took (legacy or motor path) — for the bench.
 var _last_tick_usec: int = 0
 ## Godot's Generic6DOFJoint3D reports/measures the child's rotation about the joint
@@ -323,6 +332,7 @@ func _tick(delta: float) -> void:
 		else:
 			# Root motion (if stripped) is removed inside get_animation_bone_global.
 			target_xform = skel_global * get_animation_bone_global(state.bone_idx)
+		state.target_xform = target_xform
 		var current_xform := body.global_transform
 
 		# Feed-forward: how the target itself moved since last tick (world rotation
@@ -435,28 +445,8 @@ func _create_root_world_joint() -> void:
 	var root_body: RigidBody3D = _bones[root_rig].body
 	var xform := root_body.global_transform.orthonormalized()
 
-	var anchor := RigidBody3D.new()
-	anchor.name = "%s_anchor" % root_rig
-	anchor.freeze = true
-	anchor.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
-	anchor.collision_layer = 0
-	anchor.collision_mask = 0
-	anchor.can_sleep = false
-	anchor.top_level = true
-	_rig_builder.add_child(anchor)
-	anchor.global_transform = xform
-
-	var joint := Generic6DOFJoint3D.new()
-	joint.name = "%s_anchor_motor" % root_rig
-	_rig_builder.add_child(joint)
-	joint.global_transform = xform
-	joint.node_a = joint.get_path_to(anchor)
-	joint.node_b = joint.get_path_to(root_body)
-	for axis_flag in [Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT]:
-		joint.set_flag_x(axis_flag, false)
-		joint.set_flag_y(axis_flag, false)
-		joint.set_flag_z(axis_flag, false)
-	_set_linear_motor(joint, Vector3.ZERO, 0.0)
+	var anchor := _make_anchor("%s_anchor" % root_rig, xform)
+	var joint := _make_free_joint("%s_anchor_motor" % root_rig, xform, anchor, root_body)
 	_root_anchor = anchor
 	_root_world_joint = joint
 	_motor_joints[root_rig] = {
@@ -465,6 +455,41 @@ func _create_root_world_joint() -> void:
 		"fp": Basis.IDENTITY,
 		"fc": Basis.IDENTITY,
 	}
+	var lin_xform := Transform3D(Basis.IDENTITY, xform.origin)
+	_root_anchor_lin = _make_anchor("%s_anchor_lin" % root_rig, lin_xform)
+	_root_lin_joint = _make_free_joint("%s_anchor_lin_motor" % root_rig, lin_xform, _root_anchor_lin, root_body)
+	_set_linear_motor(_root_lin_joint, Vector3.ZERO, Vector3.ZERO)
+
+
+## A shapeless static body the resolver teleports each tick (see _place_root_anchor).
+func _make_anchor(anchor_name: String, xform: Transform3D) -> RigidBody3D:
+	var anchor := RigidBody3D.new()
+	anchor.name = anchor_name
+	anchor.freeze = true
+	anchor.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	anchor.collision_layer = 0
+	anchor.collision_mask = 0
+	anchor.can_sleep = false
+	anchor.top_level = true
+	_rig_builder.add_child(anchor)
+	anchor.global_transform = xform
+	return anchor
+
+
+## A Generic6DOFJoint3D with every limit off (a free joint that only carries motors)
+## between [param a] and [param b], its frames at [param xform].
+func _make_free_joint(joint_name: String, xform: Transform3D, a: PhysicsBody3D, b: PhysicsBody3D) -> Generic6DOFJoint3D:
+	var joint := Generic6DOFJoint3D.new()
+	joint.name = joint_name
+	_rig_builder.add_child(joint)
+	joint.global_transform = xform
+	joint.node_a = joint.get_path_to(a)
+	joint.node_b = joint.get_path_to(b)
+	for axis_flag in [Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT]:
+		joint.set_flag_x(axis_flag, false)
+		joint.set_flag_y(axis_flag, false)
+		joint.set_flag_z(axis_flag, false)
+	return joint
 
 
 func _free_root_world_joint() -> void:
@@ -475,6 +500,12 @@ func _free_root_world_joint() -> void:
 	if _root_anchor:
 		_root_anchor.queue_free()
 		_root_anchor = null
+	if _root_lin_joint:
+		_root_lin_joint.queue_free()
+		_root_lin_joint = null
+	if _root_anchor_lin:
+		_root_anchor_lin.queue_free()
+		_root_anchor_lin = null
 
 
 ## Puts the anchor where the root should be this tick: at [param target] when the
@@ -488,6 +519,8 @@ func _place_root_anchor(root_body: RigidBody3D, target: Transform3D, holding: bo
 	var cur := root_body.global_transform.orthonormalized()
 	if not holding:
 		_root_anchor.global_transform = cur
+		if _root_anchor_lin:
+			_root_anchor_lin.global_transform = Transform3D(Basis.IDENTITY, cur.origin)
 		return
 	var basis := target.basis.orthonormalized()
 	var delta_q := (basis * cur.basis.inverse()).get_rotation_quaternion()
@@ -503,13 +536,18 @@ func _place_root_anchor(root_body: RigidBody3D, target: Transform3D, holding: bo
 	if offset.length() > ROOT_ANCHOR_MAX_DISTANCE:
 		origin = cur.origin + offset.normalized() * ROOT_ANCHOR_MAX_DISTANCE
 	_root_anchor.global_transform = Transform3D(basis, origin)
+	if _root_anchor_lin:
+		_root_anchor_lin.global_transform = Transform3D(Basis.IDENTITY, origin)
 
 
-## Snaps the anchor onto the root body (relative rotation = identity). Called by the
+## Snaps the anchors onto the root body (relative rotation = identity). Called by the
 ## controller at recovery start; the get-up blend then leads the anchor away smoothly.
 func rebase_root_world_joint() -> void:
 	if _root_anchor and _root_motion_bone in _bones:
-		_root_anchor.global_transform = (_bones[_root_motion_bone].body as RigidBody3D).global_transform.orthonormalized()
+		var cur := (_bones[_root_motion_bone].body as RigidBody3D).global_transform.orthonormalized()
+		_root_anchor.global_transform = cur
+		if _root_anchor_lin:
+			_root_anchor_lin.global_transform = Transform3D(Basis.IDENTITY, cur.origin)
 		_bones[_root_motion_bone].has_prev_rel = false
 
 
@@ -634,12 +672,12 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 ## move the character, which a velocity overwrite never allowed.
 func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, target_xform: Transform3D,
 		strength: float, ratio: float, delta: float) -> void:
-	var joint: Generic6DOFJoint3D = _root_world_joint
+	var joint: Generic6DOFJoint3D = _root_lin_joint
 	if not joint:
 		return
 	if strength < 0.001:
 		state.has_prev_target = false
-		_set_linear_motor(joint, Vector3.ZERO, 0.0)
+		_set_linear_motor(joint, Vector3.ZERO, Vector3.ZERO)
 		return
 	var ff_lin := Vector3.ZERO
 	if _feed_forward > 0.0 and state.has_prev_target:
@@ -656,22 +694,40 @@ func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, tar
 	if dist > 0.0001:
 		v_cmd = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ * pin
 	v_cmd += ff_lin / maxf(delta, 1e-6)
-	var force: float = _tuning.muscle_root_force * _root_hold_factor(ratio)
-	# Linear motor targets are in the constraint space of body A (the anchor).
-	var v_local: Vector3 = _root_anchor.global_basis.orthonormalized().inverse() * v_cmd
-	_set_linear_motor(joint, v_local * ROOT_LINEAR_MOTOR_SIGN, force)
+	var hold := _root_hold_factor(ratio)
+	var force: float = _tuning.muscle_root_force * hold
+	# Linear motor targets and force limits are per axis in the constraint space of
+	# body A — the world-aligned anchor twin, so these ARE world axes. Along up the
+	# motor may carry at most muscle_root_support of the body's weight; the legs carry
+	# the rest through their joint motors and the feet on the ground (0.6.0 "feet
+	# load-bearing"). Sideways the anchor keeps its full authority.
+	var support: float = _root_support_override if _root_support_override >= 0.0 else _tuning.muscle_root_support
+	var vertical: float = force * support
+	_set_linear_motor(joint, v_cmd * ROOT_LINEAR_MOTOR_SIGN, Vector3(force, vertical, force))
 
 
-static func _set_linear_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float) -> void:
+## Lets the controller override [member RagdollTuning.muscle_root_support] for a while
+## (the canned get-up blend needs the anchor to lift the pelvis: the legs cannot push a
+## body up from the ground through a pose blend). [param value] in 0..1, or negative
+## to hand the authority back to the tuning.
+func set_root_support_override(value: float) -> void:
+	_root_support_override = value
+
+
+func get_root_support_override() -> float:
+	return _root_support_override
+
+
+static func _set_linear_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: Vector3) -> void:
 	joint.set_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
 	joint.set_flag_y(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
 	joint.set_flag_z(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_MOTOR, true)
 	joint.set_param_x(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.x)
 	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.y)
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_TARGET_VELOCITY, target.z)
-	joint.set_param_x(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
-	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
-	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit)
+	joint.set_param_x(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit.x)
+	joint.set_param_y(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit.y)
+	joint.set_param_z(Generic6DOFJoint3D.PARAM_LINEAR_MOTOR_FORCE_LIMIT, limit.z)
 
 
 ## The root (and any body without a registered joint): the legacy velocity spring
@@ -775,6 +831,15 @@ func get_muscle_torque(rig_name: String) -> float:
 ## Microseconds the last resolver tick took (either path). For benches / the HUD.
 func get_last_tick_usec() -> int:
 	return _last_tick_usec
+
+
+## The world-space target the resolver drove [param rig_name] toward on its last tick
+## (the animation pose, or the IK / get-up override that replaced it). Identity for an
+## unknown bone. For benches, tests and gizmos.
+func get_bone_target_global(rig_name: String) -> Transform3D:
+	if rig_name not in _bones:
+		return Transform3D.IDENTITY
+	return _bones[rig_name].target_xform
 
 
 ## The motor command last written for [param rig_name]'s parent joint (JOINT_MOTOR

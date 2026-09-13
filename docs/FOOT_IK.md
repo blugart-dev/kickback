@@ -151,7 +151,7 @@ All parameters are on `RagdollTuning` in the "Foot IK" export group.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `foot_ik_disable_foot_collision` | `true` | Disable foot body collision during IK |
+| `foot_ik_disable_foot_collision` | `false` | Mask the feet out of collision while IK solves (opt-in; since 0.6.0 the feet are load-bearing and their sole-aligned box rests on the ground) |
 | `foot_ik_stagger_pin` | `true` | Pin feet during stagger |
 | `foot_ik_stagger_leg_strength` | `0.4` | Leg strength floor during pinning |
 

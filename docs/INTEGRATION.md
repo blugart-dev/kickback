@@ -328,9 +328,11 @@ not raise it past ~0.15. The balance-driven tip-over (`balance_ragdoll_threshold
 not fire in this mode: the held pelvis cannot topple, so knockdowns come from
 `ragdoll_probability`, `pain_ragdoll_threshold`, or `trigger_ragdoll()` /
 `set_persistent()` until the balance layer (0.6.0) owns the decision. A stagger stays on
-its feet with the torso visibly weak (the strength floor is 32 % torque). Measured numbers, tick-rate caveats (30 Hz needs
-`foot_ik_disable_foot_collision = false`) and the open items are in REFERENCE.md
-"Muscle layer" and docs/PLAN.md.
+its feet with the torso visibly weak (the strength floor is 32 % torque). Since 0.6.0
+the feet are load-bearing: the foot collider is a level sole box, the feet collide in
+every state, and `muscle_root_support` (default 0) keeps the root anchor from lifting the
+body — the legs do. Measured numbers, tick-rate caveats (30 Hz is an open item) and the
+open items are in REFERENCE.md "Muscle layer" / "Feet load-bearing" and docs/PLAN.md.
 
 ## Recording a Trace (debugging what you see)
 

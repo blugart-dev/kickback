@@ -454,7 +454,8 @@ func test_mixamo_default_has_foot_offset():
 	assert_eq(profile.bones.size(), 16, "Mixamo default should have 16 bones")
 	for bone_def: BoneDefinition in profile.bones:
 		if bone_def.rig_name == "Foot_L" or bone_def.rig_name == "Foot_R":
-			assert_eq(bone_def.shape_offset, 0.65, "%s should have 0.65 offset" % bone_def.rig_name)
+			# Sole-aligned feet: the offset is the share of the box length ahead of the ankle.
+			assert_almost_eq(bone_def.shape_offset, SkeletonDetector.FOOT_SOLE_OFFSET, 1e-6, "%s should have the sole offset" % bone_def.rig_name)
 		else:
 			assert_eq(bone_def.shape_offset, 0.5, "%s should have 0.5 offset" % bone_def.rig_name)
 

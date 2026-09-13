@@ -8,6 +8,71 @@
 
 ## [Unreleased]
 
+### 0.6.0 candidate — Balance + behaviors (`feat/balance-behaviors`, on `develop`)
+
+**Step 1 — feet load-bearing.** The legs carry the body. Before this the root anchor's
+position motor held the pelvis at its target with up to 2500 N, the feet were masked out
+of collision while foot IK solved, and when they were allowed to collide they touched the
+floor with ~2 % of the body's weight (measured with `tools/bench/foot_probe.gd`).
+
+**Changed**
+- **Sole-aligned foot collider** (`BoneDefinition.sole_aligned`, on for `Foot_L` /
+  `Foot_R` in both profile factories). The foot box is built LEVEL with the character
+  with its bottom face exactly `RagdollTuning.foot_ik_ankle_height` below the ankle — the
+  sole foot IK plants — and `SkeletonDetector.FOOT_HEEL_RATIO` (0.3) of the ankle→toe
+  extent added behind the ankle (`shape_offset` = share of the length ahead of the ankle,
+  `FOOT_SOLE_OFFSET` ≈ 0.77). The old box followed the foot bone, which on the Mixamo rig
+  points 27° down toward the toes: its corner sat 7 cm below the sole, so a colliding foot
+  was pushed 15° off its pose and the whole character up (why the feet had to be masked).
+  `PhysicsRigBuilder.build_body` takes the character's up axis; `sole_shape_transform` is
+  the pure geometry. The Mixamo default feet are `0.12 × 0.065 × 0.325` m.
+- **`foot_ik_disable_foot_collision` defaults to `false`**: the feet collide in every
+  state. The knob remains as an opt-out for rigs whose collider cannot sit on the sole.
+- **`RagdollTuning.muscle_root_support`** (new, default 0): the share of
+  `muscle_root_force` the root position motor may spend along the world's UP axis. 0 =
+  the legs carry the whole body through their joint motors and the feet on the ground;
+  1 = the 0.5.0 behaviour (the anchor may hold the pelvis up alone). Sideways and
+  orientation authority are unchanged. Implemented with a second, **world-aligned anchor**
+  (`<Root>_anchor_lin` + `<Root>_anchor_lin_motor`) for the position motor: the
+  orientation anchor's frame is the tilted pelvis target frame, and per-axis limits in
+  that frame still lifted ~500 N through its "sideways" axes.
+- **Get-up on load-bearing feet**: `ActiveRagdollController` gives the anchor full
+  vertical support for the canned get-up blend (folded legs cannot push a body up from
+  the ground through a pose blend) and makes the feet **frictionless** while it carries
+  the body, then fades the support back to the tuning's share over 0.75 s
+  (`SUPPORT_RELEASE_SECONDS`) once the character stands, friction restored. Without the
+  frictionless blend the sole box, pinned to the floor, ended the blend half a metre from
+  its target with the legs 40–50° off. Measured on the shooting range: every character
+  within 8° at `recovery_finished`, 1–4° three seconds later, pelvis at its target height
+  on its own legs. `SpringResolver.set_root_support_override()` is the hand-over.
+- Foot bodies report contacts (`contact_monitor`, `max_contacts_reported` 4) — the
+  balance layer's support-polygon input, also read by the bench.
+- `SpringResolver.get_bone_target_global(rig)`: the world-space target the resolver
+  drove a bone toward on its last tick (animation or IK / get-up override).
+- Test harness skeleton: hips at 0.935 m so the ankles sit at `foot_ik_ankle_height`
+  and the sole boxes rest exactly on the y = 0 ground.
+
+**Bench** (`tools/bench/ybot_bench.gd`, now with SAG = pelvis height below its own
+target and FEET = share of idle ticks with both feet in contact; the hand hit is measured
+from the settled idle, then the react clip, then SETTLE = the idle error over the
+following second):
+
+| Mode, Hz | IDLE mean/max | HIT peak/recover | REACT | SETTLE after react | SAG | FEET |
+|---|---|---|---:|---|---|---|
+| legacy 60 | 0.81 / 1.56 | 1.2° / 4 | 8.9 | 0.96 (balance 0.09) | +0.5 mm | 100 % |
+| **JOINT_MOTOR 60** | 1.10 / 3.57 | 1.8° / 4 | 30.0 | **10.2** (balance 0.57) | +6.1 mm | 100 % |
+| JOINT_MOTOR 120 | 0.73 / 1.87 | 2.0° / 4 | 23.0 | 1.63 (0.14) | +0.8 mm | 100 % |
+| JOINT_MOTOR 30 | 5.45 / 23.0 | 6.6° / 4 | 48.0 | 20.9 (0.78) | +9.3 mm | 100 % |
+
+The 60 Hz SETTLE line is the new, honest fact: after a violent clip the loaded feet stay
+where friction planted them while the animation returns to idle — a load-bearing foot
+cannot be dragged by the animation, it has to be lifted and stepped. That is the step
+behavior's job (next). 30 Hz regressed (4.85 → 5.45 idle) and stays open.
+
+**Tooling**: `tools/bench/foot_probe.gd` (foot collider geometry vs the floor, contacts,
+balance and foot XZ error on the ybot idle); `tools/bench/scene_probe.gd
+PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s, +3 s).
+
 ### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
 
 **Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and

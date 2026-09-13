@@ -26,6 +26,9 @@ extends Node
 const _MOVEMENT_VELOCITY_THRESHOLD_SQ := 0.25  # (0.5 m/s)^2
 ## Group used to discover the optional KickbackManager budget node.
 const _BUDGET_GROUP := "kickback_manager"
+## Seconds over which the root anchor's full get-up lift fades back to
+## RagdollTuning.muscle_root_support after a recovery (see _tick_support_release).
+const SUPPORT_RELEASE_SECONDS := 0.75
 
 @export_group("References")
 ## Path to the SpringResolver node that drives spring-based bone tracking.
@@ -58,6 +61,13 @@ var _protected_set: Dictionary = {}  # Cached O(1) lookup for protected bones
 var _disabled_collision_masks: Dictionary = {}  # rig_name → original collision_mask
 var _state: int = State.NORMAL
 var _recovery_elapsed: float = 0.0
+## Root-anchor vertical support hand-back after a get-up (see _tick_support_release).
+var _support_releasing: bool = false
+var _support_release_t: float = 0.0
+## Frictionless foot material for the get-up blend (see _set_feet_frictionless).
+var _frictionless_material: PhysicsMaterial = null
+var _feet_frictionless: bool = false
+var _foot_material_originals: Dictionary = {}  # rig_name → PhysicsMaterial (or null)
 var _ragdoll_elapsed: float = 0.0
 var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery start
 var _stagger_elapsed: float = 0.0
@@ -293,6 +303,7 @@ func _physics_process(delta: float) -> void:
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
 	_sync_injuries_to_resolver()
+	_tick_support_release(delta)
 
 	match _state:
 		State.STAGGER:
@@ -1211,6 +1222,9 @@ func get_foot_rigs() -> PackedStringArray:
 func _full_ragdoll(brace: bool = true, target_state: int = State.RAGDOLL) -> void:
 	_restore_disabled_collisions()
 	_guiding = false
+	_support_releasing = false
+	_spring.set_root_support_override(-1.0)
+	_set_feet_frictionless(false)
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, 0.0)
 
@@ -1258,6 +1272,18 @@ func _start_recovery() -> void:
 	_guiding = false  # a released guided death: the get-up ramp owns the strengths now
 	_state = State.GETTING_UP
 	_recovery_elapsed = 0.0
+	# The canned get-up is a pose blend: the root anchor must be allowed to LIFT the
+	# pelvis (full vertical support) — folded legs cannot push a body up from the
+	# ground through a blend. Handed back to the tuning over SUPPORT_RELEASE_SECONDS
+	# once the character stands (see _finish_recovery / _tick_support_release).
+	_support_releasing = false
+	_spring.set_root_support_override(1.0)
+	# ...and the feet must be free to reach their standing spots: a pose blend drags
+	# them across the floor, and a load-bearing sole box pinned by friction ends the
+	# blend half a metre from its target with the legs 40-50 deg off (measured on the
+	# shooting range). Frictionless while the anchor carries the body; friction back
+	# when the legs take the weight (_finish_recovery).
+	_set_feet_frictionless(true)
 	state_changed.emit(_state)
 
 	var bodies := _rig_builder.get_bodies()
@@ -1371,8 +1397,55 @@ func _finish_recovery() -> void:
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, _effective_base_strength(rig_name))
 
+	# Standing again: fade the anchor's lift back to the tuning's share so the legs
+	# take the weight gradually instead of in one tick; the feet grip again.
+	_set_feet_frictionless(false)
+	_support_releasing = true
+	_support_release_t = 0.0
+
 	_release_ragdoll_slot()
 	recovery_finished.emit()
+
+
+## Swaps the foot bodies' physics material for a frictionless one (get-up blend) or
+## restores whatever they had. Idempotent.
+func _set_feet_frictionless(on: bool) -> void:
+	if on == _feet_frictionless or not _rig_builder:
+		return
+	var bodies := _rig_builder.get_bodies()
+	if on:
+		if not _frictionless_material:
+			_frictionless_material = PhysicsMaterial.new()
+			_frictionless_material.friction = 0.0
+		for foot_rig: String in _foot_rigs:
+			var body: RigidBody3D = bodies.get(foot_rig)
+			if body:
+				_foot_material_originals[foot_rig] = body.physics_material_override
+				body.physics_material_override = _frictionless_material
+	else:
+		for foot_rig: String in _foot_material_originals:
+			var body: RigidBody3D = bodies.get(foot_rig)
+			if body:
+				body.physics_material_override = _foot_material_originals[foot_rig]
+		_foot_material_originals.clear()
+	_feet_frictionless = on
+
+
+## Fades the root anchor's vertical support from the get-up's full lift back to
+## RagdollTuning.muscle_root_support after a recovery (NORMAL / STAGGER only; a new
+## ragdoll clears the override — a limp root has no hold anyway).
+func _tick_support_release(delta: float) -> void:
+	if not _support_releasing:
+		return
+	if _state != State.NORMAL and _state != State.STAGGER:
+		return
+	_support_release_t += delta
+	var t := clampf(_support_release_t / SUPPORT_RELEASE_SECONDS, 0.0, 1.0)
+	if t >= 1.0:
+		_support_releasing = false
+		_spring.set_root_support_override(-1.0)
+	else:
+		_spring.set_root_support_override(lerpf(1.0, _tuning.muscle_root_support, t))
 
 
 func _start_stagger(hit_dir: Vector3) -> void:

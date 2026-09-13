@@ -70,6 +70,7 @@ func _build_rig() -> void:
 		_create_joint(joint_def)
 
 	_apply_self_collision()
+	_enable_foot_contacts()
 	_built = true
 
 
@@ -137,6 +138,7 @@ func _adopt_baked_rig() -> bool:
 	if not unmatched.is_empty():
 		push_warning("PhysicsRigBuilder: %d baked joint(s) have no JointDefinition in the profile (%s) — keeping their baked limits; re-bake the rig to match the profile" % [unmatched.size(), ", ".join(unmatched)])
 	_apply_self_collision()
+	_enable_foot_contacts()
 	return true
 
 
@@ -165,7 +167,22 @@ func _create_body(bone_def: BoneDefinition, bone_global: Transform3D) -> RigidBo
 	var child_global := NO_CHILD_BONE
 	if bone_def.child_bone != "" and _skeleton.find_bone(bone_def.child_bone) >= 0:
 		child_global = _get_bone_global(bone_def.child_bone)
-	return build_body(bone_def, bone_global, child_global, _tuning)
+	return build_body(bone_def, bone_global, child_global, _tuning, _skeleton.global_basis.y.normalized())
+
+
+## Turns on contact reporting for the profile's foot bodies so the balance layer
+## (support polygon, loaded foot) and the bench can read the ground contacts and
+## their impulses. Feet only — contact monitoring has a per-body cost.
+func _enable_foot_contacts() -> void:
+	for foot_rig: String in _profile.get_foot_rigs():
+		var body: RigidBody3D = _bodies.get(foot_rig)
+		if body:
+			body.contact_monitor = true
+			body.max_contacts_reported = maxi(body.max_contacts_reported, FOOT_CONTACTS_REPORTED)
+
+
+## Contacts reported per foot body (a flat sole on a flat floor yields up to 4).
+const FOOT_CONTACTS_REPORTED := 4
 
 
 ## Sentinel for [method build_body]'s [code]child_global[/code]: the bone has no
@@ -181,27 +198,59 @@ const NO_CHILD_BONE := Transform3D(Basis(), Vector3.INF)
 ## truth for body construction — the runtime rig and the editor RigBaker both
 ## build their bodies here, so they cannot diverge. The body is not yet in the
 ## tree; it is world-space ([code]top_level[/code]), so its transform is final
-## wherever it is parented.
-static func build_body(bone_def: BoneDefinition, bone_global: Transform3D, child_global: Transform3D, tuning: RagdollTuning) -> RigidBody3D:
+## wherever it is parented. [param up] is the character's up axis in the same
+## space as the transforms; only [member BoneDefinition.sole_aligned] boxes use it.
+static func build_body(bone_def: BoneDefinition, bone_global: Transform3D, child_global: Transform3D, tuning: RagdollTuning, up: Vector3 = Vector3.UP) -> RigidBody3D:
 	var body := RigidBody3D.new()
 	body.name = bone_def.rig_name
 	body.mass = bone_def.mass
 	apply_body_tuning(body, tuning)
 	body.transform = bone_global
 
-	# Shape is offset locally along the bone direction (toward child bone)
 	var col_shape := SkeletonDetector.create_collision_shape(bone_def)
-	if child_global.origin.is_finite():
-		var bone_to_child_local := bone_global.affine_inverse() * child_global
-		col_shape.position = bone_to_child_local.origin * bone_def.shape_offset
-	# Box shapes on bones need rotation: bone Y points along bone direction,
-	# but box Y should be height (thin). Rotate 90° on X so box Z (length)
-	# aligns with bone Y (forward) and box Y (height) aligns with bone Z (up).
-	if bone_def.shape_type == "box":
-		col_shape.rotation.x = PI / 2.0
+	if bone_def.sole_aligned and bone_def.shape_type == "box":
+		col_shape.transform = sole_shape_transform(bone_def, bone_global, child_global, tuning.foot_ik_ankle_height, up)
+	else:
+		# Shape is offset locally along the bone direction (toward child bone)
+		if child_global.origin.is_finite():
+			var bone_to_child_local := bone_global.affine_inverse() * child_global
+			col_shape.position = bone_to_child_local.origin * bone_def.shape_offset
+		# Box shapes on bones need rotation: bone Y points along bone direction,
+		# but box Y should be height (thin). Rotate 90° on X so box Z (length)
+		# aligns with bone Y (forward) and box Y (height) aligns with bone Z (up).
+		if bone_def.shape_type == "box":
+			col_shape.rotation.x = PI / 2.0
 	body.add_child(col_shape)
 
 	return body
+
+
+## The body-local transform of a [member BoneDefinition.sole_aligned] foot box: level
+## with [param up] (the character's up in the transforms' space), its Z along the
+## foot's forward (bone origin → child bone, flattened onto the ground plane; the bone's
+## own axis when there is no child), its bottom face [param sole_depth] below the bone
+## origin, and the bone origin [member BoneDefinition.shape_offset] of the box length
+## from the heel. Built from the pose the rig is built in, so a foot that is flat in
+## that pose gets a collider that rests flat on the ground.
+static func sole_shape_transform(bone_def: BoneDefinition, bone_global: Transform3D, child_global: Transform3D, sole_depth: float, up: Vector3) -> Transform3D:
+	var up_n := up.normalized() if up.length_squared() > 1e-8 else Vector3.UP
+	var forward := bone_global.basis.y
+	if child_global.origin.is_finite():
+		forward = child_global.origin - bone_global.origin
+	forward -= up_n * forward.dot(up_n)
+	if forward.length_squared() < 1e-8:
+		# Bone points straight along up: fall back to the bone's Z flattened.
+		forward = bone_global.basis.z - up_n * bone_global.basis.z.dot(up_n)
+	if forward.length_squared() < 1e-8:
+		forward = Vector3.FORWARD if absf(up_n.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
+	forward = forward.normalized()
+	var right := up_n.cross(forward).normalized()
+	var level := Basis(right, up_n, forward)
+	var size := bone_def.box_size
+	var center := bone_global.origin \
+		+ forward * (size.z * (bone_def.shape_offset - 0.5)) \
+		+ up_n * (size.y * 0.5 - sole_depth)
+	return bone_global.affine_inverse() * Transform3D(level, center)
 
 
 ## Applies every RigidBody3D property the rig takes from [param tuning] —

@@ -3,13 +3,17 @@
 ## mode, builds the Kickback rig through KickbackSetup, and reports tracking numbers
 ## for both muscle modes:
 ##   IDLE   : "idle" clip, 1 s settle then 3 s measured (mean / max error over all bodies)
-##   REACT  : "react_front" clip once, measured while it plays
+##   REACT  : "react_front" clip once, measured while it plays; SETTLE = the idle
+##            error over the following second + the balance ratio at its end
 ##   HIT    : the bullet preset (ragdoll dice disabled) on the left hand through
 ##            KickbackCharacter.receive_hit (peak hand error, ticks until back under
 ##            5 deg, any joint stuck past a limit?)
 ##   CPU    : mean SpringResolver tick time (ms) during IDLE
+##   SAG    : mean pelvis height below the resolver's own target during IDLE (mm);
+##   FEET   : share of IDLE ticks on which both feet reported a ground contact
 ## Env: BENCH_HZ=30|60|120, BENCH_DIAG=1 (per-joint dump), BENCH_VARIANT=nofootik,
-## footcol,nopin,pin03,gain05,gain15,gain20,gain30,damp2,noff (comma-separated).
+## nofootcol,support025,support05,support1,nopin,pin03,gain05,gain15,gain20,gain30,
+## damp2,noff (comma-separated).
 ##
 ##   godot --headless --path . -s tools/bench/ybot_bench.gd
 ##   BENCH_HZ=30 godot --headless --path . -s tools/bench/ybot_bench.gd
@@ -98,8 +102,14 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.muscle_root_force = 5000.0
 	if "rootforce10k" in variant:
 		tuning.muscle_root_force = 10000.0
-	if "footcol" in variant:
-		tuning.foot_ik_disable_foot_collision = false
+	if "nofootcol" in variant:
+		tuning.foot_ik_disable_foot_collision = true  # pre-0.6.0: feet masked out, anchor carries the body
+	if "support1" in variant:
+		tuning.muscle_root_support = 1.0
+	elif "support05" in variant:
+		tuning.muscle_root_support = 0.5
+	elif "support025" in variant:
+		tuning.muscle_root_support = 0.25
 	if "gain05" in variant:
 		tuning.muscle_gain = 0.05
 	if "gain15" in variant:
@@ -136,33 +146,45 @@ func _run_mode(mode: int, hz: int) -> void:
 		print(series)
 	else:
 		await _wait(hz)
-	var cpu := {"sum": 0.0}  # lambdas capture by value; use a holder
+	var cpu := {"sum": 0.0, "sag": 0.0, "feet": 0}  # lambdas capture by value; use a holder
+	var hips: RigidBody3D = builder.get_bodies()["Hips"]
+	var feet: Array = [builder.get_bodies().get("Foot_L"), builder.get_bodies().get("Foot_R")]
 	var idle := await _measure(spring, builder, skeleton, hz * 3, func() -> void:
-		cpu.sum += float(spring.get_last_tick_usec()))
+		cpu.sum += float(spring.get_last_tick_usec())
+		# SAG: pelvis height below the resolver's own (foot-IK-shifted) target. FEET:
+		# ticks on which both feet reported a ground contact (load-bearing feet).
+		cpu.sag += spring.get_bone_target_global("Hips").origin.y - hips.global_position.y
+		var both := true
+		for f in feet:
+			if not f or f.get_contact_count() == 0:
+				both = false
+		if both:
+			cpu.feet += 1)
 	var cpu_ms: float = cpu.sum / float(hz * 3) / 1000.0  # resolver tick only (ms)
+	var sag_mm: float = cpu.sag / float(hz * 3) * 1000.0
+	var feet_pct: float = 100.0 * float(cpu.feet) / float(hz * 3)
 	if OS.get_environment("BENCH_DIAG") != "":
 		_print_joint_diag(spring, builder, skeleton, label)
 
-	# REACT
-	anim.play("react_front")
-	var react_ticks := int(ceil(anim.current_animation_length * hz))
-	var react := await _measure(spring, builder, skeleton, react_ticks, Callable())
-	anim.play("idle")
-	await _wait(hz)
-
-	# HIT
+	# HIT (from the settled idle, before the react clip: with load-bearing feet a
+	# violent clip leaves the feet where friction planted them, and a hit measured from
+	# that stance measures the stance, not the muscle)
 	var hand: RigidBody3D = builder.get_bodies()["Hand_L"]
 	# Deterministic: the bullet preset's ragdoll dice roll is disabled so the number
 	# measures the muscle response to the impulse + strength reduction, not a state
 	# transition; seed() at start pins the stagger sway phase.
 	var profile: ImpactProfile = (load(BULLET) as ImpactProfile).duplicate()
 	profile.ragdoll_probability = 0.0
+	var controller: ActiveRagdollController = nodes[3]
+	var balance_before: float = controller.get_balance_ratio()
 	kc.receive_hit(hand, Vector3(0.0, 0.0, -1.0), hand.global_position, profile)
 	var peak := 0.0
 	var recover := -1
 	var stuck := false
+	var worst_state: int = controller.get_state()
 	for i in int(hz * 1.5):
 		await physics_frame
+		worst_state = maxi(worst_state, controller.get_state())
 		var e := _error_deg(spring, builder, skeleton, "Hand_L")
 		peak = maxf(peak, e)
 		if recover < 0 and i > 3 and e < 5.0:
@@ -178,9 +200,22 @@ func _run_mode(mode: int, hz: int) -> void:
 			var lim: Vector2 = lims[k]
 			if ang[k] < lim.x - 15.0 or ang[k] > lim.y + 15.0:
 				stuck = true
-	var line := "%-18s | %6.2f / %6.2f | %6.2f / %6.2f | %6.1f / %-6s / %-5s | %.3f" % [
-		label, idle[0], idle[1], react[0], react[1], peak, str(recover) if recover >= 0 else "never", str(stuck), cpu_ms]
+	# REACT: the clip once, then 1 s of idle — SETTLE is the idle error over that second
+	# (did the body, feet included, come back to the animation?) and the balance ratio
+	# at its end.
+	await _wait(hz)
+	anim.play("react_front")
+	var react_ticks := int(ceil(anim.current_animation_length * hz))
+	var react := await _measure(spring, builder, skeleton, react_ticks, Callable())
+	anim.play("idle")
+	var settle := await _measure(spring, builder, skeleton, hz, Callable())
+	var settle_balance: float = controller.get_balance_ratio()
+
+	var line := "%-18s | %6.2f / %6.2f | %6.2f / %6.2f | %6.1f / %-6s / %-5s | %.3f | %+5.1f mm / %3.0f %%" % [
+		label, idle[0], idle[1], react[0], react[1], peak, str(recover) if recover >= 0 else "never", str(stuck), cpu_ms, sag_mm, feet_pct]
 	print(line)
+	print("    hit: state reached %s (balance ratio before the hit %.2f)" % [ActiveRagdollController.State.keys()[worst_state], balance_before])
+	print("    settle after react: idle error %.2f / %.2f, balance ratio %.2f" % [settle[0], settle[1], settle_balance])
 	print("    idle per body: %s" % idle[2])
 	print("    react per body: %s" % react[2])
 	_results.append(line)

@@ -147,7 +147,19 @@ wrap; resolver CPU (≈1.4× on a quiet run, noisy); the visual gate (user), the
 it; the scripted stumble and the sine sway are deleted.
 
 **Checklist**
-- [ ] `BalanceState` (new file): CoM, CoM velocity, XCoM (`CoM + v / √(g / leg_length)`), support polygon from **foot contact** (feet collide in all states; contact from `PhysicsCollisionMonitor`-style reporting or `get_colliding_bodies`), loaded foot, signed XCoM distance to the polygon edge, computed once per physics tick
+- [x] **Feet load-bearing** (2026-09-13, `test_feet_load_bearing.gd`, 9 tests): sole-aligned
+  foot collider (`BoneDefinition.sole_aligned`, bottom face on the foot IK sole, heel added —
+  the old bone-aligned box sat 7 cm under the floor, which is why the feet were masked out);
+  feet collide in every state (`foot_ik_disable_foot_collision` default false) and report
+  contacts; `muscle_root_support` (default 0) removes the anchor's vertical authority via a
+  second, world-aligned position anchor. Measured (ybot): feet carry the body (were ~2 %);
+  pelvis sag on the legs 6 mm @60 Hz / 0.8 mm @120 / 9 mm @30; idle 1.10/3.57 @60
+  (0.94 before), 0.73/1.87 @120; get-up on the shooting range ≤ 8° at `recovery_finished`
+  and 1–4° after 3 s (anchor lifts + frictionless feet during the canned blend, support
+  faded back over 0.75 s). **Exposed**: SETTLE after react_front 10.2° @60 Hz (legacy
+  0.96) — loaded feet stay where friction planted them; the step behavior must move them.
+  30 Hz idle regressed 4.85 → 5.45 (open).
+- [ ] `BalanceState` (new file): CoM, CoM velocity, XCoM (`CoM + v / √(g / leg_length)`), support polygon from **foot contact** (feet collide in all states ✅; contact from the foot bodies' `contact_monitor` ✅ — the polygon itself is still to build), loaded foot, signed XCoM distance to the polygon edge, computed once per physics tick
 - [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
 - [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
 - [ ] Delete `_update_directed_stumble` root teleport, `_apply_stagger_sway`, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs

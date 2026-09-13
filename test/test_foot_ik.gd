@@ -15,10 +15,10 @@ const RigHarness := preload("res://test/helpers/rig_harness.gd")
 
 # Builds a rig with foot IK ENABLED over a ground plane, then steps physics so
 # the controller's lazy FootIKSolver initializes and solves a few NORMAL frames.
-func _spawn_with_foot_ik(extra_frames: int = 20):
+func _spawn_with_foot_ik(extra_frames: int = 20, tuning: RagdollTuning = null):
 	var h = RigHarness.new()
 	add_child_autoqfree(h)
-	h.setup(RagdollTuning.create_default(), null, true)  # foot_ik_enabled is on by default
+	h.setup(tuning if tuning else RagdollTuning.create_default(), null, true)  # foot_ik_enabled is on by default
 	var ok: bool = await h.await_ready(40)
 	assert_true(ok, "Kickback setup completed within frame budget")
 	await wait_physics_frames(extra_frames)
@@ -77,7 +77,7 @@ func test_default_tuning_has_foot_ik():
 	assert_almost_eq(t.foot_ik_ray_above_hip, 0.3, 0.001)
 	assert_almost_eq(t.foot_ik_ray_below_hip, 2.5, 0.001)
 	assert_eq(t.foot_ik_collision_mask, 1)
-	assert_true(t.foot_ik_disable_foot_collision)
+	assert_false(t.foot_ik_disable_foot_collision, "feet are load-bearing by default since 0.6.0")
 	assert_true(t.foot_ik_stagger_pin)
 	assert_almost_eq(t.foot_ik_stagger_leg_strength, 0.4, 0.001)
 
@@ -234,14 +234,17 @@ func test_overstretched_target_keeps_foot_on_shin():
 # ── Runtime toggle-off restores foot collision masks ───────────────────────
 
 func test_disabling_foot_ik_at_runtime_restores_foot_masks():
-	var h = await _spawn_with_foot_ik(35)
+	# Opt-in masking (off by default since 0.6.0: the feet are load-bearing).
+	var t := RagdollTuning.create_default()
+	t.foot_ik_disable_foot_collision = true
+	var h = await _spawn_with_foot_ik(35, t)
 	var solver = h.controller._foot_ik
 	assert_not_null(solver)
 	var foot_l: RigidBody3D = h.get_body("Foot_L")
 	var foot_r: RigidBody3D = h.get_body("Foot_R")
 	assert_not_null(foot_l)
 	assert_ne(solver._foot_mask_l, 0, "sanity: the rig gave the foot a real mask to restore")
-	# While foot IK solves, the feet are masked out of collision (architectural choice).
+	# While foot IK solves with masking on, the feet are out of collision.
 	assert_eq(foot_l.collision_mask, 0, "foot mask cleared while foot IK is solving")
 	# Toggle off at runtime: the next NORMAL tick must hand the masks back.
 	h.tuning.foot_ik_enabled = false

@@ -121,8 +121,29 @@ func _run() -> void:
 					all_normal = false
 			if all_normal:
 				break
-		for i in hz * 2:
-			await physics_frame
+		# Get-up timeline: the pose the blend delivered (t=0), then 1 s and 3 s later —
+		# does a standing character on load-bearing feet hold or degrade?
+		for label in ["at recovery_finished", "+1 s", "+3 s"]:
+			print("  --- %s ---" % label)
+			for kc: KickbackCharacter in chars:
+				var c: ActiveRagdollController = kc.get_active_controller()
+				var b: PhysicsRigBuilder = kc.get_parent().find_child("PhysicsRigBuilder", false, false)
+				var sp: SpringResolver = kc.get_parent().find_child("SpringResolver", false, false)
+				var sk: Skeleton3D = KickbackSetup.find_skeleton(kc.get_parent())
+				var hips_b: RigidBody3D = b.get_bodies()[c.get_root_rig()]
+				var legs := ""
+				for rig: String in ["UpperLeg_L", "LowerLeg_L", "Foot_L", "UpperLeg_R", "LowerLeg_R", "Foot_R"]:
+					legs += "%s=%.0f " % [rig, _err(sp, b, sk, rig)]
+				var feet := ""
+				for foot: String in ["Foot_L", "Foot_R"]:
+					var fb: RigidBody3D = b.get_bodies()[foot]
+					var e: Vector3 = fb.global_position - sp.get_bone_target_global(foot).origin
+					feet += "%s xz=(%+.2f %+.2f) contacts=%d  " % [foot, e.x, e.z, fb.get_contact_count()]
+					var tgt: Transform3D = sp.get_bone_target_global(foot)
+				print("  %s: hipsY=%.2f (target %.2f) support_override=%.2f bal=%.2f | %s| %s" % [kc.get_parent().name, hips_b.global_position.y,
+					sp.get_bone_target_global(c.get_root_rig()).origin.y, sp.get_root_support_override(), c.get_balance_ratio(), legs, feet])
+			for i in (hz if label == "at recovery_finished" else hz * 2):
+				await physics_frame
 		if OS.get_environment("PROBE_REBUILD") != "":
 			# Experiment: rebuild every rig joint constraint (reassign node_b) after recovery.
 			for kc: KickbackCharacter in chars:
