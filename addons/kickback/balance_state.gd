@@ -53,6 +53,9 @@ var _has_prev: bool = false
 const FALLBACK_FOOT_HALF := 0.05
 ## Minimum CoM height (m) for the pendulum frequency (a body lying on the floor).
 const MIN_HEIGHT := 0.1
+## Per-tick blend of the raw finite-difference CoM velocity into the reported one
+## (0.35 ≈ a 3-tick time constant at 60 Hz).
+const VELOCITY_SMOOTHING := 0.35
 
 
 ## Recomputes everything from the rig's bodies. [param bodies] is rig name → RigidBody3D,
@@ -71,7 +74,11 @@ func update(bodies: Dictionary, foot_rigs: PackedStringArray, delta: float, grav
 		return
 	com = sum / total_mass
 	if _has_prev and delta > 0.0:
-		com_velocity = (com - _prev_com) / delta
+		# Exponential smoothing: a finite-difference velocity from a physics rig is
+		# noisy tick to tick, and it enters the XCoM divided by ω₀ (~3 s⁻¹), so 0.3 m/s
+		# of noise would move the capture point 10 cm.
+		var raw := (com - _prev_com) / delta
+		com_velocity = com_velocity.lerp(raw, VELOCITY_SMOOTHING)
 	else:
 		com_velocity = Vector3.ZERO
 	_prev_com = com

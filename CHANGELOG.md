@@ -95,6 +95,44 @@ PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s
   self-collision on and passes inside with it off. `test_rig_fidelity.gd` pins its legacy
   numbers with `self_collision = false` explicitly.
 
+**Step 5 — balance control: the anchor becomes a bounded assist; physics decides the fall.**
+
+**Changed**
+- **`muscle_root_hold` defaults to 0.25** (≈ 625 N sideways): the root anchor is a
+  balance *assist*, no longer the thing that holds the character up. Measured on the ybot
+  (60 Hz): idle 0.98° / 4.4° — the same as the full hold — while the settle after the
+  react clip improves (10.4° → 6.1° in the first second, 5.0° in the second) and a
+  150 N·s shove is caught by the legs + steps with the pelvis moving a few cm. With the
+  hold at 0 the passive stance reads 3.4–4.4° idle and is chaotic under the shove
+  (falls in some runs); no combination of the levers below reached quiet standing ≤ 2°
+  without an assist. Documented as an honest cheat force.
+- **Ankle torque 150 N·m** (`MUSCLE_TORQUE_TABLE` Foot, was 60; adult plantarflexion
+  peaks at 150–200). At 60 the ankles sat at ~60 % of their limit just standing with the
+  CoM 9 cm off centre.
+- **`muscle_leg_gain`** (new, 0.2): the leg chains and the pelvis run a faster motor loop
+  than the arm chain (which rings above 0.1); the inverted pendulum they hold has a 0.3 s
+  time constant.
+- `step_trigger_ratio` 0.9 → 1.0 (a balance step fires once the capture point has left
+  the feet); `BalanceState.com_velocity` is exponentially smoothed (3-tick constant) so
+  the XCoM does not jitter with the finite-difference noise.
+- **Physical fall detector** (`ActiveRagdollController._check_fall`, JOINT_MOTOR mode,
+  NORMAL / STAGGER): a pelvis below 60 % of its target height or tilted past 0.55 dot
+  with world up for 0.15 s means the character is on the ground whatever the state
+  machine thinks → RAGDOLL (a knockdown; STAGGER when knockdowns are off or the budget
+  denies a slot). The first fall decision that comes from physics, not dice.
+- `UprightBehavior` (in the default list, **off by default**, `upright_enabled`): shifts
+  the whole-body target against the XCoM's drift from the animation's own CoM (an
+  ankle + hip strategy in IK form through the foot IK's new `set_body_shift`). Measured it
+  did not help — settle 4.9° vs 2.8° without it, idle after a shove 8.9° vs 3.6°, more
+  falls with the hold released at gains 0.5–2 — so it ships as the measured starting
+  point for a torque-level ankle strategy, not as a feature.
+- Bench variants: `hold0/015/025/05/1`, `nosteps`, `noupright`, `gainup/down`,
+  `leggain2/3`, `ankle120/150/200`.
+- Tests: `test_balance_control.gd` (6): the measured defaults, the leg-gain set, a quiet
+  stance under the stagger threshold on the legs, **a 400 N·s shove with the assist
+  released is detected as a fall and commits to RAGDOLL with no dice**, no false fall
+  while standing or getting up, the upright shift's sign when enabled.
+
 **Step 4 — the behavior layer and `StepBehavior`; the directed stumble is gone.**
 
 **Added**

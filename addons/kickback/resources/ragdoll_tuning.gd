@@ -428,6 +428,27 @@ var character_forward_sign: int = 1
 @export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
+# ── Balance: Upright ────────────────────────────────────────────────────────
+
+@export_group("Balance: Upright")
+## EXPERIMENTAL, off by default. [UprightBehavior]: the whole-body pose target is
+## shifted against the extrapolated CoM's drift from the animation's own CoM, so the
+## legs — solved to the planted feet — lean the body back over them (an ankle + hip
+## strategy in IK form). Measured on the ybot (hold 0.25, ankle 150, leg gain 0.2) it
+## did NOT help: settle after the react clip 4.9° vs 2.8° without it, idle error after
+## a shove 8.9° vs 3.6°; at gains 0.5–2 with the hold released it fell more often than
+## the passive stance. Kept as the measured starting point for a torque-level ankle
+## strategy; enable to experiment.
+@export var upright_enabled: bool = false
+## Target shift per metre of XCoM error (m/m). Higher corrects harder; too high with the
+## motors' ~10-tick lag oscillates.
+@export_range(0.0, 3.0) var upright_gain: float = 1.0
+## Cap on the shift (m).
+@export_range(0.0, 0.5) var upright_max_shift: float = 0.15
+## Smoothing rate (per second) of the shift toward its target.
+@export_range(1.0, 60.0) var upright_response: float = 12.0
+
+
 # ── Balance: Steps ──────────────────────────────────────────────────────────
 
 @export_group("Balance: Steps")
@@ -438,8 +459,9 @@ var character_forward_sign: int = 1
 ## which teleported the character root. 0.6.0.
 @export var steps_enabled: bool = true
 ## [member BalanceState.ratio] at which a balance step fires (1.0 = the capture point is
-## exactly at the edge of the feet; a quiet idle reads ~0.4).
-@export_range(0.5, 1.5) var step_trigger_ratio: float = 0.9
+## exactly at the edge of the feet — beyond it the ankles cannot bring it back; a quiet
+## idle reads ~0.4).
+@export_range(0.5, 1.5) var step_trigger_ratio: float = 1.0
 ## Below this ratio the character is calm enough to re-plant a mis-placed foot. Kept
 ## just under [member step_trigger_ratio]: with the feet displaced the CoM sits near
 ## the edge of the (shifted) polygon, and a stricter gate deadlocks the re-plant that
@@ -535,6 +557,11 @@ enum MuscleMode {
 ## 0.15 rings on the light arm chain once the pelvis is a bounded motor too, 0.20+
 ## limit-cycles. 0.10 is the default.
 @export_range(0.02, 1.0) var muscle_gain: float = 0.10
+## [member muscle_gain] for the LEG chains and the pelvis (0 = same as muscle_gain). The
+## legs carry the body: their loop has to be faster than the inverted pendulum they hold
+## (√(h/g) ≈ 0.3 s on the default rig) and they are heavy enough not to ring at gains the
+## light arm chain cannot take.
+@export_range(0.0, 1.0) var muscle_leg_gain: float = 0.2
 ## Cap on the commanded relative angular velocity (rad/s) per joint.
 @export_range(1.0, 60.0) var muscle_max_angular_velocity: float = 15.0
 ## Multiplier on the pelvis position pin in JOINT_MOTOR mode (the pin is what holds
@@ -564,15 +591,16 @@ enum MuscleMode {
 ## the feet touched the floor with ~2 % of it.
 @export_range(0.0, 1.0) var muscle_root_support: float = 0.0
 ## Share of [member muscle_root_force] the root position motor may spend SIDEWAYS (the
-## ground plane). 1 (default) = the balance stand-in: the pelvis is dragged to the
-## animation's position with up to the full force, so the standing character cannot
-## drift or topple — and cannot shift its weight either, so a balance step cannot
-## unload its swing foot (measured: the foot lifts 2 cm and slides). 0 = the pelvis
-## stands where the legs put it; measured on the ybot idle WITHOUT an upright /
-## ankle-strategy behavior: 7.2° idle error, constant phantom steps, a 150 N·s shove
-## walks the character off. Goes to 0 when the upright behavior lands (docs/PLAN.md
-## 0.6.0). The controller raises both shares to 1 for the canned get-up.
-@export_range(0.0, 1.0) var muscle_root_hold: float = 1.0
+## ground plane) — the balance ASSIST. 1 = the 0.5.0 stand-in: the pelvis is dragged
+## to the animation's position with up to the full force, so the character cannot
+## drift or topple, but cannot shift its weight either (a balance step's swing foot
+## lifts 2 cm and slides). 0 = the pelvis stands where the legs put it; measured on the
+## ybot (ankle 150 N·m, leg gain 0.2): 3.4–4.4° idle error, chaotic under a 150 N·s
+## shove (falls in some runs). 0.25 (default, ≈ 625 N): idle 1.02° / 2.9° — the same
+## as the full hold — while the shove moves the pelvis, the legs and the steps do the
+## rest and the ratio is back under 0.7 in 2 s. The controller raises both shares to 1
+## for the canned get-up. An honest cheat force, documented as such.
+@export_range(0.0, 1.0) var muscle_root_hold: float = 0.25
 ## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
 ## the tracking damping; this only bleeds free rotation).
 @export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5

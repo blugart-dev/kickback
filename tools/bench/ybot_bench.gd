@@ -110,6 +110,33 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.foot_ik_disable_foot_collision = true  # pre-0.6.0: feet masked out, anchor carries the body
 	if "hold1" in variant:
 		tuning.muscle_root_hold = 1.0
+	if "hold0" in variant:
+		tuning.muscle_root_hold = 0.0
+	if "hold015" in variant:
+		tuning.muscle_root_hold = 0.15
+	if "hold025" in variant:
+		tuning.muscle_root_hold = 0.25
+	if "hold05" in variant:
+		tuning.muscle_root_hold = 0.5
+	if "nosteps" in variant:
+		tuning.steps_enabled = false
+	if "noupright" in variant:
+		tuning.upright_enabled = false
+	if "leggain2" in variant:
+		tuning.muscle_leg_gain = 0.2
+	if "leggain3" in variant:
+		tuning.muscle_leg_gain = 0.3
+	var rig_profile: RagdollProfile = null
+	for ankle in [["ankle120", 120.0], ["ankle150", 150.0], ["ankle200", 200.0]]:
+		if ankle[0] in variant:
+			rig_profile = RagdollProfile.create_mixamo_default()
+			for bd: BoneDefinition in rig_profile.bones:
+				if bd.rig_name in SkeletonDetector.SOLE_ALIGNED_SLOTS:
+					bd.muscle_torque = ankle[1]
+	if "gainup" in variant:
+		tuning.upright_gain = 2.0
+	if "gaindown" in variant:
+		tuning.upright_gain = 0.5
 	if "support1" in variant:
 		tuning.muscle_root_support = 1.0
 	elif "support05" in variant:
@@ -130,7 +157,7 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.spring_feed_forward = 0.0
 	if variant != "":
 		print("  variant: ", variant)
-	var nodes := KickbackSetup.add_active_rig(char_root, skeleton, null, tuning)
+	var nodes := KickbackSetup.add_active_rig(char_root, skeleton, rig_profile, tuning)
 	var kc: KickbackCharacter = nodes[nodes.size() - 1]
 	var spring: SpringResolver = nodes[2]
 	var builder: PhysicsRigBuilder = nodes[0]

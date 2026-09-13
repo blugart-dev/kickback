@@ -78,12 +78,15 @@ func test_xcom_extrapolates_the_com_by_its_velocity_over_omega0():
 	assert_true(bs.has_support, "two foot boxes on the ground give a support polygon (contact_monitor off → assumed in contact)")
 	assert_almost_eq(bs.xcom, Vector3(bs.com.x, bs.support_y, bs.com.z), Vector3.ONE * 1e-5, "at rest the XCoM is the CoM projection")
 	assert_gt(bs.margin, 0.03, "standing CoM is inside the feet by a few cm (margin %.3f)" % bs.margin)
-	# Move the torso 1/60 m in +X: CoM velocity ≈ 1 m/s × (60 / 64) mass share.
-	(bodies["Hips"] as RigidBody3D).global_position += Vector3(1.0 / 60.0, 0.0, 0.0)
+	# Move the torso 1/60 m in +X per tick for 12 ticks: CoM velocity ≈ 1 m/s × (60 / 64)
+	# mass share, converged through the exponential smoothing (3-tick constant).
 	var com_before := bs.com
-	bs.update(bodies, feet, 1.0 / 60.0, 9.8)
+	for i in 12:
+		(bodies["Hips"] as RigidBody3D).global_position += Vector3(1.0 / 60.0, 0.0, 0.0)
+		com_before = bs.com
+		bs.update(bodies, feet, 1.0 / 60.0, 9.8)
 	var v := bs.com_velocity.x
-	assert_almost_eq(v, (bs.com.x - com_before.x) * 60.0, 1e-4, "CoM velocity from the CoM step")
+	assert_almost_eq(v, (bs.com.x - com_before.x) * 60.0, 0.03, "CoM velocity from the CoM step (smoothed, converged)")
 	var expected_x := bs.com.x + v / sqrt(9.8 / bs.height)
 	assert_almost_eq(bs.xcom.x, expected_x, 1e-5, "XCoM = CoM + v / omega0")
 	assert_gt(bs.ratio, 1.0, "a 1 m/s CoM velocity puts the XCoM outside a 0.3 m stance (ratio %.2f)" % bs.ratio)
@@ -127,11 +130,13 @@ func test_airborne_rig_has_no_support():
 
 
 func test_a_shove_moves_the_xcom_outside_the_polygon():
-	var h = await _spawn(_tuning())
+	var t := _tuning()
+	t.muscle_root_hold = 0.0  # let the body actually move
+	var h = await _spawn(t)
 	await wait_physics_frames(60)
 	for body: RigidBody3D in h.rig_builder.get_bodies().values():
 		body.linear_velocity += Vector3(1.5, 0.0, 0.0)
-	await wait_physics_frames(1)
+	await wait_physics_frames(4)  # the smoothed CoM velocity needs a few ticks to register
 	var bs: BalanceState = h.controller.get_balance()
 	assert_gt(bs.ratio, 1.0, "1.5 m/s sideways puts the XCoM outside the stance (ratio %.2f, margin %.3f)" % [bs.ratio, bs.margin])
 	assert_gt(bs.imbalance_dir.x, 0.9, "imbalance points along the shove")

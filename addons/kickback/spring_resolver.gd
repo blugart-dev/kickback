@@ -59,6 +59,8 @@ var _motors_enabled: bool = false
 ## child's local basis (PhysicsRigBuilder.get_joints), so the relative rotation the
 ## motor acts on is `(parent * fp)^-1 * (child * fc)`.
 var _motor_joints: Dictionary = {}
+## rig names that take RagdollTuning.muscle_leg_gain (leg chains + root), from the profile.
+var _leg_set: Dictionary = {}
 ## The root's anchor (JOINT_MOTOR mode): a STATIC body teleported every tick to the
 ## root's (foot-IK-shifted) animation target, joined to the root body by a limit-free
 ## Generic6DOFJoint3D whose motors drive the root to it — orientation with
@@ -243,6 +245,14 @@ func _init_chain() -> void:
 	names.sort_custom(func(a: String, b: String) -> bool:
 		return depth[a] < depth[b] if depth[a] != depth[b] else a < b)
 	_order = PackedStringArray(names)
+
+	# The leg chains + the pelvis take muscle_leg_gain (see RagdollTuning).
+	_leg_set.clear()
+	var prof := _rig_builder.get_profile()
+	if prof:
+		for rig_name: String in prof.get_all_leg_rigs():
+			_leg_set[rig_name] = true
+		_leg_set[prof.get_root_rig()] = true
 
 	# Motor data: joint node + limit frames per jointed body, muscle torque per bone.
 	_motor_joints.clear()
@@ -561,6 +571,7 @@ func _tick_joint_motors(delta: float) -> void:
 	var has_overrides := not _target_overrides.is_empty()
 	var inv_dt := 1.0 / maxf(delta, 1e-6)
 	var gain: float = _tuning.muscle_gain
+	var leg_gain: float = _tuning.muscle_leg_gain if _tuning.muscle_leg_gain > 0.0 else gain
 	var w_max: float = _tuning.muscle_max_angular_velocity
 	var torque_scale: float = _tuning.muscle_strength_scale
 
@@ -585,7 +596,8 @@ func _tick_joint_motors(delta: float) -> void:
 		if rig_name in _motor_joints:
 			if rig_name not in _chain:
 				_place_root_anchor(body, target_xform, strength >= 0.001)
-			_drive_joint_motor(rig_name, state, body, target_xform, strength, ratio, gain, w_max, torque_scale, inv_dt)
+			_drive_joint_motor(rig_name, state, body, target_xform, strength, ratio,
+				leg_gain if _leg_set.has(rig_name) else gain, w_max, torque_scale, inv_dt)
 			if rig_name not in _chain:
 				# The root: orientation by the anchor joint's angular motor above,
 				# position by its linear motor, until the balance layer exists.

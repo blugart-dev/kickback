@@ -186,7 +186,19 @@ it; the scripted stumble and the sine sway are deleted.
   the harness only — with `muscle_root_hold` 0 and no upright behavior the ybot idle is
   unstable (7.2°, constant steps, a 150 N·s shove walks it off), so **`muscle_root_hold`
   stays 1** until the next item.
-- [ ] `UprightBehavior` (ankle / hip strategy on the XCoM: lean the leg / pelvis targets against the imbalance, capped by the muscle torques; replaces the anchor's sideways hold — `muscle_root_hold` → 0 with the bench proving quiet standing ≤ 2° and the 150 N·s shove → step + recovery), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
+- [~] **Balance control** (2026-09-13, `test_balance_control.gd`, 6 tests): the anchor's
+  sideways hold is a bounded **assist** (`muscle_root_hold` 0.25 ≈ 625 N), ankle torque
+  150 N·m, `muscle_leg_gain` 0.2, step trigger 1.0, smoothed CoM velocity, and a
+  **physical fall detector** (pelvis low / tilted for 0.15 s → RAGDOLL, no dice — a
+  400 N·s shove with the assist released is detected within 2 s). Measured: idle 0.98°,
+  settle after react 6.1° / 5.0° (was 10.4 / 6.2), 150 N·s shove → 3 steps, pelvis
+  moves ~6 cm, ratio back under 1 in 2 s, no fall. **`muscle_root_hold` 0 not reached**:
+  the passive stance reads 3.4–4.4° idle and is chaotic under the shove; the IK-shift
+  `UprightBehavior` (in the list, off by default) made it worse at every gain (settle
+  4.9 vs 2.8 without). Open: a torque-level ankle strategy (command the ankle motors on
+  the XCoM error directly) is the next attempt at hold → 0; `ArmBalanceBehavior` (arm
+  target opposes XCoM error), `FallReachBehavior` (existing reach, moved),
+  `GetUpBehavior` (existing canned blend, moved)
 - [x] Delete `_update_directed_stumble` root teleport, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs (2026-09-13; `grep "global_position +=" addons/kickback/` is empty). Still to delete: `_apply_stagger_sway`
 - [ ] **Removal list from the 2026-09-13 feature inventory** (each item was compensation for
   the velocity-overwrite substrate or a stand-in for balance, and is now either redundant

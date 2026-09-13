@@ -191,7 +191,8 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
 
 **Torque table** (`SkeletonDetector.MUSCLE_TORQUE_TABLE`, N·m, on the child body of each
 joint): Spine 150, Chest 150, Head 30, UpperArm 60, LowerArm 40, Hand 10, UpperLeg 200,
-LowerLeg 150, Foot 60; root `muscle_root_torque` 400. Physically honest by construction:
+LowerLeg 150, Foot 150 (was 60 until 0.6.0: adult plantarflexion peaks at 150–200, and at
+60 the ankles sat at ~60 % of their limit just standing); root `muscle_root_torque` 400. Physically honest by construction:
 a 3 N·m shoulder cannot hold a horizontal arm (test), 60 N·m can.
 
 **Ybot bench** (`tools/bench/ybot_bench.gd`, idle / react_front / bullet on the hand,
@@ -300,13 +301,24 @@ top of **foot locks** (`set_foot_lock` / `clear_foot_lock`: a contacting foot th
 mode only. Knobs: the "Balance: Steps" tuning group. Spec and measurements in
 [SELF_PRESERVATION.md](SELF_PRESERVATION.md).
 
-**Root hold.** `RagdollTuning.muscle_root_hold` (sideways share of `muscle_root_force`,
-default **1**) and `muscle_root_support` (up share, default 0) bound the anchor's position
-motor per world axis; the controller raises both to 1 for the canned get-up and fades
-back over 0.75 s. Measured without the sideways hold and without an upright behavior the
-standing idle is unstable (7.2° idle, constant steps) — the ankle motors' 60 N·m cannot
-hold an 80 kg pendulum at 0.9 m (~720 N·m/rad) with a 10-tick lag by tracking a fixed
-pose. The hold goes to 0 with the `UprightBehavior` (ankle / hip strategy on the XCoM).
+**Root hold = the balance assist.** `RagdollTuning.muscle_root_hold` (sideways share of
+`muscle_root_force`, default **0.25** ≈ 625 N) and `muscle_root_support` (up share,
+default 0) bound the anchor's position motor per world axis; the controller raises both
+to 1 for the canned get-up and fades back over 0.75 s. Measured on the ybot (ankle
+150 N·m, `muscle_leg_gain` 0.2): with the hold at 0 the passive stance reads 3.4–4.4°
+idle error and is chaotic under a 150 N·s shove (the ankle motors cannot hold an 80 kg
+pendulum at 0.9 m — ~720 N·m/rad — through a ~10-tick loop by tracking a fixed pose);
+at 0.25 the idle is 0.98° like the full hold, the react-clip settle improves and the shove
+is caught by the legs and the steps with the pelvis moving a few cm. It is a cheat force,
+bounded and documented. **`_check_fall`** is the physical fall decision that goes with a
+body that can now fall: pelvis below 60 % of its target height or tilted past 0.55·up for
+0.15 s while standing → RAGDOLL (no dice).
+
+**`UprightBehavior` (experimental, off).** Shifts the whole-body target against the
+XCoM's drift from the animation's own CoM (`FootIKSolver.set_body_shift`), i.e. the
+ankle / hip strategy in IK form. It measured worse than the passive stance at every gain
+(settle 4.9° vs 2.8°, more falls with the hold released) and is kept only as the
+starting point for a torque-level ankle strategy.
 
 ### Self-collision (0.6.0)
 

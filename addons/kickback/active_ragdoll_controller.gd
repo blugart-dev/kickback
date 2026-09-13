@@ -29,6 +29,12 @@ const _BUDGET_GROUP := "kickback_manager"
 ## Seconds over which the root anchor's full get-up lift fades back to
 ## RagdollTuning.muscle_root_support after a recovery (see _tick_support_release).
 const SUPPORT_RELEASE_SECONDS := 0.75
+## Physical fall detection while standing (JOINT_MOTOR mode, see _check_fall): the
+## pelvis below this fraction of its target height, or its up axis past this dot with
+## world up, for FALL_HOLD_SECONDS → the character has fallen → RAGDOLL.
+const FALL_HEIGHT_RATIO := 0.6
+const FALL_TILT := 0.55
+const FALL_HOLD_SECONDS := 0.15
 
 @export_group("References")
 ## Path to the SpringResolver node that drives spring-based bone tracking.
@@ -76,7 +82,10 @@ var _balance_stable_timer: float = 0.0
 ## The behavior layer (docs/PLAN.md 0.6.0): a fixed ordered list, ticked in NORMAL and
 ## STAGGER after the balance update; each answers with stiffness / targets that this
 ## controller applies (the 0.7.0 arbiter replaces the fixed order).
-var _behaviors: Array[KickbackBehavior] = [StepBehavior.new()]
+var _behaviors: Array[KickbackBehavior] = [UprightBehavior.new(), StepBehavior.new()]
+## Physical fall detection (JOINT_MOTOR mode): seconds the pelvis has been below
+## FALL_HEIGHT_RATIO of its target height or tilted past FALL_TILT while standing.
+var _fall_timer: float = 0.0
 var _behavior_ctx: BehaviorContext = BehaviorContext.new()
 var _behavior_state: int = -1
 var _behavior_targets: Dictionary = {}
@@ -310,6 +319,8 @@ func _physics_process(delta: float) -> void:
 	_update_balance(delta)
 	_tick_support_release(delta)
 	_tick_behaviors(delta)
+	if _check_fall(delta):
+		return
 
 	match _state:
 		State.STAGGER:
@@ -515,6 +526,42 @@ func _tick_behaviors(delta: float) -> void:
 ## The behavior list (read-only view; the entries are live).
 func get_behaviors() -> Array[KickbackBehavior]:
 	return _behaviors
+
+
+## Physics decides the fall (JOINT_MOTOR mode, NORMAL / STAGGER): when the pelvis has
+## dropped below FALL_HEIGHT_RATIO of its target height or tilted past FALL_TILT for
+## FALL_HOLD_SECONDS, the character is on the ground whatever the state machine thinks —
+## commit to RAGDOLL (a knockdown; STAGGER when knockdowns are disabled or the budget
+## denies a slot, exactly like the other knockdown paths). Returns true when it did.
+func _check_fall(delta: float) -> bool:
+	if _state != State.NORMAL and _state != State.STAGGER:
+		_fall_timer = 0.0
+		return false
+	if not _spring.is_motor_mode() or _support_releasing:
+		_fall_timer = 0.0
+		return false
+	var hips: RigidBody3D = _rig_builder.get_bodies().get(_root_rig)
+	if not hips:
+		return false
+	var target_y: float = _spring.get_bone_target_global(_root_rig).origin.y
+	var ground_y: float = _balance.support_y if _balance.has_support else (_character_root.global_position.y if _character_root else 0.0)
+	var height := hips.global_position.y - ground_y
+	var target_height := maxf(target_y - ground_y, 0.1)
+	var tilted := hips.global_basis.y.normalized().dot(Vector3.UP) < FALL_TILT
+	var low := height < target_height * FALL_HEIGHT_RATIO
+	if not (tilted or low):
+		_fall_timer = 0.0
+		return false
+	_fall_timer += delta
+	if _fall_timer < FALL_HOLD_SECONDS:
+		return false
+	_fall_timer = 0.0
+	if _tuning.knockdown_enabled and _try_acquire_ragdoll_slot():
+		_full_ragdoll()
+		return true
+	if _state == State.NORMAL:
+		_start_stagger(_stagger_hit_dir if _stagger_hit_dir.length_squared() > 0.01 else _character_forward())
+	return false
 
 
 func _reset_behaviors() -> void:

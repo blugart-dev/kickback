@@ -53,6 +53,10 @@ var _pin_pos_r: Vector3 = Vector3.ZERO
 var _lock_l: bool = false
 var _lock_r: bool = false
 var _step_lift_height: float = 0.08
+## Horizontal whole-body target shift (world XZ in .x/.z) asked for by the upright
+## behavior: every bone's target moves by it while the planted feet stay, so the legs
+## are solved from a shifted pelvis to the same feet — the body leans back over them.
+var _body_shift: Vector3 = Vector3.ZERO
 
 # Stumble stepping (0.4.0 Self-Preservation): animate a pinned foot's target from
 # its current position to a step goal over a duration, then hold (the foot is now
@@ -233,6 +237,15 @@ func clear_foot_lock(foot_rig: String) -> void:
 		_step_lift_r = 0.0
 
 
+## Sets the horizontal whole-body target shift (world; .y ignored). See _body_shift.
+func set_body_shift(shift: Vector3) -> void:
+	_body_shift = Vector3(shift.x, 0.0, shift.z)
+
+
+func get_body_shift() -> Vector3:
+	return _body_shift
+
+
 func is_foot_locked(foot_rig: String) -> bool:
 	if foot_rig == _foot_l:
 		return _lock_l
@@ -357,6 +370,7 @@ func reset() -> void:
 	_ik_weight_l = 0.0
 	_ik_weight_r = 0.0
 	_pelvis_offset = 0.0
+	_body_shift = Vector3.ZERO
 	_lock_l = false
 	_lock_r = false
 	_clear_steps()
@@ -450,13 +464,14 @@ func _solve_ik(delta: float) -> void:
 	var target_pelvis: float = clampf(deepest, -_tuning.foot_ik_max_pelvis_drop, 0.0) if deepest < INF else 0.0
 	_pelvis_offset = lerpf(_pelvis_offset, target_pelvis,
 		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
-	var ps := Vector3(0, _pelvis_offset, 0)
+	var ps := Vector3(_body_shift.x, _pelvis_offset, _body_shift.z)
 
-	# Full-body shift. Reuse the persistent override buffer and the per-solve
-	# anim-global cache (hip/leg bones were already cached above).
+	# Full-body shift (the pelvis drop and the upright behavior's lean). Reuse the
+	# persistent override buffer and the per-solve anim-global cache (hip/leg bones
+	# were already cached above).
 	var overrides := _overrides_buf
 	overrides.clear()
-	if absf(_pelvis_offset) > 0.001:
+	if absf(_pelvis_offset) > 0.001 or _body_shift.length_squared() > 1e-8:
 		for rig_name: String in _spring.get_all_bone_names():
 			var bi: int = _spring.get_bone_idx(rig_name)
 			if bi >= 0:

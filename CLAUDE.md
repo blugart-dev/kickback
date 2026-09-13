@@ -55,7 +55,8 @@ kickback/
 │       ├── behaviors/               # The behavior layer (0.6.0): read BalanceState, answer with stiffness floors + pose targets
 │       │   ├── behavior.gd          # KickbackBehavior base (tick / on_state_changed / reset)
 │       │   ├── behavior_context.gd  # What a behavior may read and ask of the rig
-│       │   └── step_behavior.gd     # Balance steps (capture point) + re-plants (mis-placed loaded foot) via foot locks
+│       │   ├── step_behavior.gd     # Balance steps (capture point) + re-plants (mis-placed loaded foot) via foot locks
+│       │   └── upright_behavior.gd  # EXPERIMENTAL (off): whole-body target shift against the XCoM error (IK-form ankle/hip strategy)
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)

@@ -72,13 +72,16 @@ const MASS_TABLE := {
 
 ## Muscle torque limits (N·m) per rig body's parent joint, see
 ## [member BoneDefinition.muscle_torque]. Anatomical, a little generous on the
-## limbs so a straight arm can be held and swung under gravity.
+## limbs so a straight arm can be held and swung under gravity. The ankle is 150
+## (adult plantarflexion peaks at 150–200): at 60 the two ankles were at ~60 % of their
+## limit just standing with the CoM 9 cm off centre, and a 150 N·s shove toppled the
+## body once the root anchor stopped holding it (0.6.0 balance measurements).
 const MUSCLE_TORQUE_TABLE := {
 	"Hips": 0.0, "Spine": 150.0, "Chest": 150.0, "Head": 30.0,
 	"UpperArm_L": 60.0, "LowerArm_L": 40.0, "Hand_L": 10.0,
 	"UpperArm_R": 60.0, "LowerArm_R": 40.0, "Hand_R": 10.0,
-	"UpperLeg_L": 200.0, "LowerLeg_L": 150.0, "Foot_L": 60.0,
-	"UpperLeg_R": 200.0, "LowerLeg_R": 150.0, "Foot_R": 60.0,
+	"UpperLeg_L": 200.0, "LowerLeg_L": 150.0, "Foot_L": 150.0,
+	"UpperLeg_R": 200.0, "LowerLeg_R": 150.0, "Foot_R": 150.0,
 }
 
 ## Feet get a [member BoneDefinition.sole_aligned] box: level with the character,
