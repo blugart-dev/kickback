@@ -133,6 +133,24 @@ func _run_case(feet_collide: bool, secs: float) -> void:
 	var controller: ActiveRagdollController = nodes[3]
 	var bs: Dictionary = controller.get_balance_state()
 	print("balance: ratio=%.2f com_xz=(%.3f %.3f) support_center_xz=(%.3f %.3f)" % [bs.balance_ratio, bs.com.x, bs.com.z, bs.support_center.x, bs.support_center.z])
+	var b: BalanceState = controller.get_balance()
+	var c2 := Vector2(b.support_center.x, b.support_center.z)
+	var x2 := Vector2(b.xcom.x, b.xcom.z)
+	var com2 := Vector2(b.com.x, b.com.z)
+	print("  xcom-center=(%+.3f %+.3f) |%.3f| com-center=(%+.3f %+.3f) |%.3f| com_vel_xz=(%+.3f %+.3f) margin=%+.3f m ratio=%.2f edge_along=%.3f height=%.2f omega0=%.2f loaded=%s load=%s" % [
+		x2.x - c2.x, x2.y - c2.y, (x2 - c2).length(), com2.x - c2.x, com2.y - c2.y, (com2 - c2).length(), b.com_velocity.x, b.com_velocity.z,
+		b.margin, b.ratio, BalanceState.edge_distance_along(b.support, c2, b.imbalance_dir) if b.imbalance_dir.length() > 0.0 else -1.0, b.height, b.omega0, b.loaded_foot, str(b.foot_load)])
+	print("  hull (%d): %s" % [b.support.size(), str(b.support)])
+	# Sample the ratio over 2 s of idle to see how much the animation's own sway moves it.
+	var rmin := INF
+	var rmax := -INF
+	var mmin := INF
+	for i in 120:
+		await physics_frame
+		rmin = minf(rmin, b.ratio)
+		rmax = maxf(rmax, b.ratio)
+		mmin = minf(mmin, b.margin)
+	print("  over 2 s idle: ratio %.2f..%.2f, min margin %+.3f m" % [rmin, rmax, mmin])
 	for foot in ["Foot_L", "Foot_R"]:
 		var fb: RigidBody3D = bodies[foot]
 		var tgt: Transform3D = spring.get_bone_target_global(foot)

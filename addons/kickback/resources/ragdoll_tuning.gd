@@ -58,14 +58,19 @@ extends Resource
 @export_range(0.0, 1.0) var reaction_pulse_strength: float = 0.6
 ## Duration of the reaction pulse in seconds.
 @export_range(0.05, 0.5) var reaction_pulse_duration: float = 0.2
-## Center-of-mass balance ratio above which a hit triggers stagger (even if
-## average spring strength is still above stagger_threshold).
-## 0.0 = disabled. Higher = harder to trigger stagger from balance alone.
-@export_range(0.0, 1.0) var balance_stagger_threshold: float = 0.5
-## Balance ratio above this during stagger forces ragdoll (character is tipping over).
-@export_range(0.0, 1.0) var balance_ragdoll_threshold: float = 0.85
-## Balance ratio below this during stagger allows early recovery (character regained balance).
-@export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
+## Balance ratio above which a hit triggers a stagger (even if the average spring
+## strength is still above stagger_threshold). The ratio is [member BalanceState.ratio]
+## since 0.6.0: the extrapolated CoM's offset from the support centre over the support
+## polygon's radius in that direction — 0 centred, 1 at the edge of the feet, > 1 outside
+## (the capture point has left the feet: a step or a fall). A quiet weight-shifted idle
+## reads ~0.4, so the thresholds start at 0.8. 0.0 = disabled.
+@export_range(0.0, 1.5) var balance_stagger_threshold: float = 0.8
+## Ratio above this during a stagger forces a ragdoll (the character is tipping over:
+## its extrapolated CoM is outside its feet). Legacy velocity-overwrite mode only until
+## the balance layer's step behavior exists (docs/PLAN.md 0.6.0).
+@export_range(0.0, 1.5) var balance_ragdoll_threshold: float = 1.0
+## Ratio below this during a stagger allows early recovery (balance regained).
+@export_range(0.0, 1.5) var balance_recovery_threshold: float = 0.6
 ## How long balance must stay below recovery threshold before stagger ends.
 @export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.5
 ## Pain accumulated per hit, scaled by effective strength_reduction.

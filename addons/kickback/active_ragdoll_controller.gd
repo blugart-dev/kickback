@@ -91,6 +91,9 @@ var _injuries: Dictionary = {}  # rig_name → float (0.0-1.0, persistent damage
 var _prev_com: Vector3 = Vector3.ZERO
 var _com_velocity: Vector3 = Vector3.ZERO
 var _com_initialized: bool = false
+## The one balance measurement per tick every decision reads (docs/PLAN.md 0.6.0).
+var _balance: BalanceState = BalanceState.new()
+var _gravity: float = -1.0  # cached from the project settings on first use
 var _sway_phase: float = 0.0
 var _hit_guard_frame: int = -1
 var _hit_guard_bodies: Dictionary = {}
@@ -303,6 +306,7 @@ func _physics_process(delta: float) -> void:
 	_update_fatigue_decay(delta)
 	_tick_reaction_pulses(delta)
 	_sync_injuries_to_resolver()
+	_update_balance(delta)
 	_tick_support_release(delta)
 
 	match _state:
@@ -1371,6 +1375,7 @@ func _start_recovery() -> void:
 	# anchored in — re-anchor before the get-up blend drives it (see
 	# SpringResolver.ROOT_REBASE_ANGLE).
 	_spring.rebase_root_world_joint()
+	_balance.reset_velocity()  # the re-base is a teleport, not a velocity
 	recovery_started.emit(face_up)
 
 	# Force skeleton sync to prevent 1-frame visual pop after root teleport
@@ -1576,55 +1581,30 @@ func _compute_average_strength_ratio() -> float:
 	return total / float(count) if count > 0 else 1.0
 
 
+## Recomputes [member _balance] from the rig once per physics tick: CoM, CoM velocity,
+## XCoM, the support polygon from the feet in contact, the loaded foot and the margin.
+func _update_balance(delta: float) -> void:
+	if _gravity < 0.0:
+		_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
+	_balance.update(_rig_builder.get_bodies(), _foot_rigs, delta, _gravity,
+		_tuning.balance_support_radius_min, _tuning.balance_max_ratio)
+
+
+## The current balance measurement (see [BalanceState]); refreshed every physics tick.
+func get_balance() -> BalanceState:
+	return _balance
+
+
+## The balance measurement as the 0.4.x dictionary ({com, support_center, balance_ratio,
+## imbalance_dir, has_support} plus the 0.6.0 fields xcom, margin, support_polygon,
+## support_y, loaded_foot, foot_load, contacts, com_velocity). The ratio is now the XCoM
+## offset from the support centre over the real polygon's radius in that direction.
 func _compute_balance_state() -> Dictionary:
-	var empty := {"com": Vector3.ZERO, "support_center": Vector3.ZERO, "balance_ratio": 0.0, "imbalance_dir": Vector2.ZERO, "has_support": false}
-	var bodies := _rig_builder.get_bodies()
-
-	# Collect the foot bodies that actually exist (role-driven, multi-rig safe).
-	var feet: Array[RigidBody3D] = []
-	for foot_rig: String in _foot_rigs:
-		var fb: RigidBody3D = bodies.get(foot_rig)
-		if fb:
-			feet.append(fb)
-	if feet.is_empty():
-		return empty
-
-	var com := Vector3.ZERO
-	var total_mass := 0.0
-	for body: RigidBody3D in bodies.values():
-		com += body.global_position * body.mass
-		total_mass += body.mass
-	if total_mass <= 0.001:
-		return empty
-	com /= total_mass
-
-	var support_center := Vector3.ZERO
-	for f: RigidBody3D in feet:
-		support_center += f.global_position
-	support_center /= feet.size()
-
-	# Support radius = furthest foot from the centre (= half the spread for two feet).
-	var support_radius := _tuning.balance_support_radius_min
-	for f: RigidBody3D in feet:
-		support_radius = maxf(support_radius, f.global_position.distance_to(support_center))
-
-	var com_xz := Vector2(com.x, com.z)
-	var support_xz := Vector2(support_center.x, support_center.z)
-	var offset_vec := com_xz - support_xz
-	var offset := offset_vec.length()
-	var imbalance_dir := offset_vec.normalized() if offset > 0.001 else Vector2.ZERO
-
-	return {
-		"com": com,
-		"support_center": support_center,
-		"balance_ratio": clampf(offset / support_radius, 0.0, _tuning.balance_max_ratio),
-		"imbalance_dir": imbalance_dir,
-		"has_support": true,
-	}
+	return _balance.to_dictionary()
 
 
 func _compute_balance_ratio() -> float:
-	return _compute_balance_state().balance_ratio
+	return _balance.ratio
 
 
 func _apply_reaction_pulse(rig_name: String, intensity: float, spread: int) -> void:

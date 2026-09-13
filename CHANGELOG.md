@@ -95,6 +95,30 @@ PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s
   self-collision on and passes inside with it off. `test_rig_fidelity.gd` pins its legacy
   numbers with `self_collision = false` explicitly.
 
+**Step 3 — `BalanceState`.** One balance measurement per physics tick, read by every
+decision (REFERENCE.md "Balance state").
+
+**Added**
+- `BalanceState` (`addons/kickback/balance_state.gd`): mass-weighted CoM and its velocity,
+  the support polygon as the convex hull of the sole footprints of the feet **in contact**
+  (the foot bodies' contact reports; no contact → no support), the extrapolated CoM
+  `xcom = com + v / √(g / h)`, the signed `margin` (m) to the polygon edge, the `ratio`
+  (0 centred, 1 at the edge, > 1 outside — the 0.4.x number on the real polygon), the
+  per-foot load share and the loaded foot. `ActiveRagdollController.get_balance()`;
+  `get_balance_state()` keeps the dictionary API with the new fields added. The F3 HUD
+  draws the hull, the CoM and the XCoM ring with its margin.
+
+**Changed**
+- The static CoM-vs-ankle-midpoint ratio is gone; it read 0.5–0.6 for a perfectly standing
+  character on load-bearing feet (a standing CoM sits ahead of the ankles) and staggered
+  the character on a hand shot. On the ybot idle the new ratio is 0.40–0.42 with a 12.5 cm
+  margin, so the thresholds moved to the new scale: `balance_stagger_threshold` 0.5 → 0.8,
+  `balance_recovery_threshold` 0.3 → 0.6, `balance_ragdoll_threshold` 0.85 → 1.0 (the
+  capture point outside the feet), ranges widened to 1.5.
+- Tests: `test_balance_state.gd` (7) — hull, signed margin, edge distance, XCoM =
+  CoM + v/ω₀ on a synthetic rig, the standing harness (inside its feet, both feet in
+  contact, load shares), airborne = no support, a 1.5 m/s shove puts the XCoM outside.
+
 ### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
 
 **Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and

@@ -229,9 +229,10 @@ func test_kickback_character_ragdoll_facade():
 
 func test_balance_state_reports_support_when_standing():
 	var h = await _spawn()
+	await wait_physics_frames(3)  # BalanceState needs a tick of foot contact reports
 	var bs: Dictionary = h.controller.get_balance_state()
-	assert_true(bs.has_support, "two foot bodies → balance has a support polygon")
-	assert_lt(float(bs.balance_ratio), 0.5, "a centered standing pose reads as roughly balanced")
+	assert_true(bs.has_support, "two feet in contact → balance has a support polygon")
+	assert_lt(float(bs.balance_ratio), 0.7, "a standing pose reads as balanced (below the 0.8 stagger threshold)")
 
 
 func test_anticipate_threat_emits_signal():

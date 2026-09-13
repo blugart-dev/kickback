@@ -167,7 +167,15 @@ it; the scripted stumble and the sine sway are deleted.
   shows 17 axes already exceeded by the 21 clips (elbow lateral ±58 vs ±20, spine X −75 vs
   ±35, knee 149 vs 140). Open: the elbow-lateral reading looks like a frame/twist-bone
   question; a stagger/ragdoll with a leg swinging through the other is now blocked.
-- [ ] `BalanceState` (new file): CoM, CoM velocity, XCoM (`CoM + v / √(g / leg_length)`), support polygon from **foot contact** (feet collide in all states ✅; contact from the foot bodies' `contact_monitor` ✅ — the polygon itself is still to build), loaded foot, signed XCoM distance to the polygon edge, computed once per physics tick
+- [x] `BalanceState` (2026-09-13, `test_balance_state.gd`, 7 tests): CoM, CoM velocity, XCoM
+  (`CoM + v / √(g / h)`, h = CoM height above the support plane), support polygon = convex
+  hull of the sole footprints of the feet in contact, loaded foot (load share ∝ 1/distance
+  to the XCoM), signed margin to the polygon edge, ratio (0 centre / 1 edge / >1 outside),
+  computed once per physics tick in every state; `get_balance()` + the dictionary API; HUD
+  draws hull + XCoM. Ybot idle: margin +12.5 cm, ratio 0.40–0.42 → thresholds recalibrated
+  (stagger 0.8, recovery 0.6, ragdoll 1.0). **Not yet**: the tip-over decision and the
+  root anchor release on it (needs the step behavior first — a 150 N·s shove must step,
+  not fall).
 - [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
 - [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
 - [ ] Delete `_update_directed_stumble` root teleport, `_apply_stagger_sway`, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs

@@ -51,6 +51,7 @@ kickback/
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
 │       ├── foot_ik_solver.gd        # Two-bone foot IK (direct math → spring targets)
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
+│       ├── balance_state.gd         # One balance measurement per tick: CoM, XCoM, contact support polygon, margin, ratio, loaded foot
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)

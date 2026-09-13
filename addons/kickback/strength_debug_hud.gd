@@ -415,24 +415,31 @@ func _draw_com_and_support(bodies: Dictionary, ctrl: ActiveRagdollController, ca
 		return
 	var alpha := _distance_alpha(mid_dist)
 
-	# Support polygon — filled quad between the first two feet
-	if feet.size() >= 2:
-		var fl_pos := feet[0].global_position
-		var fr_pos := feet[1].global_position
-		var foot_fwd := (fl_pos - fr_pos).cross(Vector3.UP).normalized() * 0.1
-		if not camera.is_position_behind(fl_pos) and not camera.is_position_behind(fr_pos):
-			var fl_screen := camera.unproject_position(fl_pos)
-			var fr_screen := camera.unproject_position(fr_pos)
-			var fl_fwd_screen := camera.unproject_position(fl_pos + foot_fwd)
-			var fr_fwd_screen := camera.unproject_position(fr_pos + foot_fwd)
-			var fl_back_screen := camera.unproject_position(fl_pos - foot_fwd)
-			var fr_back_screen := camera.unproject_position(fr_pos - foot_fwd)
-			# Filled support area
-			var support_poly := PackedVector2Array([fl_fwd_screen, fr_fwd_screen, fr_back_screen, fl_back_screen])
-			draw_colored_polygon(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.15 * alpha))
-			draw_polyline(support_poly, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
-			# Close the polyline
-			draw_line(fl_back_screen, fl_fwd_screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+	# Support polygon: the convex hull of the soles in contact (BalanceState), on the
+	# support plane; nothing when no foot touches the ground.
+	var hull: PackedVector2Array = balance_state.get("support_polygon", PackedVector2Array())
+	var support_y: float = balance_state.get("support_y", 0.0)
+	if hull.size() >= 3:
+		var screen := PackedVector2Array()
+		var visible := true
+		for p2: Vector2 in hull:
+			var wp := Vector3(p2.x, support_y, p2.y)
+			if camera.is_position_behind(wp):
+				visible = false
+				break
+			screen.append(camera.unproject_position(wp))
+		if visible:
+			draw_colored_polygon(screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, 0.15 * alpha))
+			screen.append(screen[0])
+			draw_polyline(screen, Color(SUPPORT_COLOR.r, SUPPORT_COLOR.g, SUPPORT_COLOR.b, SUPPORT_COLOR.a * alpha), 2.0)
+	# Extrapolated CoM (where the body is heading) and its margin to the polygon edge.
+	var xcom: Vector3 = balance_state.get("xcom", com)
+	var margin: float = balance_state.get("margin", 0.0)
+	if not camera.is_position_behind(xcom):
+		var xs := camera.unproject_position(xcom)
+		var xc := COM_COLOR_GOOD.lerp(COM_COLOR_BAD, clampf(balance, 0.0, 1.0))
+		draw_arc(xs, 6.0, 0.0, TAU, 16, Color(xc.r, xc.g, xc.b, 0.9 * alpha), 2.0)
+		_draw_text_shadowed(xs + Vector2(9, 4), "XCoM %+.0f cm" % (margin * 100.0), FONT_SIZE, Color(xc.r, xc.g, xc.b, alpha))
 
 	# CoM marker — diamond shape, colored by balance
 	if not camera.is_position_behind(com):

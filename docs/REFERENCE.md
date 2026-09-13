@@ -249,6 +249,39 @@ then restores friction and fades the support to the tuning's value over 0.75 s o
 NORMAL is reached. Shooting range, all five targets: ≤ 8° at `recovery_finished`, 1–4°
 after 3 s, pelvis at its target height on its own legs.
 
+### Balance state (0.6.0)
+
+`BalanceState` (`addons/kickback/balance_state.gd`) is the one balance measurement per
+physics tick; the controller refreshes it in every state and every decision reads it
+(`ActiveRagdollController.get_balance()`, or the 0.4.x dictionary from
+`get_balance_state()` with the new fields added). Per tick:
+
+```
+com        = Σ mᵢ pᵢ / Σ mᵢ                       (all rig bodies)
+v          = (com − com_prev) / dt                (reset after the recovery re-base)
+support    = convex hull (XZ) of the sole footprints of the feet IN CONTACT
+             (the four bottom corners of each contacting foot box; no contact → no polygon)
+h, ω₀      = com.y − support plane,  √(g / h)     (linear inverted pendulum)
+xcom       = com_xz + v_xz / ω₀                   (extrapolated CoM = capture point)
+margin     = signed distance xcom → hull edge     (+ inside, − outside, metres)
+ratio      = |xcom − centroid| / edge distance from the centroid along that direction
+             (0 centred, 1 at the edge, > 1 outside; clamped to balance_max_ratio)
+foot_load  ∝ 1 / distance(xcom, foot footprint centre), normalised;  loaded_foot = argmax
+```
+
+`ratio` is the number the 0.4.x consumers (stagger / recovery thresholds, `balance_changed`
+payload, HUD bar, trace) already read, now on the real polygon and including velocity.
+The old static ratio (CoM offset from the ankle midpoint over half the stance width) read
+0.5–0.6 for a perfectly standing character on load-bearing feet, because a standing CoM
+sits ahead of the ankles, inside the feet. Measured on the ybot idle: hull of 6 vertices,
+CoM 9 cm from the centroid toward the weight-bearing foot, margin +12.5 cm, ratio 0.40–0.42
+over 2 s of idle sway (`tools/bench/foot_probe.gd`). The thresholds were recalibrated to
+the new scale: `balance_stagger_threshold` 0.8, `balance_recovery_threshold` 0.6,
+`balance_ragdoll_threshold` 1.0 (= the capture point has left the feet: the textbook
+"step or fall" condition, which the step behavior will consume). Airborne or lying (no
+foot in contact) → `has_support = false`, ratio 0. The F3 HUD draws the hull on the
+support plane, the CoM diamond and the XCoM ring with its margin in cm.
+
 ### Self-collision (0.6.0)
 
 `RagdollTuning.self_collision` is **on** by default since 0.6.0: the torso blocks a limp
