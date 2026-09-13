@@ -15,8 +15,13 @@ test or a PR does not back.
 
 ## Ground rules (non-negotiable)
 
-- **Branch + PR per milestone** (`feat/<milestone>`); never push to `main`; never merge
-  your own PR — merging is the human gate.
+- **`main` is release-only and frozen until the maintainer says it *feels amazing*
+  (decision 2026-09-13).** Integration happens on **`develop`**: every milestone is a
+  `feat/<milestone>` branch off `develop` with a PR **into `develop`**; when its CI is green
+  and its numbers are in the body, fast-forward `develop` to it (`git push origin
+  feat/x:develop`, never a force push) and start the next branch. `main` receives one
+  release PR from `develop` when the maintainer's feel gate passes; that merge, and any
+  tag, is the human's. Never push to `main`.
 - **Green suite before a PR**: `godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit`
   (Godot 4.7.2 + Jolt; on this machine `~/bin/godot`). Zero failures, zero orphans, every
   demo scene loads headless with `--quit-after 90` and no script errors.
@@ -50,8 +55,8 @@ test or a PR does not back.
 |---|---|---|---|
 | 0.4.1 Honesty pass | ✅ merged | PR #98 | visually verified 2026-09-12 |
 | Muscle spike | ✅ done | `docs/MUSCLE_SPIKE.md` | — |
-| **0.5.0 Muscle layer** | 🔧 PR #100 open, `JOINT_MOTOR` is the default | `feat/muscle-layer` | visual gate: user testing |
-| 0.6.0 Balance + behaviors | ⬜ | | |
+| **0.5.0 Muscle layer** | ✅ code complete, on `develop` (PR #100 to `main` kept open as the record; not merged) | `feat/muscle-layer` → `develop` | feel gate deferred: maintainer says "not there yet, comes later" |
+| **0.6.0 Balance + behaviors** | 🔧 in progress | `feat/balance-behaviors` → `develop` | steps read as steps |
 | 0.7.0 Arbiter + API cut | ⬜ | | |
 | 0.8.0 Environmental behaviors | ⬜ | | |
 | 0.9.0 Performance + hardening | ⬜ | | |
@@ -146,7 +151,30 @@ it; the scripted stumble and the sine sway are deleted.
 - [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
 - [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
 - [ ] Delete `_update_directed_stumble` root teleport, `_apply_stagger_sway`, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs
-- [ ] Tip-over decision from XCoM, not from the static ratio; `balance_changed` payload documented
+- [ ] **Removal list from the 2026-09-13 feature inventory** (each item was compensation for
+  the velocity-overwrite substrate or a stand-in for balance, and is now either redundant
+  or fake on top of real muscles):
+  - [ ] `_apply_micro_reaction` (head-whip / torso-bend / spin torque impulses): added because
+    the old resolver erased the real impulse in 3 ticks; with motors the impulse *is* the whip.
+    Delete; re-check hit vividness on the bench without it before touching gains.
+  - [ ] Velocity clamps (`max_angular_velocity` / `max_linear_velocity` hard writes) in motor
+    mode: they overwrite what the motor just did. Motor mode uses `muscle_max_angular_velocity`
+    on the command only.
+  - [ ] Unjointed / root bodies in motor mode still run the legacy velocity spring
+    (`_drive_root_body`); every body in motor mode is force-driven or free.
+  - [ ] Reaction pulses, strength reduction + spread, threat pulse: keep as *modulation*
+    (a torque-cap dip) but re-tune their defaults on the bench with real impulses; threat
+    anticipation becomes a pose behavior (head turn / arm raise) or is removed from the API.
+  - [ ] Stagger exit by regained balance (XCoM inside the polygon for `hold_time`), the timer
+    only as a safety net.
+  - [ ] Hit-streak / movement-instability multipliers and the `ragdoll_probability` dice
+    roll: move out of the physics decision path into an explicit gameplay hook (a knockdown
+    is either physics or an explicit call).
+- [ ] **Tip-over owned by `BalanceState`, not dice.** Today in motor mode the CoM ratio check
+  is off and *nothing physical decides a fall*: a standing character only goes down by
+  `ragdoll_probability`, pain, or an explicit trigger. 0.6.0 acceptance requires the fall in
+  the 400 N·s shove case to be *decided by XCoM leaving the polygon with no recoverable
+  step*, and the root anchor to release when it does. `balance_changed` payload documented
 - [ ] Tests: XCoM math; support polygon from contact; a shove that keeps XCoM inside the polygon ends in a step and no fall; a larger shove falls; ybot bench scenario "shove" with numbers
 - [ ] Docs: SELF_PRESERVATION rewritten as the behavior spec; REFERENCE balance section
 
@@ -162,7 +190,11 @@ teleport anywhere in the plugin (`grep global_position +=` in addons/ is empty).
 
 - [ ] Arbiter: per-bone highest-priority stiffness/target wins, ties blend; replaces every direct `set_bone_strength` writer (`grep set_bone_strength addons/ | wc -l` ≤ 3: arbiter, resolver, tests)
 - [ ] `ActiveRagdollController` ≤ 400 lines: state switch + behavior enable/disable
-- [ ] `RagdollTuning` ≤ 40 exports, grouped by subsystem; build-time knobs moved to the profile; migration doc for removed knobs
+- [ ] `RagdollTuning` ≤ 40 exports (161 on 2026-09-13), grouped by subsystem; build-time knobs moved to the profile; migration doc for removed knobs
+- [ ] **Retire `VELOCITY_OVERWRITE`** (decision 2026-09-13): it stays through 0.6.0 as the A/B
+  reference on the bench, then the legacy path, `spring_chain_consistency`, strength-scaled
+  gravity, the settle deadbands and `test_rig_fidelity.gd`'s legacy pins go with the API cut.
+  One muscle model, one code path.
 - [ ] Signals reviewed; API freeze note in VERSIONING
 - [ ] Tests: arbiter precedence; each behavior isolated; API surface snapshot test
 
