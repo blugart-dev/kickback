@@ -78,41 +78,47 @@ func test_self_collision_off_excludes_everything_and_reports_nothing():
 	assert_eq(h.rig_builder.get_self_collision_exclusions().size(), 0, "no safety-net list when self-collision is off")
 
 
-func _hand_inside_chest(h) -> bool:
-	var chest: RigidBody3D = h.get_body("Chest")
-	var shape := chest.get_child(0) as CollisionShape3D
-	var box := shape.shape as BoxShape3D
-	var local: Vector3 = shape.global_transform.affine_inverse() * (h.get_body("Hand_L") as RigidBody3D).global_position
-	var half := box.size * 0.5
-	return absf(local.x) < half.x and absf(local.y) < half.y and absf(local.z) < half.z
+func _hand_inside_torso(h) -> bool:
+	var hand_pos: Vector3 = (h.get_body("Hand_L") as RigidBody3D).global_position
+	for rig in ["Hips", "Spine", "Chest"]:
+		var body: RigidBody3D = h.get_body(rig)
+		var shape := body.get_child(0) as CollisionShape3D
+		var box := shape.shape as BoxShape3D
+		var local: Vector3 = shape.global_transform.affine_inverse() * hand_pos
+		var half := box.size * 0.5
+		if absf(local.x) < half.x and absf(local.y) < half.y and absf(local.z) < half.z:
+			return true
+	return false
 
 
 func test_the_torso_blocks_a_limp_arm():
-	# Limp rig (persistent ragdoll) lying on the ground; shove the left hand hard toward
-	# the chest, once with self-collision and once without. With it the hand never enters
-	# the chest box; without it the same shove gets the hand at least as close to the
-	# chest centre (whether it ends INSIDE depends on how the arm landed — the joint
-	# limits can hold it out — so that is compared, not asserted absolutely).
-	var closest: Dictionary = {}
+	# Deterministic scenario (a ragdoll landing is not: self-collision changes the fall):
+	# the rig stands, held by the anchor, with the LEFT ARM limp so it hangs beside the
+	# torso; shove the hand hard across the body. With self-collision the torso boxes stop
+	# it; without, the same shove swings it through them.
 	for self_col in [true, false]:
 		var t := _tuning()
 		t.self_collision = self_col
+		t.muscle_root_support = 1.0
 		var h = await _spawn(t)
-		h.controller.set_persistent(true)
-		await wait_physics_frames(90)  # down and settled
+		await wait_physics_frames(30)
+		h.spring.recovery_rate = 0.0
+		for rig in ["UpperArm_L", "LowerArm_L", "Hand_L"]:
+			h.spring.set_bone_strength(rig, 0.0)
+		await wait_physics_frames(60)  # the arm hangs
 		var hand: RigidBody3D = h.get_body("Hand_L")
-		var chest: RigidBody3D = h.get_body("Chest")
-		var dir := (chest.global_position - hand.global_position).normalized()
-		hand.apply_central_impulse(dir * 6.0)  # 1 kg hand → 6 m/s at the chest
+		var spine: RigidBody3D = h.get_body("Spine")
+		assert_false(_hand_inside_torso(h), "self_collision=%s: the hanging hand starts outside the torso" % str(self_col))
+		var dir: Vector3 = spine.global_position - hand.global_position
+		dir.y = 0.0
+		dir = dir.normalized()
+		hand.apply_central_impulse(dir * 6.0)  # 1 kg hand → 6 m/s across the body
 		var ever_inside := false
-		var min_dist := INF
 		for i in 30:
 			await wait_physics_frames(1)
-			if _hand_inside_chest(h):
+			if _hand_inside_torso(h):
 				ever_inside = true
-			min_dist = minf(min_dist, hand.global_position.distance_to(chest.global_position))
-		closest[self_col] = min_dist
 		if self_col:
-			assert_false(ever_inside, "self-collision on: the hand never enters the chest box (closest %.3f m)" % min_dist)
-	assert_lte(closest[false], closest[true] + 0.01,
-		"without self-collision the shove gets the hand at least as close to the chest (%.3f m vs %.3f m with it)" % [closest[false], closest[true]])
+			assert_false(ever_inside, "self-collision on: the hand never enters a torso box")
+		else:
+			assert_true(ever_inside, "self-collision off: the same shove swings the hand through the torso")
