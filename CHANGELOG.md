@@ -131,7 +131,7 @@ PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s
   `_do_directed_step`, `_apply_stumble_brace`, the arm windmill (`_update_arm_windmill`,
   `_drive_windmill_arm`), the `stumble_*` / `arm_windmill_*` / `arm_brace_weight` knobs,
   the `stumble_step_started` signal (→ `step_started`), `test_stumble_step.gd`.
-  `grep "global_position +=" addons/` is empty. The fall reach now takes the hit
+  `grep "global_position +=" addons/kickback/` is empty. The fall reach now takes the hit
   direction. `SELF_PRESERVATION.md` rewritten as the behavior spec.
 
 **Measured** (ybot, 60 Hz, `tools/bench/step_probe.gd` / `ybot_bench.gd`)

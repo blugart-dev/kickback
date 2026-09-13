@@ -4,7 +4,7 @@
 > a scripted displacement of the character root along the hit direction, steps paced by
 > distance travelled, a phase-circle arm windmill — was deleted in 0.6.0 (see
 > [AUDIT_2026-09-12.md](AUDIT_2026-09-12.md) §3.2 for why). Nothing in the plugin
-> writes the character root's position any more; `grep "global_position +=" addons/`
+> writes the character root's position any more; `grep "global_position +=" addons/kickback/`
 > is empty.
 
 ## What a behavior is

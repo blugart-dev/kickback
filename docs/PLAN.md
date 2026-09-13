@@ -187,7 +187,7 @@ it; the scripted stumble and the sine sway are deleted.
   unstable (7.2°, constant steps, a 150 N·s shove walks it off), so **`muscle_root_hold`
   stays 1** until the next item.
 - [ ] `UprightBehavior` (ankle / hip strategy on the XCoM: lean the leg / pelvis targets against the imbalance, capped by the muscle torques; replaces the anchor's sideways hold — `muscle_root_hold` → 0 with the bench proving quiet standing ≤ 2° and the 150 N·s shove → step + recovery), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
-- [x] Delete `_update_directed_stumble` root teleport, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs (2026-09-13; `grep "global_position +=" addons/` is empty). Still to delete: `_apply_stagger_sway`
+- [x] Delete `_update_directed_stumble` root teleport, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs (2026-09-13; `grep "global_position +=" addons/kickback/` is empty). Still to delete: `_apply_stagger_sway`
 - [ ] **Removal list from the 2026-09-13 feature inventory** (each item was compensation for
   the velocity-overwrite substrate or a stand-in for balance, and is now either redundant
   or fake on top of real muscles):
