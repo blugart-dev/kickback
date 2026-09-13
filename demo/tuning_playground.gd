@@ -134,6 +134,13 @@ func _build_slider_panel() -> void:
 	_add_slider(panel, "core_ramp", 0.0, 1.0, _custom_tuning.resistance_core_ramp)
 	_add_slider(panel, "leg_brace", 0.0, 1.0, _custom_tuning.resistance_leg_brace)
 
+	_add_section(panel, "MUSCLES (JOINT_MOTOR mode)")
+	_add_slider(panel, "muscle_gain", 0.02, 0.3, _custom_tuning.muscle_gain)
+	_add_slider(panel, "muscle_strength_scale", 0.0, 3.0, _custom_tuning.muscle_strength_scale)
+	_add_slider(panel, "muscle_strength_curve", 0.25, 2.0, _custom_tuning.muscle_strength_curve)
+	_add_slider(panel, "muscle_root_torque", 0.0, 2000.0, _custom_tuning.muscle_root_torque)
+	_add_slider(panel, "muscle_root_force", 0.0, 10000.0, _custom_tuning.muscle_root_force)
+
 	_add_section(panel, "RECOVERY")
 	_add_slider(panel, "recovery_rate", 0.05, 2.0, _custom_tuning.recovery_rate)
 	_add_slider(panel, "recovery_duration", 0.5, 5.0, _custom_tuning.recovery_duration)
@@ -260,6 +267,11 @@ func _apply_tuning_param(param_name: String, value: float) -> void:
 		"stagger_threshold": _custom_tuning.stagger_threshold = value
 		"stagger_duration": _custom_tuning.stagger_duration = value
 		"stagger_floor": _custom_tuning.stagger_strength_floor = value
+		"muscle_gain": _custom_tuning.muscle_gain = value
+		"muscle_strength_scale": _custom_tuning.muscle_strength_scale = value
+		"muscle_strength_curve": _custom_tuning.muscle_strength_curve = value
+		"muscle_root_torque": _custom_tuning.muscle_root_torque = value
+		"muscle_root_force": _custom_tuning.muscle_root_force = value
 		"sway_strength": _custom_tuning.stagger_sway_strength = value
 		"sway_frequency": _custom_tuning.stagger_sway_frequency = value
 		"sway_drift": _custom_tuning.stagger_sway_drift = value

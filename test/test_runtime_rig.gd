@@ -52,8 +52,8 @@ func test_rig_builds_all_joints():
 	var world_joints := 0
 	for child in h.rig_builder.get_children():
 		if child is Generic6DOFJoint3D:
-			if (child as Generic6DOFJoint3D).node_a.is_empty():
-				world_joints += 1  # the muscle layer's root world motor (JOINT_MOTOR mode)
+			if (child as Generic6DOFJoint3D).name.ends_with("_anchor_motor"):
+				world_joints += 1  # the muscle layer's root anchor joint (JOINT_MOTOR mode)
 			else:
 				joints += 1
 	assert_eq(joints, 15, "15 Generic6DOFJoint3D joints connect the 16 bodies")

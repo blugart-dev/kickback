@@ -19,13 +19,21 @@ world motor + pin hold at full authority until the bone is limp (they stand in f
 balance; a strength-scaled root let a staggered character topple within 0.3 s).
 
 **Added**
-- **Root held by the world joint's linear motor** (`muscle_root_force`, 2500 N): the pelvis
-  position is a bounded force inside the solver instead of a velocity written to the
-  pelvis. The velocity pin was diluted by the joint solve across the ~55 kg hanging from
-  the pelvis — the character stood 3.5 cm low and bounced at ~3 Hz (visible whole-body
-  wobble, feet clipping the floor in `shooting_range.tscn`); now it sits within 1 mm of
-  its target with no bounce. The root's torque and force are not scaled by
+- **Root driven through a kinematic anchor body** (`<Root>_anchor` + `<Root>_anchor_motor`):
+  the pelvis is joined to a static body the resolver teleports to its target every tick,
+  and the joint's angular (`muscle_root_torque`) and linear (`muscle_root_force`, 2500 N)
+  motors drive it there as bounded forces inside the solver. The anchor leads the pelvis
+  by at most 1 rad / 0.5 m and sits on it while limp, so Jolt's swing-twist motor axes
+  never degenerate. Found and fixed on the way (all user-visible in `shooting_range.tscn`):
+  a velocity pin on the pelvis was diluted by the joint solve (3.5 cm low, bouncing at
+  3 Hz: whole-body wobble, feet clipping the floor); a fixed world joint stood the
+  character up **upside down** after a ragdoll on the ground; re-anchoring by rebuilding
+  that constraint left every limb joint motor inert. After a ragdoll every character now
+  gets up upright with ~2° error. The root's torque and force are not scaled by
   `muscle_strength_scale` (balance, not muscle).
+- **Limb motors commanded in Jolt's swing-twist angle space** (the limits' space) instead
+  of a rotation vector: joints thrown to their limits by a ragdoll now come back instead
+  of stalling part-way with an inert command.
 - **Balance tip-over off in JOINT_MOTOR mode**: the root's world motors hold the pelvis
   until limp, so `balance_ragdoll_threshold` → RAGDOLL no longer fires in that mode (a
   staggered character was ragdolled by CoM-vs-feet spikes of 1.0–1.5 while standing);
@@ -54,8 +62,9 @@ balance; a strength-scaled root let a staggered character topple within 0.3 s).
   `get_last_tick_usec()`.
 - `tools/bench/ybot_bench.gd` — the acceptance bench on the real demo character (idle /
   react_front / bullet on the hand, both modes, `BENCH_HZ`, `BENCH_DIAG`, `BENCH_VARIANT`).
-- `test/test_muscle_layer.gd` (20 tests: wiring, force-limit scaling, limp = zero limit,
-  the pelvis stands within millimetres of its target without bouncing,
+- `test/test_muscle_layer.gd` (21 tests: wiring, force-limit scaling, limp = zero limit,
+  the pelvis stands within millimetres of its target without bouncing, a character knocked
+  to the ground gets up upright,
   a motor pushing into a joint limit yields a bounded amount, a stagger stays standing,
   gravity on, axis sign end to end on identity and anatomical frames, root yaw, hold under
   gravity, an under-powered shoulder sags, hit deflects and recovers, 30 / 120 Hz holds,
@@ -66,11 +75,10 @@ balance; a strength-scaled root let a staggered character topple within 0.3 s).
 swing about the child frame's Y/Z. Commanding in a single frame leaves every joint of a
 real idle 2–4° short.
 
-**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.76° mean / 5.1° max
-under real gravity (legacy 0.81 / 1.73); react_front 18.8° (legacy 10.1, torque-limited
-by design); bullet on the hand 4.5° peak, muscle recovery in 4 ticks (legacy erases it:
-1.3°); resolver tick ≈1.2× legacy. 120 Hz beats legacy on idle and react; 30 Hz idle
-4.9° (was a 15° ring). **30 Hz is an open item** (rings with the
+**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.94° mean / 3.5° max
+under real gravity (legacy 0.78 / 1.57); react_front 24.5° (legacy 10.1, torque-limited
+and per-axis-commanded — see the open items); bullet on the hand 2.4° peak, muscle
+recovery in 4 ticks (legacy erases it: 1.3°); resolver tick ≈1.4× legacy. **30 Hz is an open item** (rings with the
 foot-IK default of non-colliding feet; 3.6° idle with `foot_ik_disable_foot_collision =
 false`; hand-hit recovery wraps a wrist limit).
 

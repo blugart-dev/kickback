@@ -59,9 +59,16 @@ var _motors_enabled: bool = false
 ## child's local basis (PhysicsRigBuilder.get_joints), so the relative rotation the
 ## motor acts on is `(parent * fp)^-1 * (child * fc)`.
 var _motor_joints: Dictionary = {}
-## The root's world joint (JOINT_MOTOR mode): a limit-free Generic6DOFJoint3D between
-## the world and the root body whose angular motor drives the root's orientation
-## (RagdollTuning.muscle_root_torque). Created on entering motor mode, freed on leaving.
+## The root's anchor (JOINT_MOTOR mode): a STATIC body teleported every tick to the
+## root's (foot-IK-shifted) animation target, joined to the root body by a limit-free
+## Generic6DOFJoint3D whose motors drive the root to it — orientation with
+## RagdollTuning.muscle_root_torque, position with muscle_root_force. The anchor is
+## clamped to within ROOT_ANCHOR_MAX_ANGLE / ROOT_ANCHOR_MAX_DISTANCE of the root and
+## follows the root while it is limp, so the joint's relative rotation (what Jolt's
+## swing-twist motor axes are conditioned on) stays small at all times — a fixed world
+## frame degenerated once the pelvis lay on the ground (the character got up upside
+## down), and rebuilding the constraint to re-anchor it broke the other joints.
+var _root_anchor: RigidBody3D = null
 var _root_world_joint: Generic6DOFJoint3D = null
 ## Microseconds the last resolver tick took (legacy or motor path) — for the bench.
 var _last_tick_usec: int = 0
@@ -74,6 +81,13 @@ const MOTOR_AXIS_SIGN := -1.0
 ## Sign of the world joint's LINEAR motor target relative to the desired root velocity
 ## (world axes; the joint frame is the identity). Calibrated in test_muscle_layer.gd.
 const ROOT_LINEAR_MOTOR_SIGN := 1.0
+## Jolt's 6DOF angular motor acts on swing-twist axes (twist about the parent frame's
+## X, swing about the child frame's Y/Z), a well-conditioned axis set only while the
+## two frames are within a few tens of degrees. A limb joint is kept there by its
+## limits; the root's anchor is kept there by these clamps: the anchor never leads the
+## root by more than this angle (radians) / distance (metres).
+const ROOT_ANCHOR_MAX_ANGLE := 1.0
+const ROOT_ANCHOR_MAX_DISTANCE := 0.5
 ## Measured on the ybot idle (tools/bench/ybot_bench.gd, BENCH_DIAG=1): commanding the
 ## motor entirely in the parent frame left every joint 2-4 deg short on the swing
 ## axes, entirely in the child frame fixed the swing axes but tripled the twist (X)
@@ -408,11 +422,10 @@ func _apply_motor_mode(enable: bool) -> void:
 	_motors_enabled = enable
 
 
-## Attaches the root body to the world through a limit-free 6DOF joint (node_a empty
-## = the world under Jolt's default `joints/world_node`) and registers it in
-## _motor_joints with an empty parent, so the root is driven by the same joint-motor
-## code as every other body: frame A is the world (identity), frame C is the root's
-## basis at attachment, the command is the root's world orientation error.
+## Creates the root anchor (static body at the root's current transform) and the
+## limit-free joint anchor -> root, registered in _motor_joints with an empty parent
+## and identity frames: relative rotation = anchor^-1 * root, target = anchor^-1 *
+## animation target, both small by construction (see _place_root_anchor).
 func _create_root_world_joint() -> void:
 	if _root_world_joint or _root_motion_bone.is_empty():
 		return
@@ -420,31 +433,84 @@ func _create_root_world_joint() -> void:
 	if root_rig not in _bones or root_rig in _motor_joints:
 		return
 	var root_body: RigidBody3D = _bones[root_rig].body
+	var xform := root_body.global_transform.orthonormalized()
+
+	var anchor := RigidBody3D.new()
+	anchor.name = "%s_anchor" % root_rig
+	anchor.freeze = true
+	anchor.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	anchor.collision_layer = 0
+	anchor.collision_mask = 0
+	anchor.can_sleep = false
+	anchor.top_level = true
+	_rig_builder.add_child(anchor)
+	anchor.global_transform = xform
+
 	var joint := Generic6DOFJoint3D.new()
-	joint.name = "%s_world_motor" % root_rig
+	joint.name = "%s_anchor_motor" % root_rig
 	_rig_builder.add_child(joint)
-	joint.global_transform = Transform3D(Basis.IDENTITY, root_body.global_position)
+	joint.global_transform = xform
+	joint.node_a = joint.get_path_to(anchor)
 	joint.node_b = joint.get_path_to(root_body)
 	for axis_flag in [Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, Generic6DOFJoint3D.FLAG_ENABLE_ANGULAR_LIMIT]:
 		joint.set_flag_x(axis_flag, false)
 		joint.set_flag_y(axis_flag, false)
 		joint.set_flag_z(axis_flag, false)
 	_set_linear_motor(joint, Vector3.ZERO, 0.0)
+	_root_anchor = anchor
 	_root_world_joint = joint
 	_motor_joints[root_rig] = {
 		"joint": joint,
 		"parent": "",
 		"fp": Basis.IDENTITY,
-		"fc": root_body.global_basis.orthonormalized().inverse(),
+		"fc": Basis.IDENTITY,
 	}
 
 
 func _free_root_world_joint() -> void:
-	if not _root_world_joint:
+	if _root_world_joint:
+		_motor_joints.erase(_root_motion_bone)
+		_root_world_joint.queue_free()
+		_root_world_joint = null
+	if _root_anchor:
+		_root_anchor.queue_free()
+		_root_anchor = null
+
+
+## Puts the anchor where the root should be this tick: at [param target] when the
+## root holds, clamped to ROOT_ANCHOR_MAX_ANGLE / ROOT_ANCHOR_MAX_DISTANCE from the root
+## body (a hit or a fall can throw the root far from its target; the anchor leads it
+## back from nearby instead of commanding across a degenerate axis set); on the root
+## itself while the root is limp, so the relative rotation is ~0 when it wakes up.
+func _place_root_anchor(root_body: RigidBody3D, target: Transform3D, holding: bool) -> void:
+	if not _root_anchor:
 		return
-	_motor_joints.erase(_root_motion_bone)
-	_root_world_joint.queue_free()
-	_root_world_joint = null
+	var cur := root_body.global_transform.orthonormalized()
+	if not holding:
+		_root_anchor.global_transform = cur
+		return
+	var basis := target.basis.orthonormalized()
+	var delta_q := (basis * cur.basis.inverse()).get_rotation_quaternion()
+	if delta_q.w < 0.0:
+		delta_q = -delta_q
+	var angle := 2.0 * acos(clampf(delta_q.w, -1.0, 1.0))
+	if angle > ROOT_ANCHOR_MAX_ANGLE:
+		var axis := Vector3(delta_q.x, delta_q.y, delta_q.z)
+		if axis.length_squared() > 1e-10:
+			basis = Basis(axis.normalized(), ROOT_ANCHOR_MAX_ANGLE) * cur.basis
+	var origin := target.origin
+	var offset := origin - cur.origin
+	if offset.length() > ROOT_ANCHOR_MAX_DISTANCE:
+		origin = cur.origin + offset.normalized() * ROOT_ANCHOR_MAX_DISTANCE
+	_root_anchor.global_transform = Transform3D(basis, origin)
+
+
+## Snaps the anchor onto the root body (relative rotation = identity). Called by the
+## controller at recovery start; the get-up blend then leads the anchor away smoothly.
+func rebase_root_world_joint() -> void:
+	if _root_anchor and _root_motion_bone in _bones:
+		_root_anchor.global_transform = (_bones[_root_motion_bone].body as RigidBody3D).global_transform.orthonormalized()
+		_bones[_root_motion_bone].has_prev_rel = false
 
 
 func _tick_joint_motors(delta: float) -> void:
@@ -474,10 +540,12 @@ func _tick_joint_motors(delta: float) -> void:
 		state.target_xform = target_xform
 
 		if rig_name in _motor_joints:
+			if rig_name not in _chain:
+				_place_root_anchor(body, target_xform, strength >= 0.001)
 			_drive_joint_motor(rig_name, state, body, target_xform, strength, ratio, gain, w_max, torque_scale, inv_dt)
 			if rig_name not in _chain:
-				# The root: orientation by the world-joint motor above, position by
-				# the (scaled) pin until the balance layer exists.
+				# The root: orientation by the anchor joint's angular motor above,
+				# position by its linear motor, until the balance layer exists.
 				_drive_root_pin(rig_name, state, body, target_xform, strength, ratio, delta)
 		else:
 			_drive_root_body(rig_name, state, body, target_xform, strength, ratio, delta)
@@ -504,9 +572,13 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 	var parent_rig: String = j.parent
 	var fp: Basis = j.fp
 	var fc: Basis = j.fc
-	var a: Basis = fp
-	var pa: Basis = fp
-	if not parent_rig.is_empty():
+	var a: Basis
+	var pa: Basis
+	if parent_rig.is_empty():
+		# The root: its parent is the anchor (already placed this tick).
+		a = _root_anchor.global_basis.orthonormalized() * fp
+		pa = a
+	else:
 		var parent_state: Dictionary = _bones[parent_rig]
 		var parent_body: RigidBody3D = parent_state.body
 		a = parent_body.global_basis.orthonormalized() * fp
@@ -516,35 +588,38 @@ func _drive_joint_motor(rig_name: String, state: Dictionary, body: RigidBody3D, 
 	var r_rel: Basis = a.inverse() * b
 	var r_tgt: Basis = pa.inverse() * ca
 
-	var err := _axis_angle(r_tgt * r_rel.inverse())
-	var angle := err.length()
-	if angle > 0.0:
-		# Same settle deadband as the legacy spring (no buzz on an irreducible error).
-		err *= maxf(angle - _tuning.spring_angular_settle_deadband, 0.0) / angle
-	var ff := Vector3.ZERO
-	if _feed_forward > 0.0 and state.has_prev_rel:
-		ff = _axis_angle(r_tgt * (state.prev_rel_target as Basis).inverse()) * inv_dt * _feed_forward
-	state.prev_rel_target = r_tgt
-	state.has_prev_rel = true
+	if true:
+		# Limb joints: command in Jolt's OWN swing-twist angle space (the space the
+		# limits are defined and verified in) — per axis, error = target angle - body
+		# angle (wrapped), so the command agrees with what each motor axis moves at
+		# ANY joint angle. A rotation-vector command (below, kept for the root) only
+		# agrees near rest: after a ragdoll, joints thrown to their limits stalled
+		# part-way back with a correctly-signed command that produced no motion.
+		var body_ang: Vector3 = _swing_twist_angles(r_rel)
+		var tgt_ang: Vector3 = _swing_twist_angles(r_tgt)
+		var err_ang := Vector3(wrapf(tgt_ang.x - body_ang.x, -PI, PI), wrapf(tgt_ang.y - body_ang.y, -PI, PI), wrapf(tgt_ang.z - body_ang.z, -PI, PI))
+		var mag := err_ang.length()
+		if mag > 0.0:
+			err_ang *= maxf(mag - _tuning.spring_angular_settle_deadband, 0.0) / mag
+		var ff_ang := Vector3.ZERO
+		if _feed_forward > 0.0 and state.has_prev_rel:
+			var prev_ang: Vector3 = _swing_twist_angles(state.prev_rel_target as Basis)
+			ff_ang = Vector3(wrapf(tgt_ang.x - prev_ang.x, -PI, PI), wrapf(tgt_ang.y - prev_ang.y, -PI, PI), wrapf(tgt_ang.z - prev_ang.z, -PI, PI)) * inv_dt * _feed_forward
+		state.prev_rel_target = r_tgt
+		state.has_prev_rel = true
+		var w_ang: Vector3 = err_ang * (gain * inv_dt) + ff_ang
+		if w_ang.length_squared() > w_max * w_max:
+			w_ang = w_ang.normalized() * w_max
+		var limit_j: float
+		if parent_rig.is_empty():
+			# Balance stand-in, not a muscle: not scaled by muscle_strength_scale, full
+			# authority until limp (see _root_hold_factor).
+			limit_j = _tuning.muscle_root_torque * _root_hold_factor(ratio)
+		else:
+			limit_j = float(state.torque) * torque_scale * pow(clampf(ratio, 0.0, 1.0), _tuning.muscle_strength_curve)
+		_set_motor(joint, w_ang * MOTOR_AXIS_SIGN, limit_j)
+		return
 
-	var w: Vector3 = err * (gain * inv_dt) + ff
-	if w.length_squared() > w_max * w_max:
-		w = w.normalized() * w_max
-	var limit: float
-	if parent_rig.is_empty():
-		# The root's world motor is the stand-in for BALANCE (docs/PLAN.md 0.6.0), not a
-		# muscle: not scaled by muscle_strength_scale, it holds the pelvis through a
-		# stagger or a hit (the limbs go weak, the character stays up) and only lets go
-		# when the bone is limp (ragdoll).
-		limit = _tuning.muscle_root_torque * _root_hold_factor(ratio)
-	else:
-		limit = float(state.torque) * torque_scale * pow(clampf(ratio, 0.0, 1.0), _tuning.muscle_strength_curve)
-	# Jolt's 6DOF angular motor is solved on its swing-twist axes: the twist axis is
-	# the X of the PARENT's constraint frame (A), the two swing axes are the Y / Z of
-	# the CHILD's (B = A * r_rel). Hand each component in its own frame.
-	var w_b: Vector3 = r_rel.inverse() * w
-	var w_cmd := Vector3(w.x, w_b.y, w_b.z)
-	_set_motor(joint, w_cmd * MOTOR_AXIS_SIGN, limit)
 
 
 ## The root's position hold in JOINT_MOTOR mode (orientation comes from the same
@@ -582,7 +657,9 @@ func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, tar
 		v_cmd = pos_error * (maxf(dist - _tuning.spring_linear_settle_deadband, 0.0) / dist) * _REFERENCE_HZ * pin
 	v_cmd += ff_lin / maxf(delta, 1e-6)
 	var force: float = _tuning.muscle_root_force * _root_hold_factor(ratio)
-	_set_linear_motor(joint, v_cmd * ROOT_LINEAR_MOTOR_SIGN, force)
+	# Linear motor targets are in the constraint space of body A (the anchor).
+	var v_local: Vector3 = _root_anchor.global_basis.orthonormalized().inverse() * v_cmd
+	_set_linear_motor(joint, v_local * ROOT_LINEAR_MOTOR_SIGN, force)
 
 
 static func _set_linear_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float) -> void:
@@ -643,6 +720,23 @@ static func _set_motor(joint: Generic6DOFJoint3D, target: Vector3, limit: float)
 	joint.set_param_x(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
 	joint.set_param_y(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
 	joint.set_param_z(Generic6DOFJoint3D.PARAM_ANGULAR_MOTOR_FORCE_LIMIT, limit)
+
+
+## Jolt-style swing-twist angles (radians) of a relative rotation in the joint frame:
+## twist about X first, then the swing split about Y and Z — the decomposition
+## PhysicsRigBuilder.get_joint_angles reports and the joint limits are measured in.
+static func _swing_twist_angles(r: Basis) -> Vector3:
+	var q := r.get_rotation_quaternion()
+	if q.w < 0.0:
+		q = -q
+	var twist := Quaternion(q.x, 0.0, 0.0, q.w)
+	if twist.length_squared() < 1e-12:
+		twist = Quaternion.IDENTITY
+	twist = twist.normalized()
+	var swing := q * twist.inverse()
+	if swing.w < 0.0:
+		swing = -swing
+	return Vector3(2.0 * atan2(twist.x, twist.w), 2.0 * atan2(swing.y, swing.w), 2.0 * atan2(swing.z, swing.w))
 
 
 ## Rotation vector (axis × angle, radians) of [param r]; zero for a near-identity basis.

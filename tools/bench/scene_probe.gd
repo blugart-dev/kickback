@@ -100,6 +100,79 @@ func _run() -> void:
 				tr += "%.3f|%+.2f " % [hips_b.global_position.y, hips_b.linear_velocity.y]
 		print(tr)
 		print("  pelvis y range over 1.5 s: %.3f .. %.3f (%.1f mm peak-to-peak)" % [ymin, ymax, (ymax - ymin) * 1000.0])
+	# PROBE_ACTION=ragdoll: knock every character down at 1 s, let them recover, and
+	# report the recovered pose (pelvis upright? joint-space errors? lowest point?).
+	if OS.get_environment("PROBE_ACTION") == "ragdoll":
+		for i in hz:
+			await physics_frame
+		for kc: KickbackCharacter in chars:
+			var c: ActiveRagdollController = kc.get_active_controller()
+			var b: PhysicsRigBuilder = kc.get_parent().find_child("PhysicsRigBuilder", false, false)
+			var hips_b: RigidBody3D = b.get_bodies()[c.get_root_rig()]
+			hips_b.apply_impulse(Vector3(40.0, 0.0, 30.0))
+			c.trigger_ragdoll()
+		print("  --- ragdoll triggered on all characters; waiting for recovery ---")
+		var deadline := Time.get_ticks_msec() + 15000
+		while Time.get_ticks_msec() < deadline:
+			await physics_frame
+			var all_normal := true
+			for kc: KickbackCharacter in chars:
+				if kc.get_active_controller().get_state() != ActiveRagdollController.State.NORMAL:
+					all_normal = false
+			if all_normal:
+				break
+		for i in hz * 2:
+			await physics_frame
+		if OS.get_environment("PROBE_REBUILD") != "":
+			# Experiment: rebuild every rig joint constraint (reassign node_b) after recovery.
+			for kc: KickbackCharacter in chars:
+				var b2: PhysicsRigBuilder = kc.get_parent().find_child("PhysicsRigBuilder", false, false)
+				for child_rig: String in b2.get_joints():
+					var jj: Generic6DOFJoint3D = b2.get_joints()[child_rig].joint
+					var pth := jj.node_b
+					jj.node_b = NodePath()
+					jj.node_b = pth
+			print("  --- joints rebuilt; waiting 2 s ---")
+			for i in hz * 2:
+				await physics_frame
+		for kc: KickbackCharacter in chars:
+			var c: ActiveRagdollController = kc.get_active_controller()
+			var b: PhysicsRigBuilder = kc.get_parent().find_child("PhysicsRigBuilder", false, false)
+			var sp: SpringResolver = kc.get_parent().find_child("SpringResolver", false, false)
+			var sk: Skeleton3D = KickbackSetup.find_skeleton(kc.get_parent())
+			var hips_b: RigidBody3D = b.get_bodies()[c.get_root_rig()]
+			var worst := 0.0
+			var worst_name := ""
+			var low := INF
+			for rig: String in b.get_bodies():
+				var e: float = _err(sp, b, sk, rig)
+				if e > worst:
+					worst = e
+					worst_name = rig
+				low = minf(low, (b.get_bodies()[rig] as RigidBody3D).global_position.y)
+			print("  %s: state=%s pelvis up.dot(UP)=%.2f hipsY=%.2f worst=%s@%.0f deg lowest=%.3f" % [
+				kc.get_parent().name, c.get_state_name(), hips_b.global_basis.y.dot(Vector3.UP), hips_b.global_position.y, worst_name, worst, low])
+			if worst > 40.0:
+				var sg := sk.global_transform
+				var joints: Dictionary = b.get_joints()
+				for jd: JointDefinition in b.get_profile().joints:
+					var child := jd.child_rig
+					var pi: int = sk.find_bone(b.get_bone_name_for_body(jd.parent_rig))
+					var ci: int = sk.find_bone(b.get_bone_name_for_body(child))
+					var body_ang: Vector3 = b.get_joint_angles(child)
+					var anim_ang: Vector3 = b.get_joint_angles(child, sg * sp.get_animation_bone_global(pi), sg * sp.get_animation_bone_global(ci))
+					var cmd: Dictionary = sp.get_motor_command(child)
+					var pb: RigidBody3D = b.get_bodies()[jd.parent_rig]
+					var cb: RigidBody3D = b.get_bodies()[child]
+					var fp: Basis = (joints[child].frame_parent as Transform3D).basis
+					var a: Basis = pb.global_basis.orthonormalized() * fp
+					var relw: Vector3 = a.inverse() * (cb.angular_velocity - pb.angular_velocity)
+					var e: float = _err(sp, b, sk, child)
+					if e > 15.0:
+						print("     %-11s err=%3.0f body=(%6.1f %6.1f %6.1f) anim=(%6.1f %6.1f %6.1f) cmd=%s force_limit=%.1f strength=%.2f/%.2f relwA=(%.2f %.2f %.2f)" % [
+							child, e, body_ang.x, body_ang.y, body_ang.z, anim_ang.x, anim_ang.y, anim_ang.z,
+							cmd.get("target"), float(cmd.get("limit", -1.0)), sp.get_bone_strength(child), sp.get_base_strength(child), relw.x, relw.y, relw.z])
+				print("     fatigue=%.2f pain=%.2f injuries=%s state=%s" % [c.get_fatigue(), c.get_pain(), c.get_all_injuries(), c.get_state_name()])
 	# All characters: a compact summary sampled every 2 s over a longer window.
 	var long_s := 0.0
 	if OS.get_environment("PROBE_ALL_SECONDS") != "":

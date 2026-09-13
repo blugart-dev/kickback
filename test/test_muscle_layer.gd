@@ -151,18 +151,18 @@ func test_root_motor_follows_an_animated_pelvis_yaw():
 	await wait_physics_frames(60)
 	var e := _error_deg(h, "Hips")
 	assert_lt(e, 4.0, "pelvis reaches the yawed target (%.1f deg off)" % e)
-	assert_lt(_error_deg(h, "Chest"), 5.0, "chest follows the yawed pelvis")
+	assert_lt(_error_deg(h, "Chest"), 8.0, "chest follows the yawed pelvis (chain lag)")
 
 
-func test_leaving_motor_mode_frees_the_root_world_joint():
+func test_leaving_motor_mode_frees_the_root_anchor():
 	var t := _tuning()
 	var h = await _spawn(t, false)
 	await wait_physics_frames(3)
-	assert_not_null(h.rig_builder.find_child("Hips_world_motor", false, false), "world joint created")
+	assert_not_null(h.rig_builder.find_child("Hips_anchor_motor", false, false), "root anchor joint created")
 	t.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	h.character.refresh_tuning()
 	await wait_physics_frames(3)
-	assert_null(h.rig_builder.find_child("Hips_world_motor", false, false), "world joint freed on leaving motor mode")
+	assert_null(h.rig_builder.find_child("Hips_anchor_motor", false, false), "root anchor joint freed on leaving motor mode")
 
 
 func test_motor_pushing_into_a_limit_yields_a_bounded_amount():
@@ -301,6 +301,33 @@ func test_stagger_stays_on_its_feet_and_recovers_in_motor_mode():
 	assert_true(finished, "stagger recovers to NORMAL")
 	assert_signal_not_emitted(h.controller, "ragdoll_started")
 	assert_gt(h.get_body("Hips").global_position.y, 0.6, "still standing")
+
+
+func test_knocked_down_character_gets_up_upright():
+	# Regression: after a ragdoll on the ground the pelvis lies 90 deg+ from the
+	# orientation its world joint was anchored in; Jolt's swing-twist motor axes
+	# degenerate there and the get-up drove the character to the wrong stable
+	# point — it stood up UPSIDE DOWN (seen in shooting_range.tscn). The root joint
+	# is re-anchored on large relative rotations and at recovery start.
+	var t := _tuning()
+	t.foot_ik_enabled = true  # the shipped configuration: feet planted by IK, not colliding in NORMAL
+	t.ragdoll_force_recovery_time = 1.0
+	t.settle_duration = 0.3
+	t.recovery_duration = 1.5
+	t.safety_timeout = 2.5
+	var h = await _spawn(t, true)
+	await wait_physics_frames(10)
+	var hips: RigidBody3D = h.get_body("Hips")
+	hips.apply_impulse(Vector3(60.0, 0.0, 20.0))  # knock it over so it lands lying
+	h.controller.trigger_ragdoll()
+	await wait_physics_frames(45)
+	assert_lt(hips.global_basis.y.dot(Vector3.UP), 0.8, "the character actually went down")
+	var recovered: bool = await wait_for_signal(h.controller.recovery_finished, 12.0)
+	assert_true(recovered, "recovery finished")
+	await wait_physics_frames(90)
+	assert_gt(hips.global_basis.y.dot(Vector3.UP), 0.9, "pelvis upright after getting up (up.dot = %.2f)" % hips.global_basis.y.dot(Vector3.UP))
+	assert_lt(_error_deg(h, "Hips"), 15.0, "pelvis near its animation orientation")
+	assert_gt(hips.global_position.y, 0.6, "standing height")
 
 
 func test_switching_mode_at_runtime_disables_motors():

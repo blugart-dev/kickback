@@ -133,25 +133,41 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
   weak, still standing. Limp (ratio 0) is still zero torque and full strength is still
   full torque. `strength_map` / `default_spring_strength` no longer set stiffness in this
   mode — the ratio is what matters.
-- **The root is balance, not muscle.** Its world joint carries BOTH motors: the angular
-  motor (`muscle_root_torque`, 400 N·m) for orientation and the LINEAR motor
+- **The root is balance, not muscle.** The pelvis is driven by a limit-free
+  `Generic6DOFJoint3D` between it and a **kinematic anchor body** (`<Root>_anchor`, a
+  static RigidBody3D with no shape) that the resolver teleports every tick to the root's
+  (foot-IK-shifted) animation target. The joint carries both motors: the angular motor
+  (`muscle_root_torque`, 400 N·m) for orientation and the LINEAR motor
   (`muscle_root_force`, 2500 N) for position — target velocity = position error × 60 Hz
-  × `muscle_root_pin` past the settle deadband, plus the target's own motion. Neither is
-  scaled by `muscle_strength_scale`; both stay at full authority while the bone has any
-  real strength (`_root_hold_factor`: full above 5 % ratio, fading to zero below) and
-  release when limp. Two things this replaced, both measured on the demo idle: a velocity
-  pin written to the pelvis alone was diluted by the joint solve across the ~55 kg
-  hanging from it (3.5 cm low, bouncing at ~3 Hz — the "whole body wobble" seen in the
-  editor, feet clipping the floor), and a velocity shift broadcast to every body
-  cancelled gravity for all of them and discarded impulses applied between ticks. As a
-  bounded force inside the solver the pelvis sits within 1 mm of its target with no
-  bounce, and a hit above ~2500 N can move the character. The balance layer (0.6.0)
-  replaces this with feet that carry the weight. Consequence: **the balance-driven
-  tip-over (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held
-  pelvis cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the
-  body, not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5
-  while standing perfectly well). Falls come from `ragdoll_probability`, pain, or explicit
+  × `muscle_root_pin` past the settle deadband, plus the target's own motion, in the
+  anchor's frame. Neither is scaled by `muscle_strength_scale`; both stay at full
+  authority while the bone has any real strength (`_root_hold_factor`: full above 5 %
+  ratio, fading to zero below) and release when limp. The anchor never leads the pelvis
+  by more than `ROOT_ANCHOR_MAX_ANGLE` (1 rad) / `ROOT_ANCHOR_MAX_DISTANCE` (0.5 m) and
+  sits ON the pelvis while it is limp, so the joint's relative rotation — what Jolt's
+  swing-twist motor axes are conditioned on — is always small: with a fixed world frame
+  a pelvis lying on the ground was 90°+ from its frame, the axes degenerated and the
+  get-up drove the character to the wrong stable point (upside down); re-anchoring by
+  rebuilding the constraint broke every other joint of the rig. Three earlier root
+  designs were measured and rejected on the demo idle: a velocity pin on the pelvis
+  (diluted by the joint solve: 3.5 cm low, bouncing at 3 Hz — the editor "wobble", feet
+  clipping the floor), a velocity shift broadcast to every body (cancels gravity for all
+  of them, discards impulses applied between ticks), and the fixed world joint above. As
+  a bounded force inside the solver the pelvis sits within 1 mm of its target with no
+  bounce, a hit above ~2500 N moves the character, and after a ragdoll on the ground the
+  character gets up upright with ~2° error. The balance layer (0.6.0) replaces this with
+  feet that carry the weight. Consequence: **the balance-driven tip-over
+  (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held pelvis
+  cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the body,
+  not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5 while
+  standing perfectly well). Falls come from `ragdoll_probability`, pain, or explicit
   triggers until the balance layer owns the decision.
+- **Limb motors are commanded in Jolt's own swing-twist angle space** (per axis:
+  target angle − body angle, wrapped, × gain / tick + feed-forward), the space the limits
+  are defined and verified in, so the command agrees with what each motor axis moves at
+  any joint angle. The rotation-vector command used first only agreed near rest: after a
+  ragdoll, joints thrown to their limits stalled part-way back with a correctly-signed
+  command that produced no motion.
 - **Gravity stays on** for every jointed body (`gravity_scale`, not scaled by strength);
   damping is `muscle_angular_damp` / `muscle_linear_damp`.
 - **Frames.** Two engine facts measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`,
@@ -181,7 +197,7 @@ foot IK on, 2026-09-13):
 | Mode | Hz | IDLE mean / max | REACT mean | HIT peak / recover | resolver ms/tick |
 |---|---:|---|---:|---|---|
 | legacy | 60 | 0.78 / 1.65 | 10.1 | 1.3° / 4 ticks | 0.17 |
-| **JOINT_MOTOR** | 60 | **0.76 / 5.08** | 18.8 | **4.5° / 4 ticks** | 0.17 (≈1.2× legacy) |
+| **JOINT_MOTOR** | 60 | **0.94 / 3.54** | 24.5 | **2.4° / 4 ticks** | 0.14 (≈1.4× legacy) |
 | legacy | 120 | 0.86 / 1.40 | 13.1 | 1.2° / 4 | 0.25 |
 | JOINT_MOTOR | 120 | 0.73 / 2.43 | 10.6 | 2.1° / 4 | 0.18 |
 | legacy | 30 | 1.06 / 7.17 | 10.0 | 1.7° / 4 | 0.15 |

@@ -83,15 +83,21 @@ profile (`BoneDefinition.muscle_torque`, N·m), scaled by strength and by
 - [x] Docs: REFERENCE "Muscle layer" section (math, frames, tables), GODOT_CONSTRAINTS motor notes, INTEGRATION migration note, CHANGELOG
 
 **Acceptance (ybot, 60 Hz, `JOINT_MOTOR`)** — measured 2026-09-13, `tools/bench/ybot_bench.gd`
-- [x] HOLD (idle clip, feet on ground, foot IK on) mean ≤ 2°, max ≤ 8° — **0.76 / 5.08** (legacy 0.81 / 1.73); pelvis within 1 mm of target, no bounce (the first build stood 3.5 cm low and bounced at 3 Hz: user-visible wobble, fixed by holding the root with the world joint's linear motor)
-- [~] TRACK: the original "≤ 5° on idle + react" was written before the bench existed and is
+- [x] HOLD (idle clip, feet on ground, foot IK on) mean ≤ 2°, max ≤ 8° — **0.94 / 3.54** (legacy 0.78 / 1.57); pelvis within 1 mm of target, no bounce (the first build stood 3.5 cm low and bounced at 3 Hz: user-visible wobble, fixed by the anchor-body root)
+- [x] GET-UP: after a ragdoll on the ground every shooting-range character stands back up upright, worst body error ~2° (the first build got up upside down)
+- [ ] TRACK: the original "≤ 5° on idle + react" was written before the bench existed and is
   unmet even by the legacy resolver (react_front alone: 10.1°). Revised to *react_front mean ≤
-  1.75× legacy*; measured **18.8 vs 10.1 = 1.86×** with the force-driven root (16.3 with the
-  diluted velocity pin, which let the pelvis lag the clip). Torque-limited by design; recorded
-  as a miss against the revised bar rather than moving the bar again.
-- [x] HIT: the original "peak ≥ 15°" was a guess; the bullet preset carries 4 N·s, not a
+  1.75× legacy*; measured **24.5 vs 10.1 = 2.4×** with the anchor root and the per-axis
+  (swing-twist angle space) limb command — 18.8 with the earlier rotation-vector command,
+  which tracked fast clips better but stalled joints after a ragdoll. Robustness won;
+  recorded as a MISS, carried to 0.6.0 (candidate: rotation-vector command when the joint
+  is within ~30° of its target, angle-space otherwise).
+- [ ] HIT: the original "peak ≥ 15°" was a guess; the bullet preset carries 4 N·s, not a
   shove. Revised to *peak ≥ 3× legacy and back under 5° within 1 s, no joint stuck* —
-  **4.5° vs 1.3° = 3.5×, 4 ticks, none stuck** (6.3° with the softer velocity-pin root).
+  measured **2.4° vs 1.3° = 1.8×, 4 ticks, none stuck** with the anchor root (4.5° before).
+  A MISS on deflection; the user also reports hits read less vividly than legacy. The
+  vividness levers are now sliders in the Tuning Lab (`muscle_strength_curve`,
+  `muscle_strength_scale`, `muscle_gain`, root torque/force); carried to 0.6.0.
 - [x] 120 Hz ≤ 60 Hz numbers — **0.73 / 2.43 idle, 10.6 react** (beats legacy)
 - [~] 30 Hz HOLD ≤ 4°: **4.85** with the defaults (was a 15° ring before the force-driven
   root); 3.6 with `foot_ik_disable_foot_collision = false`. Feet-load-bearing is 0.6.0's
@@ -110,12 +116,20 @@ swing in the child frame — the spike's remaining TRACK deficit was partly this
 stagger floor as a raw torque fraction collapsed the character → `muscle_strength_curve`
 0.5 (√ratio); a strength-scaled root pin/motor let a stagger topple → the root holds at
 full authority until limp (`_root_hold_factor`), the stand-in for balance.
-**Found by the user in the editor (2026-09-13)**: the pelvis stood 3.5 cm low and bounced
-at 3 Hz (whole-body wobble, feet clipping the floor). The velocity pin on the pelvis was
-diluted by the joint solve; the root is now held by the world joint's linear motor
-(`muscle_root_force`), and the balance tip-over is off in motor mode (a held pelvis cannot
-topple; the ratio spikes were false falls). Tooling from that investigation:
-`tools/bench/scene_probe.gd`, `KickbackTraceRecorder` (F5) + `tools/bench/trace_report.py`.
+**Found by the user in the editor (2026-09-13)**: (1) the pelvis stood 3.5 cm low and
+bounced at 3 Hz (whole-body wobble, feet clipping the floor) — the velocity pin on the
+pelvis was diluted by the joint solve; (2) characters got up **upside down** after a
+ragdoll on the ground — a fixed world joint's swing-twist motor axes degenerate once the
+pelvis lies 90°+ from its frame, and re-anchoring by rebuilding the constraint left every
+limb joint inert. Both fixed by the kinematic **root anchor** design (REFERENCE.md "Muscle
+layer"): a static body teleported to the target each tick, joined to the pelvis by a
+limit-free joint with bounded angular/linear motors, clamped to lead by ≤ 1 rad / 0.5 m.
+Limb motors are now commanded in Jolt's swing-twist angle space (the limits' space) so
+joints thrown to their limits come back. The balance tip-over is off in motor mode (a
+held pelvis cannot topple; the ratio spikes were false falls). Verified: after a ragdoll
+every shooting-range character gets up upright with ~2° error. Tooling from that
+investigation: `tools/bench/scene_probe.gd` (`PROBE_ACTION=ragdoll`), `KickbackTraceRecorder`
+(F5) + `tools/bench/trace_report.py`.
 **Still open** (carried to 0.6.0): 30 Hz with non-colliding feet; 30 Hz hand-hit wrist
 wrap; resolver CPU (≈1.4× on a quiet run, noisy); the visual gate (user), then
 `plugin.cfg` 0.5.0 + tag.

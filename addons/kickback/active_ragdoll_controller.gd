@@ -1341,6 +1341,10 @@ func _start_recovery() -> void:
 		_character_root.reset_physics_interpolation()
 
 	_ragdoll_poses = saved_transforms.duplicate()
+	# JOINT_MOTOR: the pelvis lies far from the orientation its world joint was
+	# anchored in — re-anchor before the get-up blend drives it (see
+	# SpringResolver.ROOT_REBASE_ANGLE).
+	_spring.rebase_root_world_joint()
 	recovery_started.emit(face_up)
 
 	# Force skeleton sync to prevent 1-frame visual pop after root teleport
