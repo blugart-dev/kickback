@@ -32,4 +32,15 @@ extends Resource
 @export var sphere_radius: float = 0.1
 ## Where the collision shape sits along the bone direction toward the child bone.
 ## 0.5 = centered between bone and child. Higher values shift toward the child.
+## For a [member sole_aligned] box it is instead the fraction of the box LENGTH that
+## lies ahead of the bone origin (0.77 = 77 % toes, 23 % heel).
 @export_range(0.0, 1.0) var shape_offset: float = 0.5
+## Feet only. The box is built LEVEL with the character's up axis (not along the
+## bone, which on most rigs points from the ankle down to the toes) with its bottom
+## face exactly [member RagdollTuning.foot_ik_ankle_height] below the bone origin —
+## the same sole the foot IK plants — so a standing foot's collider rests flat on the
+## ground instead of a pitched box whose corner sits several cm below it.
+## [member box_size]: x = width, y = thickness, z = heel-to-toe length; the bone
+## origin sits [member shape_offset] of the length from the back. This is what lets
+## the feet carry the body's weight (docs/PLAN.md 0.6.0).
+@export var sole_aligned: bool = false

@@ -48,16 +48,20 @@ func test_rig_builds_all_bodies():
 
 func test_rig_builds_all_joints():
 	var h = await _spawn()
+	await wait_physics_frames(2)  # the resolver may still be a tick away from its first solve
 	var joints := 0
 	var world_joints := 0
+	var names := PackedStringArray()
 	for child in h.rig_builder.get_children():
 		if child is Generic6DOFJoint3D:
-			if (child as Generic6DOFJoint3D).name.ends_with("_anchor_motor"):
-				world_joints += 1  # the muscle layer's root anchor joint (JOINT_MOTOR mode)
+			names.append(String(child.name))
+			if String(child.name).contains("_anchor"):
+				world_joints += 1  # the muscle layer's root anchor joints (JOINT_MOTOR mode)
 			else:
 				joints += 1
 	assert_eq(joints, 15, "15 Generic6DOFJoint3D joints connect the 16 bodies")
-	assert_eq(world_joints, 1 if h.spring.is_motor_mode() else 0, "one world joint drives the root in JOINT_MOTOR mode")
+	assert_eq(world_joints, 2 if h.spring.is_motor_mode() else 0,
+		"two anchor joints drive the root in JOINT_MOTOR mode (orientation in the pelvis frame, position in world axes): %s" % ", ".join(names))
 
 
 func test_bodies_snap_to_bone_globals():
@@ -86,8 +90,12 @@ func test_spring_registers_all_bones_with_base_strengths():
 
 func test_springs_hold_pose_against_gravity():
 	# Groundless: the springs alone must counter gravity — nothing holds the rig
-	# up from below.
-	var h = await _spawn(null, false)
+	# up from below. In JOINT_MOTOR mode that is the root anchor at full vertical
+	# support (the default since 0.6.0 is 0: the legs carry the body — see
+	# test_feet_load_bearing.gd).
+	var t := RagdollTuning.create_default()
+	t.muscle_root_support = 1.0
+	var h = await _spawn(t, false)
 	var hips: RigidBody3D = h.get_body("Hips")
 	var start_y := hips.global_position.y
 	assert_almost_eq(start_y, 0.9, 0.1, "hips start near the rest height")
@@ -221,9 +229,10 @@ func test_kickback_character_ragdoll_facade():
 
 func test_balance_state_reports_support_when_standing():
 	var h = await _spawn()
+	await wait_physics_frames(3)  # BalanceState needs a tick of foot contact reports
 	var bs: Dictionary = h.controller.get_balance_state()
-	assert_true(bs.has_support, "two foot bodies → balance has a support polygon")
-	assert_lt(float(bs.balance_ratio), 0.5, "a centered standing pose reads as roughly balanced")
+	assert_true(bs.has_support, "two feet in contact → balance has a support polygon")
+	assert_lt(float(bs.balance_ratio), 0.7, "a standing pose reads as balanced (below the 0.8 stagger threshold)")
 
 
 func test_anticipate_threat_emits_signal():

@@ -64,7 +64,8 @@ velocity every tick (a head's came back reversed). Diagnosis and defaults:
    collision exception for every body pair). Only jointed pairs were excluded before;
    the auto-generated torso boxes and limb capsules overlap in ordinary poses (Chest-Hips
    in contact 170 of 180 idle frames, forearms inside the chest box), and every contact is
-   a solver impulse against the springs.
+   a solver impulse against the springs. **Reverted for the motor substrate in 0.6.0:
+   `self_collision` is on by default** — see "Self-collision" below.
 2. **Chain-consistent linear commands** (`spring_chain_consistency`, 0..1, default 1).
    Bodies update parent-first (`PhysicsRigBuilder.get_joints()` gives the topology and
    the joint anchor in both bodies' local frames). A jointed child's linear velocity is
@@ -155,8 +156,10 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
   of them, discards impulses applied between ticks), and the fixed world joint above. As
   a bounded force inside the solver the pelvis sits within 1 mm of its target with no
   bounce, a hit above ~2500 N moves the character, and after a ragdoll on the ground the
-  character gets up upright with ~2° error. The balance layer (0.6.0) replaces this with
-  feet that carry the weight. Consequence: **the balance-driven tip-over
+  character gets up upright with ~2° error. **Since 0.6.0 the anchor does not carry the
+  body's weight**: `muscle_root_support` (default 0) caps the position motor along the
+  world's UP axis, so the legs hold the pelvis up through their joint motors and the feet
+  on the ground — see "Feet load-bearing" below. Consequence: **the balance-driven tip-over
   (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held pelvis
   cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the body,
   not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5 while
@@ -188,7 +191,8 @@ motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio
 
 **Torque table** (`SkeletonDetector.MUSCLE_TORQUE_TABLE`, N·m, on the child body of each
 joint): Spine 150, Chest 150, Head 30, UpperArm 60, LowerArm 40, Hand 10, UpperLeg 200,
-LowerLeg 150, Foot 60; root `muscle_root_torque` 400. Physically honest by construction:
+LowerLeg 150, Foot 150 (was 60 until 0.6.0: adult plantarflexion peaks at 150–200, and at
+60 the ankles sat at ~60 % of their limit just standing); root `muscle_root_torque` 400. Physically honest by construction:
 a 3 N·m shoulder cannot hold a horizontal arm (test), 60 N·m can.
 
 **Ybot bench** (`tools/bench/ybot_bench.gd`, idle / react_front / bullet on the hand,
@@ -214,6 +218,147 @@ force-driven root brought the default (feet not colliding) from a 15° ring down
 hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
 tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
 noisy on Windows; quiet runs put the motor path at ≈1.2–1.4× the legacy path.
+
+### Feet load-bearing (0.6.0, step 1)
+
+Three things had to be true before the legs could carry the body:
+
+1. **The foot collider sits on the sole.** `BoneDefinition.sole_aligned` (on for the
+   feet in both profile factories) builds the foot box LEVEL with the character's up axis
+   at rig-build time, bottom face exactly `foot_ik_ankle_height` below the ankle, its
+   length along the flattened ankle→toe direction with `FOOT_HEEL_RATIO` (0.3) of the
+   ankle→toe extent added behind the ankle (`shape_offset` = the share of the box length
+   ahead of the ankle, `FOOT_SOLE_OFFSET` ≈ 0.77). The bone-aligned box it replaces
+   followed the Mixamo foot bone 27° down toward the toes; its corner sat 7 cm below the
+   sole, a colliding foot was pushed 15° off its pose and the whole character up — the
+   reason the feet used to be masked out of collision. `PhysicsRigBuilder.sole_shape_transform`
+   is the geometry; `build_body` takes the character's up.
+2. **The feet collide** (`foot_ik_disable_foot_collision = false` by default) and report
+   contacts (`contact_monitor`, 4 contacts) for the balance layer.
+3. **The anchor stops lifting.** The position motor runs on a second, world-aligned anchor
+   (`<Root>_anchor_lin`) so its force limits are world axes: `(muscle_root_force,
+   muscle_root_force × muscle_root_support, muscle_root_force)`. With `muscle_root_support`
+   0 the anchor has no vertical authority. Measured: the feet went from carrying ~2 % of
+   the 804 N body to all of it (with the feet masked the body sinks until the shins hit the
+   floor — `test_feet_load_bearing.gd`); pelvis sag on the legs 6 mm at 60 Hz, 0.8 mm at
+   120 Hz, 9 mm at 30 Hz; no bounce.
+
+**Get-up.** The canned get-up blend needs the pelvis lifted (folded legs cannot push a
+body up through a pose blend) and the feet free to reach their standing spots: the
+controller sets the support override to 1 and makes the feet frictionless for the blend,
+then restores friction and fades the support to the tuning's value over 0.75 s once
+NORMAL is reached. Shooting range, all five targets: ≤ 8° at `recovery_finished`, 1–4°
+after 3 s, pelvis at its target height on its own legs.
+
+### Balance state (0.6.0)
+
+`BalanceState` (`addons/kickback/balance_state.gd`) is the one balance measurement per
+physics tick; the controller refreshes it in every state and every decision reads it
+(`ActiveRagdollController.get_balance()`, or the 0.4.x dictionary from
+`get_balance_state()` with the new fields added). Per tick:
+
+```
+com        = Σ mᵢ pᵢ / Σ mᵢ                       (all rig bodies)
+v          = (com − com_prev) / dt                (reset after the recovery re-base)
+support    = convex hull (XZ) of the sole footprints of the feet IN CONTACT
+             (the four bottom corners of each contacting foot box; no contact → no polygon)
+h, ω₀      = com.y − support plane,  √(g / h)     (linear inverted pendulum)
+xcom       = com_xz + v_xz / ω₀                   (extrapolated CoM = capture point)
+margin     = signed distance xcom → hull edge     (+ inside, − outside, metres)
+ratio      = |xcom − centroid| / edge distance from the centroid along that direction
+             (0 centred, 1 at the edge, > 1 outside; clamped to balance_max_ratio)
+foot_load  ∝ 1 / distance(xcom, foot footprint centre), normalised;  loaded_foot = argmax
+```
+
+`ratio` is the number the 0.4.x consumers (stagger / recovery thresholds, `balance_changed`
+payload, HUD bar, trace) already read, now on the real polygon and including velocity.
+The old static ratio (CoM offset from the ankle midpoint over half the stance width) read
+0.5–0.6 for a perfectly standing character on load-bearing feet, because a standing CoM
+sits ahead of the ankles, inside the feet. Measured on the ybot idle: hull of 6 vertices,
+CoM 9 cm from the centroid toward the weight-bearing foot, margin +12.5 cm, ratio 0.40–0.42
+over 2 s of idle sway (`tools/bench/foot_probe.gd`). The thresholds were recalibrated to
+the new scale: `balance_stagger_threshold` 0.8, `balance_recovery_threshold` 0.6,
+`balance_ragdoll_threshold` 1.0 (= the capture point has left the feet: the textbook
+"step or fall" condition, which the step behavior will consume). Airborne or lying (no
+foot in contact) → `has_support = false`, ratio 0. The F3 HUD draws the hull on the
+support plane, the CoM diamond and the XCoM ring with its margin in cm.
+
+### Behavior layer (0.6.0)
+
+`KickbackBehavior` (`addons/kickback/behaviors/`) is the base: `tick(ctx, balance, delta)`
+returns `{"stiffness": {rig: multiplier}, "targets": {rig: Transform3D}}`; the controller
+runs a fixed ordered list (`ActiveRagdollController.get_behaviors()`) in NORMAL / STAGGER,
+applies stiffness as a floor on each bone's current strength and merges the targets into
+the override channel after the IK solvers. `BehaviorContext` hands a behavior the
+resolver, rig, profile, tuning, root and the foot / arm IK solvers; `reset()` on ragdoll.
+
+**`StepBehavior`** — balance steps (XCoM at the edge of the feet for 4 ticks → the
+fall-side foot swings to the capture point) and re-plants (calm + a loaded foot > 10 cm
+from its animation spot → the less loaded foot is lifted and stepped there), executed
+through `FootIKSolver.begin_step` (a lifted arc, then a hover until the foot arrives) on
+top of **foot locks** (`set_foot_lock` / `clear_foot_lock`: a contacting foot that drifted
+> 5 cm from its spot is held where it stands so the leg does not fight friction). Motor
+mode only. Knobs: the "Balance: Steps" tuning group. Spec and measurements in
+[SELF_PRESERVATION.md](SELF_PRESERVATION.md).
+
+**Root hold = the balance assist.** `RagdollTuning.muscle_root_hold` (sideways share of
+`muscle_root_force`, default **0.25** ≈ 625 N) and `muscle_root_support` (up share,
+default 0) bound the anchor's position motor per world axis; the controller raises both
+to 1 for the canned get-up and fades back over 0.75 s. Measured on the ybot (ankle
+150 N·m, `muscle_leg_gain` 0.2): with the hold at 0 the passive stance reads 3.4–4.4°
+idle error and is chaotic under a 150 N·s shove (the ankle motors cannot hold an 80 kg
+pendulum at 0.9 m — ~720 N·m/rad — through a ~10-tick loop by tracking a fixed pose);
+at 0.25 the idle is 0.98° like the full hold, the react-clip settle improves and the shove
+is caught by the legs and the steps with the pelvis moving a few cm. It is a cheat force,
+bounded and documented. **`_check_fall`** is the physical fall decision that goes with a
+body that can now fall: pelvis below 60 % of its target height or tilted past 0.55·up for
+0.15 s while standing → RAGDOLL (no dice).
+
+**`UprightBehavior` (experimental, off).** Shifts the whole-body target against the
+XCoM's drift from the animation's own CoM (`FootIKSolver.set_body_shift`), i.e. the
+ankle / hip strategy in IK form. It measured worse than the passive stance at every gain
+(settle 4.9° vs 2.8°, more falls with the hold released) and is kept only as the
+starting point for a torque-level ankle strategy.
+
+### Self-collision (0.6.0)
+
+`RagdollTuning.self_collision` is **on** by default since 0.6.0: the torso blocks a limp
+arm, one leg blocks the other, a ragdoll keeps its volume instead of folding limbs through
+the chest. Rules (`PhysicsRigBuilder._apply_self_collision`):
+
+- jointed pairs never collide — the `Generic6DOFJoint3D` excludes its two bodies;
+- any NON-adjacent pair whose shapes already overlap in the pose the rig is built in is
+  excluded for good one physics tick after the build (`get_self_collision_exclusions()`
+  lists them) — a torso box that interpenetrates by construction would otherwise spend the
+  whole game pushing itself apart and fighting the muscles;
+- everything else collides. `find_overlapping_pairs()` is the space query the probes and
+  tests use (exceptions do not hide anything from it).
+
+Why it was off: the velocity-overwrite resolver's commands were rewritten by every contact
+impulse (a hunched game idle had Chest-Hips in contact 170 of 180 frames). Under bounded
+joint motors the contacts are part of the solve. Measured on the ybot
+(`tools/bench/overlap_probe.gd`): no non-adjacent pair overlaps in the build pose, the
+idle, or a 4 s ragdoll; the bench is bit-identical on and off; the shooting-range get-up
+still lands within 2–5°. Off = every pair excluded (the pre-0.6.0 behaviour).
+
+**Joint limits vs the animations** (`tools/bench/limit_envelope.gd`, the 21 ybot clips
+sampled at 30 Hz, angles in the joint limit frame): the anatomical table is *not*
+generous for this character — 17 axes are exceeded by at least one clip, mostly by the
+get-up, kip-up and injured clips. Spine X reaches −75° (limit ±35), Head X −82° (±70),
+shoulder twist −113°/158° (±90), shoulder lateral −139° (±120), **elbow lateral ±58° (±20)**,
+wrist lateral 81° (±60), hip twist 65° (±40), knee flexion 149° (140). A motor driven past
+a limit pushes into a hard wall (Jolt ignores limit softness), so these clips are tracked
+short there. The limits were therefore **not tightened** to fix the ragdoll look (that is
+self-collision's job); `joint_limit_scale` widens them for a project whose clips need it,
+and the elbow-lateral reading is a frame question to revisit (a forearm-twist bone the
+detector folds into the elbow would show exactly this).
+
+**What this exposes.** After the react clip the 60 Hz idle no longer converges (SETTLE
+10.2° mean, balance ratio 0.57, legacy 0.96°): the loaded feet stay where friction planted
+them while the animation returns to idle. A load-bearing foot cannot be dragged into
+place — it has to be unloaded and stepped, which is the balance layer's step behavior
+(next). The static CoM-vs-ankle-midpoint ratio also reads 0.5–0.6 for such a stance, so
+until `BalanceState` owns the decision a hit from that stance triggers a stagger.
 
 ## Center of mass balance ratio
 

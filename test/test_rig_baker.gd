@@ -106,7 +106,7 @@ func test_baked_shape_honours_bone_definition_shape_offset():
 			"%s: shape offset matches the runtime builder" % rig_name)
 		assert_almost_eq(baked_shape.rotation, runtime_shape.rotation, Vector3.ONE * 1e-5,
 			"%s: shape rotation matches the runtime builder" % rig_name)
-		if bone_def.child_bone != "":
+		if bone_def.child_bone != "" and not bone_def.sole_aligned:
 			var expected := (bone_global.affine_inverse() * child_global).origin * bone_def.shape_offset
 			assert_almost_eq(baked_shape.position, expected, Vector3.ONE * 1e-5,
 				"%s: offset is bone->child * BoneDefinition.shape_offset (%.2f)" % [rig_name, bone_def.shape_offset])

@@ -110,7 +110,7 @@ func _tuning() -> RagdollTuning:
 	var t := RagdollTuning.create_default()
 	t.foot_ik_enabled = false
 	t.stagger_sway_strength = 0.0
-	t.stumble_enabled = false
+	t.steps_enabled = false
 	t.arm_brace_enabled = false
 	return t
 

@@ -58,14 +58,19 @@ extends Resource
 @export_range(0.0, 1.0) var reaction_pulse_strength: float = 0.6
 ## Duration of the reaction pulse in seconds.
 @export_range(0.05, 0.5) var reaction_pulse_duration: float = 0.2
-## Center-of-mass balance ratio above which a hit triggers stagger (even if
-## average spring strength is still above stagger_threshold).
-## 0.0 = disabled. Higher = harder to trigger stagger from balance alone.
-@export_range(0.0, 1.0) var balance_stagger_threshold: float = 0.5
-## Balance ratio above this during stagger forces ragdoll (character is tipping over).
-@export_range(0.0, 1.0) var balance_ragdoll_threshold: float = 0.85
-## Balance ratio below this during stagger allows early recovery (character regained balance).
-@export_range(0.0, 1.0) var balance_recovery_threshold: float = 0.3
+## Balance ratio above which a hit triggers a stagger (even if the average spring
+## strength is still above stagger_threshold). The ratio is [member BalanceState.ratio]
+## since 0.6.0: the extrapolated CoM's offset from the support centre over the support
+## polygon's radius in that direction — 0 centred, 1 at the edge of the feet, > 1 outside
+## (the capture point has left the feet: a step or a fall). A quiet weight-shifted idle
+## reads ~0.4, so the thresholds start at 0.8. 0.0 = disabled.
+@export_range(0.0, 1.5) var balance_stagger_threshold: float = 0.8
+## Ratio above this during a stagger forces a ragdoll (the character is tipping over:
+## its extrapolated CoM is outside its feet). Legacy velocity-overwrite mode only until
+## the balance layer's step behavior exists (docs/PLAN.md 0.6.0).
+@export_range(0.0, 1.5) var balance_ragdoll_threshold: float = 1.0
+## Ratio below this during a stagger allows early recovery (balance regained).
+@export_range(0.0, 1.5) var balance_recovery_threshold: float = 0.6
 ## How long balance must stay below recovery threshold before stagger ends.
 @export_range(0.0, 1.0) var balance_recovery_hold_time: float = 0.5
 ## Pain accumulated per hit, scaled by effective strength_reduction.
@@ -217,15 +222,19 @@ extends Resource
 ## Bones whose collision_mask is set to 0 during NORMAL state and restored on
 ## STAGGER/RAGDOLL. Prevents clipping from animation poses (crossed arms, etc.).
 @export var normal_state_disabled_collision: PackedStringArray = []
-## Whether the bodies of ONE rig collide with each other. Off by default: the
-## auto-generated torso boxes and limb capsules overlap in ordinary animation
-## poses (measured on a hunched idle: Chest-Hips in contact 170 of 180 frames,
-## forearms inside the chest box, upper arms in the spine box), and each of
-## those contacts is a solver impulse that rewrites the spring commands every
-## tick — the largest source of the rig lagging / wobbling behind its animation.
-## Bodies still collide with everything else on [member collision_mask]
-## (environment, OTHER ragdolls). Enable to reproduce the pre-1.4 behaviour.
-@export var self_collision: bool = false
+## Whether the bodies of ONE rig collide with each other. On since 0.6.0: the torso
+## blocks a limp arm, one leg blocks the other, so a ragdoll keeps a body's volume
+## instead of folding limbs through the chest. Jointed pairs never collide (the joint
+## excludes them) and any non-adjacent pair already overlapping in the pose the rig is
+## built in is excluded for good (a torso box that interpenetrates by construction —
+## see [method PhysicsRigBuilder.get_self_collision_exclusions]). It was off for the
+## velocity-overwrite resolver, whose commands every contact impulse rewrote (a hunched
+## game idle had Chest-Hips in contact 170 of 180 frames — the rig lagged and wobbled);
+## under bounded joint motors the contacts are part of the solve, and on the demo rig the
+## idle / react / ragdoll numbers are identical on and off. Bodies always collide with
+## everything else on [member collision_mask] (environment, OTHER ragdolls). Read at
+## build time only.
+@export var self_collision: bool = true
 
 # ── Advanced: Spring Dynamics ───────────────────────────────────────────────
 
@@ -372,7 +381,10 @@ var character_forward_sign: int = 1
 ## When enabled, a foot IK solver adjusts leg targets based on ground raycasts.
 @export var foot_ik_enabled: bool = true
 ## Distance from ankle joint center to the bottom of the foot sole (meters).
-## Offsets the IK target upward so feet don't sink into the ground.
+## Offsets the IK target upward so feet don't sink into the ground, and is the depth
+## of the sole-aligned foot collider's bottom face below the ankle (the rig is built
+## with it — see [member BoneDefinition.sole_aligned]), so the planted foot's box rests
+## exactly on the ground and can carry the body's weight.
 @export_range(0.0, 0.2) var foot_ik_ankle_height: float = 0.065
 ## Maximum distance the pelvis can drop to accommodate the lowest foot (meters).
 ## Prevents unrealistic leg stretching when one foot is much lower than the other.
@@ -399,10 +411,14 @@ var character_forward_sign: int = 1
 ## Physics collision layers used for foot IK ground raycasts.
 ## Must include layers that your terrain/ground uses.
 @export_flags_3d_physics var foot_ik_collision_mask: int = 1
-## Disable foot body collision with ground during NORMAL state.
-## IK plants feet precisely so physics collision is redundant and causes jitter.
-## Collision is restored during STAGGER/RAGDOLL/GETTING_UP.
-@export var foot_ik_disable_foot_collision: bool = true
+## Mask the foot bodies out of collision while foot IK is solving (NORMAL / STAGGER;
+## restored for RAGDOLL / GETTING_UP). Off by default since 0.6.0: the feet are
+## load-bearing — the sole-aligned foot collider rests on the ground and the legs
+## carry the body (see [member muscle_root_support]). Before 0.6.0 the pitched foot
+## box sat several cm below the floor and had to be masked out (it was pushing the
+## whole character up); turn this on only for a rig whose foot collider cannot be
+## made to sit on the sole.
+@export var foot_ik_disable_foot_collision: bool = false
 ## Pin feet to their ground contact positions during STAGGER state.
 ## Prevents foot sliding while the upper body wobbles from sway forces.
 ## Leg bone spring strengths are boosted to keep feet planted.
@@ -412,66 +428,66 @@ var character_forward_sign: int = 1
 @export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
-# ── Self-Preservation: Stumble Steps ────────────────────────────────────────
+# ── Balance: Upright ────────────────────────────────────────────────────────
 
-@export_group("Self-Preservation: Stumble Steps")
-## Enable the directed stumble: a staggering hit drifts the character root along
-## the hit direction ([member stumble_push_speed]) and the trailing foot steps to
-## follow. NOTE: this is a scripted displacement, not balance-driven stepping
-## (see docs/AUDIT_2026-09-12.md). Requires foot IK (the step is executed through
-## the foot IK solver). 0.4.0.
-@export var stumble_enabled: bool = true
-## Horizontal distance (meters) the root drifts between consecutive stumble
-## steps, and the distance ahead of the hips each step lands.
-@export_range(0.0, 1.0) var stumble_step_length: float = 0.24
-## Time for the stepping foot to travel from its current position to the step
-## target (seconds).
-@export_range(0.05, 1.0) var stumble_step_duration: float = 0.24
-## Maximum number of catch-steps in one stagger before giving up and ragdolling.
-@export_range(1, 5) var stumble_max_steps: int = 3
-## Spring strength (as a fraction of each bone's base) applied WHILE stumbling. A
-## real stumble tenses the body and steps — not a foot reposition on a limp ragdoll —
-## so during the stumble the springs stiffen toward this level so the body stays
-## upright as it lurches. Transient (only while [member _stumbling]); relaxes to the
-## stagger floor when the stumble ends. Higher = stiffer/more upright; too high reads
-## as a snap. 0.0 = no stiffening.
-@export_range(0.0, 1.0) var stumble_brace_strength: float = 0.6
-## Initial knockback speed (m/s) of the directed stumble: on a staggering hit the
-## character root drifts in the hit direction at this speed, so the stumble visibly
-## DISPLACES the character (you stumble where you're shoved) rather than shuffling in
-## place. Decays via [member stumble_push_decel]. 0.0 = no displacement (in-place).
-@export_range(0.0, 6.0) var stumble_push_speed: float = 2.3
-## Deceleration (m/s²) of the knockback drift — how fast the stumble momentum is
-## absorbed. Total stumble distance ≈ speed² / (2·decel). Higher = shorter stumble.
-@export_range(0.5, 20.0) var stumble_push_decel: float = 7.0
-## Peak height (meters) the swinging foot lifts during a stumble step, so it steps
-## over the ground instead of sliding across it. 0.0 = no lift (slides).
-@export_range(0.0, 0.3) var stumble_step_lift: float = 0.1
+@export_group("Balance: Upright")
+## EXPERIMENTAL, off by default. [UprightBehavior]: the whole-body pose target is
+## shifted against the extrapolated CoM's drift from the animation's own CoM, so the
+## legs — solved to the planted feet — lean the body back over them (an ankle + hip
+## strategy in IK form). Measured on the ybot (hold 0.25, ankle 150, leg gain 0.2) it
+## did NOT help: settle after the react clip 4.9° vs 2.8° without it, idle error after
+## a shove 8.9° vs 3.6°; at gains 0.5–2 with the hold released it fell more often than
+## the passive stance. Kept as the measured starting point for a torque-level ankle
+## strategy; enable to experiment.
+@export var upright_enabled: bool = false
+## Target shift per metre of XCoM error (m/m). Higher corrects harder; too high with the
+## motors' ~10-tick lag oscillates.
+@export_range(0.0, 3.0) var upright_gain: float = 1.0
+## Cap on the shift (m).
+@export_range(0.0, 0.5) var upright_max_shift: float = 0.15
+## Smoothing rate (per second) of the shift toward its target.
+@export_range(1.0, 60.0) var upright_response: float = 12.0
+
+
+# ── Balance: Steps ──────────────────────────────────────────────────────────
+
+@export_group("Balance: Steps")
+## Enable balance-driven stepping ([StepBehavior]): a foot swings to the capture point
+## when the extrapolated CoM reaches the edge of the feet, and a loaded foot standing
+## far from its animation spot is lifted and re-planted there. Requires foot IK (the
+## swing is executed through the foot IK solver). Replaces the 0.4.0 directed stumble,
+## which teleported the character root. 0.6.0.
+@export var steps_enabled: bool = true
+## [member BalanceState.ratio] at which a balance step fires (1.0 = the capture point is
+## exactly at the edge of the feet — beyond it the ankles cannot bring it back; a quiet
+## idle reads ~0.4).
+@export_range(0.5, 1.5) var step_trigger_ratio: float = 1.0
+## Below this ratio the character is calm enough to re-plant a mis-placed foot. Kept
+## just under [member step_trigger_ratio]: with the feet displaced the CoM sits near
+## the edge of the (shifted) polygon, and a stricter gate deadlocks the re-plant that
+## would bring the feet back under it (measured 0.63–0.65 after the react clip).
+@export_range(0.0, 1.5) var step_calm_ratio: float = 0.85
+## Horizontal distance (m) between a loaded foot and its animation spot beyond which
+## the foot is re-planted (lifted and stepped there) instead of dragged.
+@export_range(0.02, 0.5) var step_replant_distance: float = 0.10
+## Time (s) for the swinging foot to travel from where it stands to its landing spot.
+@export_range(0.05, 1.0) var step_duration: float = 0.22
+## Peak height (m) of the swing arc, so the foot steps over the ground.
+@export_range(0.0, 0.3) var step_lift: float = 0.08
+## Longest single step (m) from where the foot stands.
+@export_range(0.1, 1.5) var step_max_length: float = 0.6
+## Closest the landing spot may come to the stance foot (m) — keeps the legs uncrossed.
+@export_range(0.0, 0.4) var step_min_stance: float = 0.12
 
 
 # ── Self-Preservation: Arm Bracing ──────────────────────────────────────────
 
 @export_group("Self-Preservation: Arm Bracing")
-## Enable procedural arm bracing: during a directed stumble the arms windmill (sweep
-## in wide vertical circles) to fight for balance — the active upper-body layer on top
-## of the loose flailing. Requires the arm IK solver (arm-chain roles). 0.4.0.
+## Enable the arm IK solver (the protective reach-for-ground on a committed fall; the
+## arm-balance behavior of 0.6.0 will use it too). Requires the arm-chain roles. The
+## 0.4.0 windmill (a scripted phase circle during the directed stumble) was removed in
+## 0.6.0 together with the stumble.
 @export var arm_brace_enabled: bool = true
-## How strongly the windmill drives the arms (0..1). This is a TENDENCY layered over
-## the loose physics pose, not a takeover: lower keeps the arms reactive and organic
-## (they only lean toward the windmill), 1.0 pins them rigidly to the geometric circle.
-@export_range(0.0, 1.0) var arm_brace_weight: float = 0.5
-## Radius (meters) of the windmill circle each hand sweeps. Larger = bigger, wilder
-## arcs. Kept within the arm's reach so the solve never overstretches.
-@export_range(0.0, 0.5) var arm_windmill_radius: float = 0.24
-## Outward offset (meters) of each windmill circle from the shoulder, along the body's
-## lateral axis, so the arms circle out to their own sides instead of across the chest.
-@export_range(0.0, 0.5) var arm_windmill_lateral: float = 0.16
-## Vertical offset (meters) of each windmill circle's center above the shoulder, so the
-## arms sweep up high (a raised, balancing flail) rather than down at the hips.
-@export_range(-0.3, 0.5) var arm_windmill_height: float = 0.1
-## Angular speed (rad/s) of the windmill sweep. Higher = faster spinning arms. The two
-## arms sweep in opposite phase, so this also sets how fast they alternate.
-@export_range(0.0, 30.0) var arm_windmill_speed: float = 5.0
 ## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
 ## into the brace faster; lower = they ease in.
 @export_range(1.0, 40.0) var arm_brace_blend_speed: float = 8.0
@@ -541,6 +557,11 @@ enum MuscleMode {
 ## 0.15 rings on the light arm chain once the pelvis is a bounded motor too, 0.20+
 ## limit-cycles. 0.10 is the default.
 @export_range(0.02, 1.0) var muscle_gain: float = 0.10
+## [member muscle_gain] for the LEG chains and the pelvis (0 = same as muscle_gain). The
+## legs carry the body: their loop has to be faster than the inverted pendulum they hold
+## (√(h/g) ≈ 0.3 s on the default rig) and they are heavy enough not to ring at gains the
+## light arm chain cannot take.
+@export_range(0.0, 1.0) var muscle_leg_gain: float = 0.2
 ## Cap on the commanded relative angular velocity (rad/s) per joint.
 @export_range(1.0, 60.0) var muscle_max_angular_velocity: float = 15.0
 ## Multiplier on the pelvis position pin in JOINT_MOTOR mode (the pin is what holds
@@ -561,6 +582,25 @@ enum MuscleMode {
 ## for the default rig) plus a margin. A hit stronger than this moves the character.
 ## Not scaled by [member muscle_strength_scale]; released when limp.
 @export_range(0.0, 20000.0) var muscle_root_force: float = 2500.0
+## Share of [member muscle_root_force] the root position motor may spend along the
+## world's UP axis (0 = none: the legs carry the whole body through their joint motors
+## and the feet on the ground; 1 = the motor may hold the pelvis up by itself, as
+## before 0.6.0 — the default rig weighs ~800 N, so anything above ~0.35 can still
+## carry it all). Sideways and orientation authority are unaffected. The
+## feet-load-bearing lever of docs/PLAN.md 0.6.0: with the anchor carrying the weight
+## the feet touched the floor with ~2 % of it.
+@export_range(0.0, 1.0) var muscle_root_support: float = 0.0
+## Share of [member muscle_root_force] the root position motor may spend SIDEWAYS (the
+## ground plane) — the balance ASSIST. 1 = the 0.5.0 stand-in: the pelvis is dragged
+## to the animation's position with up to the full force, so the character cannot
+## drift or topple, but cannot shift its weight either (a balance step's swing foot
+## lifts 2 cm and slides). 0 = the pelvis stands where the legs put it; measured on the
+## ybot (ankle 150 N·m, leg gain 0.2): 3.4–4.4° idle error, chaotic under a 150 N·s
+## shove (falls in some runs). 0.25 (default, ≈ 625 N): idle 1.02° / 2.9° — the same
+## as the full hold — while the shove moves the pelvis, the legs and the steps do the
+## rest and the ratio is back under 0.7 in 2 s. The controller raises both shares to 1
+## for the canned get-up. An honest cheat force, documented as such.
+@export_range(0.0, 1.0) var muscle_root_hold: float = 0.25
 ## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
 ## the tracking damping; this only bleeds free rotation).
 @export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5

@@ -25,9 +25,13 @@ func _tuning(motor: bool = true) -> RagdollTuning:
 	var t := RagdollTuning.create_default()
 	t.foot_ik_enabled = false
 	t.stagger_sway_strength = 0.0
-	t.stumble_enabled = false
+	t.steps_enabled = false
 	t.arm_brace_enabled = false
 	t.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR if motor else RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
+	# These tests characterise the MUSCLES, mostly on a groundless rig: the root anchor
+	# carries the body (the 0.5.0 stand-in). Since 0.6.0 the default is 0 (the legs
+	# carry the body through the feet) — covered by test_feet_load_bearing.gd.
+	t.muscle_root_support = 1.0
 	return t
 
 
@@ -138,7 +142,9 @@ func test_motor_follows_an_animated_elbow_fold():
 	h.skeleton.set_bone_pose_rotation(idx, Quaternion(Vector3.DOWN, deg_to_rad(60.0)))
 	await wait_physics_frames(60)
 	var e := _error_deg(h, "LowerArm_L")
-	assert_lt(e, 8.0, "forearm reaches the folded target (%.1f deg off)" % e)
+	# 7.x deg with the single-joint root of 0.5.0; 8.3 once the root became two
+	# constraints (orientation in the pelvis frame, position in world axes, 0.6.0).
+	assert_lt(e, 10.0, "forearm reaches the folded target (%.1f deg off)" % e)
 
 
 func test_root_motor_follows_an_animated_pelvis_yaw():
@@ -182,9 +188,13 @@ func test_motor_pushing_into_a_limit_yields_a_bounded_amount():
 # ── Hold under real gravity ─────────────────────────────────────────────────
 
 func test_motors_hold_the_pose_under_gravity():
-	# Groundless T-pose: the muscles alone must carry the arms and legs; the pelvis
-	# pin holds the body up. (Spike: ~1 deg at gain 0.17-0.25.)
-	var h = await _spawn(_tuning(), false)
+	# Groundless T-pose: the muscles alone must carry the arms and legs; the root
+	# anchor holds the body up (muscle_root_support = 1: since 0.6.0 the default is 0,
+	# the legs carry the body, and there is no ground here). (Spike: ~1 deg at gain
+	# 0.17-0.25.)
+	var t := _tuning()
+	t.muscle_root_support = 1.0
+	var h = await _spawn(t, false)
 	await wait_physics_frames(90)
 	var hips: RigidBody3D = h.get_body("Hips")
 	assert_gt(hips.global_position.y, 0.7, "pelvis pin holds the body up")
@@ -198,8 +208,11 @@ func test_pelvis_stands_at_its_target_height():
 	# solver): the standing pelvis sits within the settle deadband of its target and
 	# does not bounce. A velocity pin written to the pelvis alone was diluted by the
 	# joint solve across the ~55 kg hanging from it (3.5 cm low, bouncing at ~3 Hz on
-	# the demo idle — the user-visible whole-body wobble).
-	var h = await _spawn(_tuning(), false)
+	# the demo idle — the user-visible whole-body wobble). Groundless, so the anchor
+	# carries the weight here (muscle_root_support = 1).
+	var t := _tuning()
+	t.muscle_root_support = 1.0
+	var h = await _spawn(t, false)
 	await wait_physics_frames(90)
 	var hips: RigidBody3D = h.get_body("Hips")
 	var st: Dictionary = h.spring._bones["Hips"]
@@ -221,6 +234,7 @@ func test_weak_muscle_cannot_hold_a_horizontal_arm():
 	# above). At 15 N.m (×0.25) it still sags, just slowly (~2 deg in 1.5 s).
 	var t := _tuning()
 	t.muscle_strength_scale = 0.05
+	t.muscle_root_support = 1.0  # groundless
 	var h = await _spawn(t, false)
 	await wait_physics_frames(90)
 	var e := _error_deg(h, "UpperArm_L")
@@ -292,7 +306,7 @@ func test_stagger_stays_on_its_feet_and_recovers_in_motor_mode():
 	# weak but standing. Linear torque collapsed the character into a ragdoll.
 	var t := _tuning()
 	t.stagger_duration = 1.0
-	t.stumble_enabled = false
+	t.steps_enabled = false
 	var h = await _spawn(t, true)
 	await wait_physics_frames(5)
 	watch_signals(h.controller)
@@ -318,9 +332,9 @@ func test_knocked_down_character_gets_up_upright():
 	var h = await _spawn(t, true)
 	await wait_physics_frames(10)
 	var hips: RigidBody3D = h.get_body("Hips")
-	hips.apply_impulse(Vector3(60.0, 0.0, 20.0))  # knock it over so it lands lying
+	hips.apply_impulse(Vector3(90.0, 0.0, 30.0))  # knock it over so it lands lying
 	h.controller.trigger_ragdoll()
-	await wait_physics_frames(45)
+	await wait_physics_frames(60)
 	assert_lt(hips.global_basis.y.dot(Vector3.UP), 0.8, "the character actually went down")
 	var recovered: bool = await wait_for_signal(h.controller.recovery_finished, 12.0)
 	assert_true(recovered, "recovery finished")

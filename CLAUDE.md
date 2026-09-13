@@ -51,6 +51,12 @@ kickback/
 │       ├── spring_resolver.gd       # Velocity-based spring pose matching
 │       ├── foot_ik_solver.gd        # Two-bone foot IK (direct math → spring targets)
 │       ├── active_ragdoll_controller.gd  # State machine (NORMAL/STAGGER/RAGDOLL/GETTING_UP/PERSISTENT)
+│       ├── balance_state.gd         # One balance measurement per tick: CoM, XCoM, contact support polygon, margin, ratio, loaded foot
+│       ├── behaviors/               # The behavior layer (0.6.0): read BalanceState, answer with stiffness floors + pose targets
+│       │   ├── behavior.gd          # KickbackBehavior base (tick / on_state_changed / reset)
+│       │   ├── behavior_context.gd  # What a behavior may read and ask of the rig
+│       │   ├── step_behavior.gd     # Balance steps (capture point) + re-plants (mis-placed loaded foot) via foot locks
+│       │   └── upright_behavior.gd  # EXPERIMENTAL (off): whole-body target shift against the XCoM error (IK-form ankle/hip strategy)
 │       ├── physics_collision_monitor.gd # Optional ragdoll-environment collision observer
 │       ├── jolt_check.gd            # Jolt physics verification
 │       ├── strength_debug_hud.gd    # F3 debug gizmos (auto-discovers all characters)
@@ -90,7 +96,11 @@ kickback/
 ├── tools/
 │   ├── spike/motor_spike.gd         # Standalone headless muscle spike (audit §8): 6DOF-motor muscle A/B vs SpringResolver — results in docs/MUSCLE_SPIKE.md
 │   ├── bench/ybot_bench.gd         # 0.5.0 acceptance bench on the ybot: both muscle modes, idle/react/hit, BENCH_HZ/DIAG/VARIANT
-│   ├── bench/scene_probe.gd        # Loads any demo scene as-is and logs every character with no input (PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS)
+│   ├── bench/scene_probe.gd        # Loads any demo scene as-is and logs every character with no input (PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS; PROBE_ACTION=ragdoll adds a get-up timeline)
+│   ├── bench/foot_probe.gd         # Foot collider vs floor, contacts, balance ratio and foot XZ error on the ybot idle (feet load-bearing)
+│   ├── bench/overlap_probe.gd      # Non-adjacent body-pair overlaps (build pose / idle / ragdoll) + idle tracking, self-collision on/off
+│   ├── bench/limit_envelope.gd     # Min/max joint angle every ybot clip reaches vs the authored limits
+│   ├── bench/step_probe.gd         # Step behavior timeline on the ybot: root moved 0.25 m / 150 N·s shove / PROBE_SCENARIO=react
 │   └── bench/trace_report.py       # Summarises a KickbackTraceRecorder trace: sag, bounce frequency, error spikes, clipping, pacing
 └── project.godot                    # Names 3D physics layers 1-5 (Environment, Projectiles, Characters, Active Ragdoll, Godot Ragdoll)
 ```

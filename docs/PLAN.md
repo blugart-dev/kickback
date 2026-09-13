@@ -15,8 +15,13 @@ test or a PR does not back.
 
 ## Ground rules (non-negotiable)
 
-- **Branch + PR per milestone** (`feat/<milestone>`); never push to `main`; never merge
-  your own PR — merging is the human gate.
+- **`main` is release-only and frozen until the maintainer says it *feels amazing*
+  (decision 2026-09-13).** Integration happens on **`develop`**: every milestone is a
+  `feat/<milestone>` branch off `develop` with a PR **into `develop`**; when its CI is green
+  and its numbers are in the body, fast-forward `develop` to it (`git push origin
+  feat/x:develop`, never a force push) and start the next branch. `main` receives one
+  release PR from `develop` when the maintainer's feel gate passes; that merge, and any
+  tag, is the human's. Never push to `main`.
 - **Green suite before a PR**: `godot --headless --path . --script addons/gut/gut_cmdln.gd -- -gdir=res://test/ -gexit`
   (Godot 4.7.2 + Jolt; on this machine `~/bin/godot`). Zero failures, zero orphans, every
   demo scene loads headless with `--quit-after 90` and no script errors.
@@ -50,8 +55,8 @@ test or a PR does not back.
 |---|---|---|---|
 | 0.4.1 Honesty pass | ✅ merged | PR #98 | visually verified 2026-09-12 |
 | Muscle spike | ✅ done | `docs/MUSCLE_SPIKE.md` | — |
-| **0.5.0 Muscle layer** | 🔧 PR #100 open, `JOINT_MOTOR` is the default | `feat/muscle-layer` | visual gate: user testing |
-| 0.6.0 Balance + behaviors | ⬜ | | |
+| **0.5.0 Muscle layer** | ✅ code complete, on `develop` (PR #100 to `main` kept open as the record; not merged) | `feat/muscle-layer` → `develop` | feel gate deferred: maintainer says "not there yet, comes later" |
+| **0.6.0 Balance + behaviors** | 🔧 in progress | `feat/balance-behaviors` → `develop` | steps read as steps |
 | 0.7.0 Arbiter + API cut | ⬜ | | |
 | 0.8.0 Environmental behaviors | ⬜ | | |
 | 0.9.0 Performance + hardening | ⬜ | | |
@@ -142,11 +147,83 @@ wrap; resolver CPU (≈1.4× on a quiet run, noisy); the visual gate (user), the
 it; the scripted stumble and the sine sway are deleted.
 
 **Checklist**
-- [ ] `BalanceState` (new file): CoM, CoM velocity, XCoM (`CoM + v / √(g / leg_length)`), support polygon from **foot contact** (feet collide in all states; contact from `PhysicsCollisionMonitor`-style reporting or `get_colliding_bodies`), loaded foot, signed XCoM distance to the polygon edge, computed once per physics tick
-- [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
-- [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
-- [ ] Delete `_update_directed_stumble` root teleport, `_apply_stagger_sway`, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs
-- [ ] Tip-over decision from XCoM, not from the static ratio; `balance_changed` payload documented
+- [x] **Feet load-bearing** (2026-09-13, `test_feet_load_bearing.gd`, 9 tests): sole-aligned
+  foot collider (`BoneDefinition.sole_aligned`, bottom face on the foot IK sole, heel added —
+  the old bone-aligned box sat 7 cm under the floor, which is why the feet were masked out);
+  feet collide in every state (`foot_ik_disable_foot_collision` default false) and report
+  contacts; `muscle_root_support` (default 0) removes the anchor's vertical authority via a
+  second, world-aligned position anchor. Measured (ybot): feet carry the body (were ~2 %);
+  pelvis sag on the legs 6 mm @60 Hz / 0.8 mm @120 / 9 mm @30; idle 1.10/3.57 @60
+  (0.94 before), 0.73/1.87 @120; get-up on the shooting range ≤ 8° at `recovery_finished`
+  and 1–4° after 3 s (anchor lifts + frictionless feet during the canned blend, support
+  faded back over 0.75 s). **Exposed**: SETTLE after react_front 10.2° @60 Hz (legacy
+  0.96) — loaded feet stay where friction planted them; the step behavior must move them.
+  30 Hz idle regressed 4.85 → 5.45 (open).
+- [x] **Self-collision on** (2026-09-13, maintainer asked for the ragdoll look first; `test_self_collision.gd`,
+  6 tests): `self_collision` default true; jointed pairs excluded by the joint, build-pose
+  overlaps excluded by a safety net (`get_self_collision_exclusions`), everything else
+  collides. Measured: ybot has no non-adjacent overlaps in idle / react / 4 s ragdoll, bench
+  bit-identical on/off, get-up 2–5°. **Limits not tightened**: `tools/bench/limit_envelope.gd`
+  shows 17 axes already exceeded by the 21 clips (elbow lateral ±58 vs ±20, spine X −75 vs
+  ±35, knee 149 vs 140). Open: the elbow-lateral reading looks like a frame/twist-bone
+  question; a stagger/ragdoll with a leg swinging through the other is now blocked.
+- [x] `BalanceState` (2026-09-13, `test_balance_state.gd`, 7 tests): CoM, CoM velocity, XCoM
+  (`CoM + v / √(g / h)`, h = CoM height above the support plane), support polygon = convex
+  hull of the sole footprints of the feet in contact, loaded foot (load share ∝ 1/distance
+  to the XCoM), signed margin to the polygon edge, ratio (0 centre / 1 edge / >1 outside),
+  computed once per physics tick in every state; `get_balance()` + the dictionary API; HUD
+  draws hull + XCoM. Ybot idle: margin +12.5 cm, ratio 0.40–0.42 → thresholds recalibrated
+  (stagger 0.8, recovery 0.6, ragdoll 1.0). **Not yet**: the tip-over decision and the
+  root anchor release on it (needs the step behavior first — a 150 N·s shove must step,
+  not fall).
+- [x] `KickbackBehavior` base + `BehaviorContext` (2026-09-13): `tick(ctx, balance, delta) -> {stiffness, targets}`; the controller runs a fixed ordered list in NORMAL / STAGGER (`get_behaviors()`), stiffness applied as floors, targets merged after the IK solvers
+- [x] `StepBehavior` (2026-09-13, `test_step_behavior.gd`, 6 tests): balance step (XCoM at the
+  edge for 4 ticks → fall-side foot to the capture point) + re-plant (calm + loaded foot
+  > 10 cm from its spot); **foot locks** in `FootIKSolver` (`set_foot_lock`, `begin_step`
+  with a hover-until-arrived landing). Measured: root moved 0.25 m → both feet re-planted
+  by 0.83 s, legs 1.5°; after react_front 5 steps, legs 3° by 2.8 s (bench SETTLE 10.4 →
+  6.2 in the 2nd second, was 9.9 flat). Balance steps validated with the hold released on
+  the harness only — with `muscle_root_hold` 0 and no upright behavior the ybot idle is
+  unstable (7.2°, constant steps, a 150 N·s shove walks it off), so **`muscle_root_hold`
+  stays 1** until the next item.
+- [~] **Balance control** (2026-09-13, `test_balance_control.gd`, 6 tests): the anchor's
+  sideways hold is a bounded **assist** (`muscle_root_hold` 0.25 ≈ 625 N), ankle torque
+  150 N·m, `muscle_leg_gain` 0.2, step trigger 1.0, smoothed CoM velocity, and a
+  **physical fall detector** (pelvis low / tilted for 0.15 s → RAGDOLL, no dice — a
+  400 N·s shove with the assist released is detected within 2 s). Measured: idle 0.98°,
+  settle after react 6.1° / 5.0° (was 10.4 / 6.2), 150 N·s shove → 3 steps, pelvis
+  moves ~6 cm, ratio back under 1 in 2 s, no fall. **`muscle_root_hold` 0 not reached**:
+  the passive stance reads 3.4–4.4° idle and is chaotic under the shove; the IK-shift
+  `UprightBehavior` (in the list, off by default) made it worse at every gain (settle
+  4.9 vs 2.8 without). Open: a torque-level ankle strategy (command the ankle motors on
+  the XCoM error directly) is the next attempt at hold → 0; `ArmBalanceBehavior` (arm
+  target opposes XCoM error), `FallReachBehavior` (existing reach, moved),
+  `GetUpBehavior` (existing canned blend, moved)
+- [x] Delete `_update_directed_stumble` root teleport, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs (2026-09-13; `grep "global_position +=" addons/kickback/` is empty). Still to delete: `_apply_stagger_sway`
+- [ ] **Removal list from the 2026-09-13 feature inventory** (each item was compensation for
+  the velocity-overwrite substrate or a stand-in for balance, and is now either redundant
+  or fake on top of real muscles):
+  - [ ] `_apply_micro_reaction` (head-whip / torso-bend / spin torque impulses): added because
+    the old resolver erased the real impulse in 3 ticks; with motors the impulse *is* the whip.
+    Delete; re-check hit vividness on the bench without it before touching gains.
+  - [ ] Velocity clamps (`max_angular_velocity` / `max_linear_velocity` hard writes) in motor
+    mode: they overwrite what the motor just did. Motor mode uses `muscle_max_angular_velocity`
+    on the command only.
+  - [ ] Unjointed / root bodies in motor mode still run the legacy velocity spring
+    (`_drive_root_body`); every body in motor mode is force-driven or free.
+  - [ ] Reaction pulses, strength reduction + spread, threat pulse: keep as *modulation*
+    (a torque-cap dip) but re-tune their defaults on the bench with real impulses; threat
+    anticipation becomes a pose behavior (head turn / arm raise) or is removed from the API.
+  - [ ] Stagger exit by regained balance (XCoM inside the polygon for `hold_time`), the timer
+    only as a safety net.
+  - [ ] Hit-streak / movement-instability multipliers and the `ragdoll_probability` dice
+    roll: move out of the physics decision path into an explicit gameplay hook (a knockdown
+    is either physics or an explicit call).
+- [ ] **Tip-over owned by `BalanceState`, not dice.** Today in motor mode the CoM ratio check
+  is off and *nothing physical decides a fall*: a standing character only goes down by
+  `ragdoll_probability`, pain, or an explicit trigger. 0.6.0 acceptance requires the fall in
+  the 400 N·s shove case to be *decided by XCoM leaving the polygon with no recoverable
+  step*, and the root anchor to release when it does. `balance_changed` payload documented
 - [ ] Tests: XCoM math; support polygon from contact; a shove that keeps XCoM inside the polygon ends in a step and no fall; a larger shove falls; ybot bench scenario "shove" with numbers
 - [ ] Docs: SELF_PRESERVATION rewritten as the behavior spec; REFERENCE balance section
 
@@ -162,7 +239,11 @@ teleport anywhere in the plugin (`grep global_position +=` in addons/ is empty).
 
 - [ ] Arbiter: per-bone highest-priority stiffness/target wins, ties blend; replaces every direct `set_bone_strength` writer (`grep set_bone_strength addons/ | wc -l` ≤ 3: arbiter, resolver, tests)
 - [ ] `ActiveRagdollController` ≤ 400 lines: state switch + behavior enable/disable
-- [ ] `RagdollTuning` ≤ 40 exports, grouped by subsystem; build-time knobs moved to the profile; migration doc for removed knobs
+- [ ] `RagdollTuning` ≤ 40 exports (161 on 2026-09-13), grouped by subsystem; build-time knobs moved to the profile; migration doc for removed knobs
+- [ ] **Retire `VELOCITY_OVERWRITE`** (decision 2026-09-13): it stays through 0.6.0 as the A/B
+  reference on the bench, then the legacy path, `spring_chain_consistency`, strength-scaled
+  gravity, the settle deadbands and `test_rig_fidelity.gd`'s legacy pins go with the API cut.
+  One muscle model, one code path.
 - [ ] Signals reviewed; API freeze note in VERSIONING
 - [ ] Tests: arbiter precedence; each behavior isolated; API surface snapshot test
 

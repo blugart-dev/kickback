@@ -8,6 +8,209 @@
 
 ## [Unreleased]
 
+### 0.6.0 candidate — Balance + behaviors (`feat/balance-behaviors`, on `develop`)
+
+**Step 1 — feet load-bearing.** The legs carry the body. Before this the root anchor's
+position motor held the pelvis at its target with up to 2500 N, the feet were masked out
+of collision while foot IK solved, and when they were allowed to collide they touched the
+floor with ~2 % of the body's weight (measured with `tools/bench/foot_probe.gd`).
+
+**Changed**
+- **Sole-aligned foot collider** (`BoneDefinition.sole_aligned`, on for `Foot_L` /
+  `Foot_R` in both profile factories). The foot box is built LEVEL with the character
+  with its bottom face exactly `RagdollTuning.foot_ik_ankle_height` below the ankle — the
+  sole foot IK plants — and `SkeletonDetector.FOOT_HEEL_RATIO` (0.3) of the ankle→toe
+  extent added behind the ankle (`shape_offset` = share of the length ahead of the ankle,
+  `FOOT_SOLE_OFFSET` ≈ 0.77). The old box followed the foot bone, which on the Mixamo rig
+  points 27° down toward the toes: its corner sat 7 cm below the sole, so a colliding foot
+  was pushed 15° off its pose and the whole character up (why the feet had to be masked).
+  `PhysicsRigBuilder.build_body` takes the character's up axis; `sole_shape_transform` is
+  the pure geometry. The Mixamo default feet are `0.12 × 0.065 × 0.325` m.
+- **`foot_ik_disable_foot_collision` defaults to `false`**: the feet collide in every
+  state. The knob remains as an opt-out for rigs whose collider cannot sit on the sole.
+- **`RagdollTuning.muscle_root_support`** (new, default 0): the share of
+  `muscle_root_force` the root position motor may spend along the world's UP axis. 0 =
+  the legs carry the whole body through their joint motors and the feet on the ground;
+  1 = the 0.5.0 behaviour (the anchor may hold the pelvis up alone). Sideways and
+  orientation authority are unchanged. Implemented with a second, **world-aligned anchor**
+  (`<Root>_anchor_lin` + `<Root>_anchor_lin_motor`) for the position motor: the
+  orientation anchor's frame is the tilted pelvis target frame, and per-axis limits in
+  that frame still lifted ~500 N through its "sideways" axes.
+- **Get-up on load-bearing feet**: `ActiveRagdollController` gives the anchor full
+  vertical support for the canned get-up blend (folded legs cannot push a body up from
+  the ground through a pose blend) and makes the feet **frictionless** while it carries
+  the body, then fades the support back to the tuning's share over 0.75 s
+  (`SUPPORT_RELEASE_SECONDS`) once the character stands, friction restored. Without the
+  frictionless blend the sole box, pinned to the floor, ended the blend half a metre from
+  its target with the legs 40–50° off. Measured on the shooting range: every character
+  within 8° at `recovery_finished`, 1–4° three seconds later, pelvis at its target height
+  on its own legs. `SpringResolver.set_root_support_override()` is the hand-over.
+- Foot bodies report contacts (`contact_monitor`, `max_contacts_reported` 4) — the
+  balance layer's support-polygon input, also read by the bench.
+- `SpringResolver.get_bone_target_global(rig)`: the world-space target the resolver
+  drove a bone toward on its last tick (animation or IK / get-up override).
+- Test harness skeleton: hips at 0.935 m so the ankles sit at `foot_ik_ankle_height`
+  and the sole boxes rest exactly on the y = 0 ground.
+
+**Bench** (`tools/bench/ybot_bench.gd`, now with SAG = pelvis height below its own
+target and FEET = share of idle ticks with both feet in contact; the hand hit is measured
+from the settled idle, then the react clip, then SETTLE = the idle error over the
+following second):
+
+| Mode, Hz | IDLE mean/max | HIT peak/recover | REACT | SETTLE after react | SAG | FEET |
+|---|---|---|---:|---|---|---|
+| legacy 60 | 0.81 / 1.56 | 1.2° / 4 | 8.9 | 0.96 (balance 0.09) | +0.5 mm | 100 % |
+| **JOINT_MOTOR 60** | 1.10 / 3.57 | 1.8° / 4 | 30.0 | **10.2** (balance 0.57) | +6.1 mm | 100 % |
+| JOINT_MOTOR 120 | 0.73 / 1.87 | 2.0° / 4 | 23.0 | 1.63 (0.14) | +0.8 mm | 100 % |
+| JOINT_MOTOR 30 | 5.45 / 23.0 | 6.6° / 4 | 48.0 | 20.9 (0.78) | +9.3 mm | 100 % |
+
+The 60 Hz SETTLE line is the new, honest fact: after a violent clip the loaded feet stay
+where friction planted them while the animation returns to idle — a load-bearing foot
+cannot be dragged by the animation, it has to be lifted and stepped. That is the step
+behavior's job (next). 30 Hz regressed (4.85 → 5.45 idle) and stays open.
+
+**Tooling**: `tools/bench/foot_probe.gd` (foot collider geometry vs the floor, contacts,
+balance and foot XZ error on the ybot idle); `tools/bench/scene_probe.gd
+PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s, +3 s).
+
+**Step 2 — self-collision on (the ragdoll look).** Limbs no longer fold through the torso.
+
+**Changed**
+- **`RagdollTuning.self_collision` defaults to `true`.** Jointed pairs are excluded by
+  their joint; any non-adjacent pair already overlapping in the build pose is excluded
+  for good by a new safety net (`PhysicsRigBuilder.get_self_collision_exclusions()`, run
+  one physics tick after the build); everything else collides. It was off for the
+  velocity-overwrite resolver, whose commands every contact impulse rewrote; under bounded
+  joint motors the ybot has no non-adjacent overlaps in the idle, the react clip or a 4 s
+  ragdoll, and the bench is bit-identical on and off (`tools/bench/overlap_probe.gd`). The
+  shooting-range get-up still lands within 2–5°. `find_overlapping_pairs()` is the space
+  query behind the probe and the tests.
+- **Joint limits were NOT tightened**, on evidence: `tools/bench/limit_envelope.gd` samples
+  all 21 ybot clips against the authored limits and finds 17 axes already exceeded by the
+  animations (spine X −75° vs ±35, elbow lateral ±58° vs ±20, knee 149° vs 140, shoulder
+  twist 158° vs ±90, …). The table is not generous for this character; the folding limbs
+  were a self-collision problem. Recorded in REFERENCE.md "Self-collision".
+- Tests: `test_self_collision.gd` (6) — defaults, jointed-pair exclusion, the safety net
+  on an oversized Hips box, and a limp hand shoved at the chest that is blocked with
+  self-collision on and passes inside with it off. `test_rig_fidelity.gd` pins its legacy
+  numbers with `self_collision = false` explicitly.
+
+**Step 5 — balance control: the anchor becomes a bounded assist; physics decides the fall.**
+
+**Changed**
+- **`muscle_root_hold` defaults to 0.25** (≈ 625 N sideways): the root anchor is a
+  balance *assist*, no longer the thing that holds the character up. Measured on the ybot
+  (60 Hz): idle 0.98° / 4.4° — the same as the full hold — while the settle after the
+  react clip improves (10.4° → 6.1° in the first second, 5.0° in the second) and a
+  150 N·s shove is caught by the legs + steps with the pelvis moving a few cm. With the
+  hold at 0 the passive stance reads 3.4–4.4° idle and is chaotic under the shove
+  (falls in some runs); no combination of the levers below reached quiet standing ≤ 2°
+  without an assist. Documented as an honest cheat force.
+- **Ankle torque 150 N·m** (`MUSCLE_TORQUE_TABLE` Foot, was 60; adult plantarflexion
+  peaks at 150–200). At 60 the ankles sat at ~60 % of their limit just standing with the
+  CoM 9 cm off centre.
+- **`muscle_leg_gain`** (new, 0.2): the leg chains and the pelvis run a faster motor loop
+  than the arm chain (which rings above 0.1); the inverted pendulum they hold has a 0.3 s
+  time constant.
+- `step_trigger_ratio` 0.9 → 1.0 (a balance step fires once the capture point has left
+  the feet); `BalanceState.com_velocity` is exponentially smoothed (3-tick constant) so
+  the XCoM does not jitter with the finite-difference noise.
+- **Physical fall detector** (`ActiveRagdollController._check_fall`, JOINT_MOTOR mode,
+  NORMAL / STAGGER): a pelvis below 60 % of its target height or tilted past 0.55 dot
+  with world up for 0.15 s means the character is on the ground whatever the state
+  machine thinks → RAGDOLL (a knockdown; STAGGER when knockdowns are off or the budget
+  denies a slot). The first fall decision that comes from physics, not dice.
+- `UprightBehavior` (in the default list, **off by default**, `upright_enabled`): shifts
+  the whole-body target against the XCoM's drift from the animation's own CoM (an
+  ankle + hip strategy in IK form through the foot IK's new `set_body_shift`). Measured it
+  did not help — settle 4.9° vs 2.8° without it, idle after a shove 8.9° vs 3.6°, more
+  falls with the hold released at gains 0.5–2 — so it ships as the measured starting
+  point for a torque-level ankle strategy, not as a feature.
+- Bench variants: `hold0/015/025/05/1`, `nosteps`, `noupright`, `gainup/down`,
+  `leggain2/3`, `ankle120/150/200`.
+- Tests: `test_balance_control.gd` (6): the measured defaults, the leg-gain set, a quiet
+  stance under the stagger threshold on the legs, **a 400 N·s shove with the assist
+  released is detected as a fall and commits to RAGDOLL with no dice**, no false fall
+  while standing or getting up, the upright shift's sign when enabled.
+
+**Step 4 — the behavior layer and `StepBehavior`; the directed stumble is gone.**
+
+**Added**
+- `KickbackBehavior` / `BehaviorContext` (`addons/kickback/behaviors/`): a behavior reads
+  the shared `BalanceState` every tick and answers with stiffness floors and pose
+  targets; the controller runs a fixed ordered list in NORMAL / STAGGER
+  (`get_behaviors()`), the 0.7.0 arbiter replaces the order with priorities.
+- `StepBehavior`: **balance steps** (the XCoM at the edge of the feet for 4 consecutive
+  ticks → the fall-side foot swings to the capture point, ≥ `step_min_stance` from the
+  stance foot, ≤ `step_max_length`) and **re-plants** (calm, and a loaded foot more than
+  `step_replant_distance` from its animation spot → the less loaded foot is lifted and
+  stepped there). Steps are lifted arcs the foot IK solver animates as the foot's target
+  (`FootIKSolver.begin_step`), then a hover at the goal until the physical foot arrives
+  within 5 cm (the motors lag ~10 ticks; a foot that lands short is friction-pinned). The
+  leg chains and pelvis are asked to full base strength while a foot is in flight. Emits
+  `step_started(foot_rig, target)`.
+- **Foot locks** (`FootIKSolver.set_foot_lock` / `clear_foot_lock` / `is_foot_locked`): a
+  load-bearing foot cannot be dragged by the animation, so a contacting foot that drifted
+  more than 5 cm from its spot is held where it stands (its IK target = its own position)
+  and released when the spot returns or the foot leaves the ground. The stagger's
+  anti-slide pin is the same lock on both feet. Motor mode only — the legacy resolver's
+  numbers are unchanged.
+- `RagdollTuning` "Balance: Steps": `steps_enabled`, `step_trigger_ratio` 0.9,
+  `step_calm_ratio` 0.85, `step_replant_distance` 0.10, `step_duration` 0.22, `step_lift`
+  0.08, `step_max_length` 0.6, `step_min_stance` 0.12. `muscle_root_hold` (sideways share
+  of the anchor's force, default **1** — see below).
+- Tooling: `tools/bench/step_probe.gd` (re-plant after a 0.25 m root move, a 150 N·s
+  shove, or `PROBE_SCENARIO=react`: per-foot mismatch / contact / lock / step / lift
+  timeline); the bench gained a SHOVE line (steps, ratio, pelvis and root displacement)
+  and a second SETTLE second.
+
+**Removed** (docs/PLAN.md removal list)
+- The 0.4.0 directed stumble: `_update_directed_stumble` (the root teleport),
+  `_do_directed_step`, `_apply_stumble_brace`, the arm windmill (`_update_arm_windmill`,
+  `_drive_windmill_arm`), the `stumble_*` / `arm_windmill_*` / `arm_brace_weight` knobs,
+  the `stumble_step_started` signal (→ `step_started`), `test_stumble_step.gd`.
+  `grep "global_position +=" addons/kickback/` is empty. The fall reach now takes the hit
+  direction. `SELF_PRESERVATION.md` rewritten as the behavior spec.
+
+**Measured** (ybot, 60 Hz, `tools/bench/step_probe.gd` / `ybot_bench.gd`)
+- Root moved 0.25 m with the feet planted: both feet re-planted by 0.83 s, legs within
+  1.5° at 1 s. After `react_front`: 5 steps over ~1.7 s, legs within 3° by 2.8 s; bench
+  SETTLE 10.4° in the first second, 6.2° in the second (was 9.9° flat).
+- 150 N·s shove with the default `muscle_root_hold` = 1: 2–4 steps, the pelvis moves
+  1–2 cm (the anchor arrests it), ratio back to ~0.6 in 2 s.
+- **`muscle_root_hold` stays 1 for now.** With it at 0 and no upright behavior the idle
+  is unstable (7.2° / 51° idle error, constant steps, a 150 N·s shove walks the character
+  off): torque-limited leg motors with a ~10-tick lag cannot hold an 80 kg inverted
+  pendulum by tracking a fixed pose. The `UprightBehavior` (ankle / hip strategy on the
+  XCoM) is the next step and takes the hold to 0 with measurements.
+- Harness skeleton: ankles 5 cm behind the leg line so the synthetic body stands
+  mid-foot (it stood on its heels: ratio 0.5–0.9 while still); `straight_legs` option
+  for the knee-fallback tests.
+
+**Step 3 — `BalanceState`.** One balance measurement per physics tick, read by every
+decision (REFERENCE.md "Balance state").
+
+**Added**
+- `BalanceState` (`addons/kickback/balance_state.gd`): mass-weighted CoM and its velocity,
+  the support polygon as the convex hull of the sole footprints of the feet **in contact**
+  (the foot bodies' contact reports; no contact → no support), the extrapolated CoM
+  `xcom = com + v / √(g / h)`, the signed `margin` (m) to the polygon edge, the `ratio`
+  (0 centred, 1 at the edge, > 1 outside — the 0.4.x number on the real polygon), the
+  per-foot load share and the loaded foot. `ActiveRagdollController.get_balance()`;
+  `get_balance_state()` keeps the dictionary API with the new fields added. The F3 HUD
+  draws the hull, the CoM and the XCoM ring with its margin.
+
+**Changed**
+- The static CoM-vs-ankle-midpoint ratio is gone; it read 0.5–0.6 for a perfectly standing
+  character on load-bearing feet (a standing CoM sits ahead of the ankles) and staggered
+  the character on a hand shot. On the ybot idle the new ratio is 0.40–0.42 with a 12.5 cm
+  margin, so the thresholds moved to the new scale: `balance_stagger_threshold` 0.5 → 0.8,
+  `balance_recovery_threshold` 0.3 → 0.6, `balance_ragdoll_threshold` 0.85 → 1.0 (the
+  capture point outside the feet), ranges widened to 1.5.
+- Tests: `test_balance_state.gd` (7) — hull, signed margin, edge distance, XCoM =
+  CoM + v/ω₀ on a synthetic rig, the standing harness (inside its feet, both feet in
+  contact, load shares), airborne = no support, a 1.5 m/s shove puts the XCoM outside.
+
 ### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
 
 **Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and

@@ -173,7 +173,8 @@ PERSISTENT ──set_persistent(false)──→ GETTING_UP
 
 | Transition                | Signal emitted          | When to use                |
 |---------------------------|-------------------------|----------------------------|
-| Any → STAGGER             | `stagger_started`       | Play stumble animation     |
+| Any → STAGGER             | `stagger_started`       | Play a stagger / hit-reaction animation |
+| a foot steps (0.6.0)      | `step_started(foot_rig, target)` | Footstep sound / decal at `target` |
 | STAGGER → NORMAL          | `stagger_finished`      | Return to idle/locomotion  |
 | Any → RAGDOLL             | `ragdoll_started`       | Disable movement, stop AI  |
 | RAGDOLL → GETTING_UP      | `recovery_started`      | Play get-up animation      |
@@ -328,9 +329,11 @@ not raise it past ~0.15. The balance-driven tip-over (`balance_ragdoll_threshold
 not fire in this mode: the held pelvis cannot topple, so knockdowns come from
 `ragdoll_probability`, `pain_ragdoll_threshold`, or `trigger_ragdoll()` /
 `set_persistent()` until the balance layer (0.6.0) owns the decision. A stagger stays on
-its feet with the torso visibly weak (the strength floor is 32 % torque). Measured numbers, tick-rate caveats (30 Hz needs
-`foot_ik_disable_foot_collision = false`) and the open items are in REFERENCE.md
-"Muscle layer" and docs/PLAN.md.
+its feet with the torso visibly weak (the strength floor is 32 % torque). Since 0.6.0
+the feet are load-bearing: the foot collider is a level sole box, the feet collide in
+every state, and `muscle_root_support` (default 0) keeps the root anchor from lifting the
+body — the legs do. Measured numbers, tick-rate caveats (30 Hz is an open item) and the
+open items are in REFERENCE.md "Muscle layer" / "Feet load-bearing" and docs/PLAN.md.
 
 ## Recording a Trace (debugging what you see)
 
@@ -393,7 +396,7 @@ Characters flop dramatically.
 locked. Slow `fatigue_decay` so sustained fire eventually overwhelms.
 
 **Death-only ragdoll:** Set `knockdown_enabled = false`. Hits keep all
-their in-animation life (micro-reactions, pulses, stagger, stumble) but a
+their in-animation life (micro-reactions, pulses, stagger, steps) but a
 would-be knockdown downgrades to stagger — enemies never leave their feet
 until an explicit `trigger_ragdoll()` / `set_persistent(true)` (the death).
 No need to zero `ragdoll_probability` across every ImpactProfile.

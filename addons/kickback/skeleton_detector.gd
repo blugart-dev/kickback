@@ -72,14 +72,26 @@ const MASS_TABLE := {
 
 ## Muscle torque limits (N·m) per rig body's parent joint, see
 ## [member BoneDefinition.muscle_torque]. Anatomical, a little generous on the
-## limbs so a straight arm can be held and swung under gravity.
+## limbs so a straight arm can be held and swung under gravity. The ankle is 150
+## (adult plantarflexion peaks at 150–200): at 60 the two ankles were at ~60 % of their
+## limit just standing with the CoM 9 cm off centre, and a 150 N·s shove toppled the
+## body once the root anchor stopped holding it (0.6.0 balance measurements).
 const MUSCLE_TORQUE_TABLE := {
 	"Hips": 0.0, "Spine": 150.0, "Chest": 150.0, "Head": 30.0,
 	"UpperArm_L": 60.0, "LowerArm_L": 40.0, "Hand_L": 10.0,
 	"UpperArm_R": 60.0, "LowerArm_R": 40.0, "Hand_R": 10.0,
-	"UpperLeg_L": 200.0, "LowerLeg_L": 150.0, "Foot_L": 60.0,
-	"UpperLeg_R": 200.0, "LowerLeg_R": 150.0, "Foot_R": 60.0,
+	"UpperLeg_L": 200.0, "LowerLeg_L": 150.0, "Foot_L": 150.0,
+	"UpperLeg_R": 200.0, "LowerLeg_R": 150.0, "Foot_R": 150.0,
 }
+
+## Feet get a [member BoneDefinition.sole_aligned] box: level with the character,
+## bottom face on the foot IK sole, so the collider rests flat and can carry weight.
+const SOLE_ALIGNED_SLOTS: Array[String] = ["Foot_L", "Foot_R"]
+## Heel length as a fraction of the ankle→toe-end extent (the box is that much longer
+## than the measured extent, and the bone origin sits FOOT_SOLE_OFFSET of the box
+## length from the heel).
+const FOOT_HEEL_RATIO := 0.3
+const FOOT_SOLE_OFFSET := 1.0 / (1.0 + FOOT_HEEL_RATIO)
 
 const SHAPE_TABLE := {
 	"Hips": "box", "Spine": "box", "Chest": "box", "Head": "sphere",
@@ -137,9 +149,11 @@ const BONE_PROPORTIONS := {
 	# Hands: flat, longer than wide (palm + fingers extent)
 	"Hand_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
 	"Hand_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.5, "min_ratio": Vector3(0.133, 0.050, 0.167)},
-	# Feet: narrow, flat, very long (foot + toes extent)
-	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
-	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.28, "offset": 0.65, "min_ratio": Vector3(0.167, 0.083, 0.333)},
+	# Feet: narrow, flat, very long (heel + foot + toes extent), sole-aligned (see
+	# SOLE_ALIGNED_SLOTS): length = extent × (1 + FOOT_HEEL_RATIO), thickness a
+	# fraction of that length, the ankle FOOT_SOLE_OFFSET of the length from the heel.
+	"Foot_L":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.2, "offset": FOOT_SOLE_OFFSET, "min_ratio": Vector3(0.167, 0.083, 0.333)},
+	"Foot_R":      {"depth_is_length": true, "width_ratio": 0.48, "height_ratio": 0.2, "offset": FOOT_SOLE_OFFSET, "min_ratio": Vector3(0.167, 0.083, 0.333)},
 	# Limb capsules
 	"UpperArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
 	"LowerArm_L":  {"radius_ratio": 0.15, "height_ratio": 1.0, "offset": 0.5, "min_radius_ratio": 0.050, "min_height_ratio": 0.167},
@@ -402,6 +416,7 @@ static func create_profile_from_skeleton(
 		bone_def.mass = MASS_TABLE.get(slot, 5.0)
 		bone_def.muscle_torque = MUSCLE_TORQUE_TABLE.get(slot, 50.0)
 		bone_def.shape_type = SHAPE_TABLE.get(slot, "box")
+		bone_def.sole_aligned = slot in SOLE_ALIGNED_SLOTS
 
 		# Estimate shape dimensions from bone length and skeleton geometry
 		_estimate_shape(skeleton, bone_def, child_bone, leaf_extent, skeleton_height)
@@ -736,9 +751,13 @@ static func _estimate_shape(skeleton: Skeleton3D, bone_def: BoneDefinition, chil
 			var min_ratio: Vector3 = props.get("min_ratio", Vector3(0.05, 0.03, 0.05))
 			var min_s: Vector3 = min_ratio * skeleton_height
 			if props.get("depth_is_length", false):
-				# Extremities (feet, hands): Z = full length, X/Y = fractions
+				# Extremities (feet, hands): Z = full length, X/Y = fractions. A
+				# sole-aligned foot adds the heel behind the ankle (the measured
+				# extent is ankle → toe end only).
 				var w_ratio: float = props.get("width_ratio", 0.48)
 				var h_ratio: float = props.get("height_ratio", 0.28)
+				if bone_def.sole_aligned:
+					length *= 1.0 + FOOT_HEEL_RATIO
 				bone_def.box_size = Vector3(
 					maxf(length * w_ratio, min_s.x),
 					maxf(length * h_ratio, min_s.y),

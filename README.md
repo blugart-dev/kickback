@@ -45,8 +45,9 @@ procedural poses) are still ahead.
 
 By difficulty-weighted progress toward that goal, the project is at **~20–25%**. The
 2026-09 **[audit](docs/AUDIT_2026-09-12.md)** revised the earlier ~30% figure: the 0.4.0
-"directed stumble" is a scripted root displacement with foot-IK step targets, not
-balance-driven stepping, so it earns nothing on the self-preservation row. `1.0.0` is
+"directed stumble" was a scripted root displacement with foot-IK step targets, not
+balance-driven stepping, so it earned nothing on the self-preservation row (0.6.0 on
+`develop` replaces it with a balance state and real steps). `1.0.0` is
 reserved for full Euphoria parity. See **[ROADMAP.md](docs/ROADMAP.md)** for the scorecard
 and milestones, and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers mean.
 
@@ -73,7 +74,7 @@ and milestones, and **[VERSIONING.md](docs/VERSIONING.md)** for what the numbers
 - **Protected bones** — mark bones (e.g., legs) that never weaken from hits. Upper body reacts to impacts while legs stay animated and feet stay planted.
 
   <img src="https://github.com/user-attachments/assets/55dddf2f-7df1-4c52-8e48-ef6077061cec" alt="Protected vs unprotected bones — same hit, different result" width="640">
-- **Directed stumble + arm bracing (0.4.0)** — a staggering hit shoves the character along the hit direction with foot-IK catch steps, windmilling arms, and a reach-for-ground on a committed fall. Plainly: the stumble is a *scripted root displacement* (`ActiveRagdollController._update_directed_stumble` moves the character root), not balance-driven stepping — see [SELF_PRESERVATION.md](docs/SELF_PRESERVATION.md) and the [audit](docs/AUDIT_2026-09-12.md) §3.2, which recommends replacing it.
+- **Balance-driven steps (0.6.0, on `develop`)** — one `BalanceState` per tick (CoM, extrapolated CoM, the support polygon from the feet actually in contact) and a `StepBehavior` that lifts and re-plants a foot the animation cannot drag, or steps to the capture point when the XCoM leaves the feet. Nothing moves the character root any more. The 0.4.0 directed stumble (a scripted root displacement) and its arm windmill are gone. A reach-for-ground still breaks a committed fall. See [SELF_PRESERVATION.md](docs/SELF_PRESERVATION.md); the upright behavior that lets the pelvis stand on the legs alone is next.
 - **Always-simulated rig** — physics bodies never freeze, springs are always active. Hit reactions feel immediate with no startup delay. Gravity scales with spring strength: `RagdollTuning.gravity_scale` (default 1.0) × (1 − strength), so a limp ragdoll falls at real gravity.
 - **Skeleton auto-detection** — `SkeletonDetector` maps humanoid bones by name tokens plus position in the bone hierarchy. Verified in the test suite against Mixamo (`mixamorig:` / `mixamorig_`), Blender Rigify DEF bones, the Unreal Engine 5 Mannequin, generic `Hips/Spine/Chest/Neck/Head` rigs, and single-spine-bone rigs (no Chest: the head and arm joints re-parent to the nearest torso body). Anything else: author a `RagdollProfile`.
 - **Animation-agnostic** — works with AnimationPlayer, AnimationTree, or any system that drives Skeleton3D bone poses. Controllers emit signals; animation is the user's responsibility.

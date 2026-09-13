@@ -48,9 +48,15 @@ var _foot_mask_r: int = 0
 var _collision_disabled: bool = false
 
 # Stagger foot pinning
-var _stagger_pinning: bool = false
-var _pin_pos_l: Vector3 = Vector3.ZERO
+var _pin_pos_l: Vector3 = Vector3.ZERO  # lock position of the left foot (valid while _lock_l)
 var _pin_pos_r: Vector3 = Vector3.ZERO
+var _lock_l: bool = false
+var _lock_r: bool = false
+var _step_lift_height: float = 0.08
+## Horizontal whole-body target shift (world XZ in .x/.z) asked for by the upright
+## behavior: every bone's target moves by it while the planted feet stay, so the legs
+## are solved from a shifted pelvis to the same feet — the body leans back over them.
+var _body_shift: Vector3 = Vector3.ZERO
 
 # Stumble stepping (0.4.0 Self-Preservation): animate a pinned foot's target from
 # its current position to a step goal over a duration, then hold (the foot is now
@@ -167,21 +173,21 @@ func process(delta: float) -> void:
 		# masks back — otherwise a foot masked to 0 by an earlier solve stays that way.
 		reset()
 		return
+	_advance_steps(delta)
 	_disable_foot_collision()
-	_solve_ik(delta, false)
+	_solve_ik(delta)
 
 
-# ── STAGGER state: pin feet or blend out ───────────────────────────────────
+# ── STAGGER state: lock both feet (anti-slide) or blend out ────────────────
 
 func begin_stagger() -> void:
 	if not _initialized or not _tuning.foot_ik_stagger_pin:
 		return
-	# Capture current foot body positions as pin targets
+	# Lock both feet where they stand so the upper body can wobble on planted feet.
 	if _foot_body_l:
-		_pin_pos_l = _foot_body_l.global_position
+		set_foot_lock(_foot_l, _foot_body_l.global_position)
 	if _foot_body_r:
-		_pin_pos_r = _foot_body_r.global_position
-	_stagger_pinning = true
+		set_foot_lock(_foot_r, _foot_body_r.global_position)
 
 
 func process_stagger(delta: float) -> void:
@@ -190,41 +196,94 @@ func process_stagger(delta: float) -> void:
 	if not _tuning.foot_ik_enabled:
 		reset()  # see process(): a runtime toggle-off must restore the foot masks
 		return
-	if not _stagger_pinning:
+	if not (_lock_l or _lock_r):
 		_blend_out(delta)
 		return
 	_advance_steps(delta)
 	_disable_foot_collision()
 	_boost_leg_strength()
-	_solve_ik(delta, true)
+	_solve_ik(delta)
 
 
 func end_stagger() -> void:
-	_stagger_pinning = false
+	clear_foot_lock(_foot_l)
+	clear_foot_lock(_foot_r)
 	_clear_steps()
 
 
-# ── Stumble stepping (0.4.0 Self-Preservation) ─────────────────────────────
+# ── Foot locks + steps (the balance layer's hands on the feet, 0.6.0) ──────
 
-## Starts a stumble recovery step: the foot named [param foot_rig] swings from its
-## current pinned position to [param target] (a world-space ground-plane goal) over
-## [param duration] seconds, with a lift arc, then stays planted there. The controller
-## decides when, which foot, and where (the directed stumble); this just animates the
-## foot pin.
-## Requires stagger pinning to be active (the foot must be pinned to move it).
-## Returns true if the step started, false if it can't (not pinning, or the foot
-## isn't one of this rig's two feet).
-func begin_stumble(foot_rig: String, target: Vector3, duration: float) -> bool:
-	if not _initialized or not _stagger_pinning:
+## Locks a foot's IK target to [param world_pos] (XZ; the solver ground-snaps Y): the
+## leg no longer chases the animation's foot spot but holds the foot where it stands,
+## so a load-bearing foot is not dragged against friction. Set by [StepBehavior] (and
+## by [method begin_stagger] for both feet); released by [method clear_foot_lock].
+func set_foot_lock(foot_rig: String, world_pos: Vector3) -> void:
+	if foot_rig == _foot_l:
+		_pin_pos_l = world_pos
+		_lock_l = true
+	elif foot_rig == _foot_r:
+		_pin_pos_r = world_pos
+		_lock_r = true
+
+
+func clear_foot_lock(foot_rig: String) -> void:
+	if foot_rig == _foot_l:
+		_lock_l = false
+		_step_active_l = false
+		_step_lift_l = 0.0
+	elif foot_rig == _foot_r:
+		_lock_r = false
+		_step_active_r = false
+		_step_lift_r = 0.0
+
+
+## Sets the horizontal whole-body target shift (world; .y ignored). See _body_shift.
+func set_body_shift(shift: Vector3) -> void:
+	_body_shift = Vector3(shift.x, 0.0, shift.z)
+
+
+func get_body_shift() -> Vector3:
+	return _body_shift
+
+
+func is_foot_locked(foot_rig: String) -> bool:
+	if foot_rig == _foot_l:
+		return _lock_l
+	if foot_rig == _foot_r:
+		return _lock_r
+	return false
+
+
+## The lock position of a locked foot (its own position when not locked).
+func get_foot_lock(foot_rig: String) -> Vector3:
+	if foot_rig == _foot_l:
+		return _pin_pos_l if _lock_l else (_foot_body_l.global_position if _foot_body_l else Vector3.ZERO)
+	if foot_rig == _foot_r:
+		return _pin_pos_r if _lock_r else (_foot_body_r.global_position if _foot_body_r else Vector3.ZERO)
+	return Vector3.ZERO
+
+
+## Starts a step: [param foot_rig] swings from where it stands (it is locked there if
+## it was not) to [param target] (a world-space ground-plane goal) over
+## [param duration] seconds with a [param lift]-metre arc, then stays locked at the
+## goal. The caller ([StepBehavior]) decides when, which foot and where. Returns false
+## for a foot that is not one of this rig's two.
+func begin_step(foot_rig: String, target: Vector3, duration: float, lift: float) -> bool:
+	if not _initialized:
 		return false
 	_step_duration = maxf(duration, 0.01)
-	if foot_rig == _foot_l:
+	_step_lift_height = maxf(lift, 0.0)
+	if foot_rig == _foot_l and _foot_body_l:
+		if not _lock_l:
+			set_foot_lock(_foot_l, _foot_body_l.global_position)
 		_step_from_l = _pin_pos_l
 		_step_to_l = target
 		_step_t_l = 0.0
 		_step_active_l = true
 		return true
-	if foot_rig == _foot_r:
+	if foot_rig == _foot_r and _foot_body_r:
+		if not _lock_r:
+			set_foot_lock(_foot_r, _foot_body_r.global_position)
 		_step_from_r = _pin_pos_r
 		_step_to_r = target
 		_step_t_r = 0.0
@@ -238,28 +297,53 @@ func is_stepping() -> bool:
 	return _step_active_l or _step_active_r
 
 
-## Advances any active step, moving the foot's pin target from→to over the step
-## duration with a smoothstep ease, then planting it at the goal.
+func is_foot_stepping(foot_rig: String) -> bool:
+	if foot_rig == _foot_l:
+		return _step_active_l
+	if foot_rig == _foot_r:
+		return _step_active_r
+	return false
+
+
+## Advances any active step: the foot's lock travels from→to over the step duration
+## with a smoothstep ease under a sine lift arc, then HOVERS at the goal (a little lift,
+## unloaded) until the physical foot has caught up within STEP_LAND_RADIUS or the hold
+## times out — the joint motors lag the target by ~10 ticks, and a foot that touches
+## down short is immediately loaded and friction-pinned there. On landing the lock is
+## snapped to where the foot actually is (never a spot it did not reach).
 func _advance_steps(delta: float) -> void:
-	# Lift height arc: the swinging foot rises and falls (sin over the step) so it
-	# STEPS over the ground instead of sliding across it.
-	var lift_h: float = _tuning.stumble_step_lift
+	var lift_h: float = _step_lift_height
 	if _step_active_l:
-		_step_t_l = minf(_step_t_l + delta / _step_duration, 1.0)
-		_pin_pos_l = _step_from_l.lerp(_step_to_l, smoothstep(0.0, 1.0, _step_t_l))
-		_step_lift_l = sin(_step_t_l * PI) * lift_h
-		if _step_t_l >= 1.0:
-			_pin_pos_l = _step_to_l
+		_step_t_l += delta / _step_duration
+		var t := minf(_step_t_l, 1.0)
+		_pin_pos_l = _step_from_l.lerp(_step_to_l, smoothstep(0.0, 1.0, t))
+		_step_lift_l = sin(t * PI) * lift_h if t < 1.0 else lift_h * STEP_HOVER_LIFT
+		if t >= 1.0 and _foot_body_l and (_landed(_foot_body_l, _step_to_l) or _step_t_l >= STEP_HOLD_MAX):
+			_pin_pos_l = _foot_body_l.global_position
 			_step_active_l = false
 			_step_lift_l = 0.0
 	if _step_active_r:
-		_step_t_r = minf(_step_t_r + delta / _step_duration, 1.0)
-		_pin_pos_r = _step_from_r.lerp(_step_to_r, smoothstep(0.0, 1.0, _step_t_r))
-		_step_lift_r = sin(_step_t_r * PI) * lift_h
-		if _step_t_r >= 1.0:
-			_pin_pos_r = _step_to_r
+		_step_t_r += delta / _step_duration
+		var t := minf(_step_t_r, 1.0)
+		_pin_pos_r = _step_from_r.lerp(_step_to_r, smoothstep(0.0, 1.0, t))
+		_step_lift_r = sin(t * PI) * lift_h if t < 1.0 else lift_h * STEP_HOVER_LIFT
+		if t >= 1.0 and _foot_body_r and (_landed(_foot_body_r, _step_to_r) or _step_t_r >= STEP_HOLD_MAX):
+			_pin_pos_r = _foot_body_r.global_position
 			_step_active_r = false
 			_step_lift_r = 0.0
+
+
+## The physical foot is within STEP_LAND_RADIUS (XZ) of the step goal.
+static func _landed(foot: RigidBody3D, goal: Vector3) -> bool:
+	return Vector2(foot.global_position.x - goal.x, foot.global_position.z - goal.z).length() <= STEP_LAND_RADIUS
+
+
+## A step counts as landed when the foot is this close (m, XZ) to its goal.
+const STEP_LAND_RADIUS := 0.05
+## Lift (fraction of the step lift) the foot hovers at while waiting to arrive.
+const STEP_HOVER_LIFT := 0.3
+## The hover gives up after this many step durations (the foot is planted where it is).
+const STEP_HOLD_MAX := 2.5
 
 
 func _clear_steps() -> void:
@@ -286,14 +370,16 @@ func reset() -> void:
 	_ik_weight_l = 0.0
 	_ik_weight_r = 0.0
 	_pelvis_offset = 0.0
-	_stagger_pinning = false
+	_body_shift = Vector3.ZERO
+	_lock_l = false
+	_lock_r = false
 	_clear_steps()
 	_restore_foot_collision()
 
 
 # ── Shared IK computation ─────────────────────────────────────────────────
 
-func _solve_ik(delta: float, use_pins: bool) -> void:
+func _solve_ik(delta: float) -> void:
 	var sg := _skeleton.global_transform
 	var root_y := _character_root.global_position.y
 
@@ -309,12 +395,10 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	var lower_r := _anim_global(_bone_idx[_lower_r], sg)
 	var foot_r := _anim_global(_bone_idx[_foot_r], sg)
 
-	# Foot XZ source: animation (NORMAL) or pinned positions (STAGGER)
-	var foot_xz_l := Vector2(foot_l.origin.x, foot_l.origin.z)
-	var foot_xz_r := Vector2(foot_r.origin.x, foot_r.origin.z)
-	if use_pins:
-		foot_xz_l = Vector2(_pin_pos_l.x, _pin_pos_l.z)
-		foot_xz_r = Vector2(_pin_pos_r.x, _pin_pos_r.z)
+	# Foot XZ source per foot: its lock (where it stands / where its step is going)
+	# when locked, else the animation's foot spot.
+	var foot_xz_l := Vector2(_pin_pos_l.x, _pin_pos_l.z) if _lock_l else Vector2(foot_l.origin.x, foot_l.origin.z)
+	var foot_xz_r := Vector2(_pin_pos_r.x, _pin_pos_r.z) if _lock_r else Vector2(foot_r.origin.x, foot_r.origin.z)
 
 	# Ground raycasts from hip height at foot XZ positions
 	var ray_above := _tuning.foot_ik_ray_above_hip
@@ -380,13 +464,14 @@ func _solve_ik(delta: float, use_pins: bool) -> void:
 	var target_pelvis: float = clampf(deepest, -_tuning.foot_ik_max_pelvis_drop, 0.0) if deepest < INF else 0.0
 	_pelvis_offset = lerpf(_pelvis_offset, target_pelvis,
 		1.0 - exp(-_tuning.foot_ik_pelvis_blend_speed * delta))
-	var ps := Vector3(0, _pelvis_offset, 0)
+	var ps := Vector3(_body_shift.x, _pelvis_offset, _body_shift.z)
 
-	# Full-body shift. Reuse the persistent override buffer and the per-solve
-	# anim-global cache (hip/leg bones were already cached above).
+	# Full-body shift (the pelvis drop and the upright behavior's lean). Reuse the
+	# persistent override buffer and the per-solve anim-global cache (hip/leg bones
+	# were already cached above).
 	var overrides := _overrides_buf
 	overrides.clear()
-	if absf(_pelvis_offset) > 0.001:
+	if absf(_pelvis_offset) > 0.001 or _body_shift.length_squared() > 1e-8:
 		for rig_name: String in _spring.get_all_bone_names():
 			var bi: int = _spring.get_bone_idx(rig_name)
 			if bi >= 0:
