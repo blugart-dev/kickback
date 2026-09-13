@@ -49,10 +49,15 @@ func test_rig_builds_all_bodies():
 func test_rig_builds_all_joints():
 	var h = await _spawn()
 	var joints := 0
+	var world_joints := 0
 	for child in h.rig_builder.get_children():
 		if child is Generic6DOFJoint3D:
-			joints += 1
+			if (child as Generic6DOFJoint3D).name.ends_with("_anchor_motor"):
+				world_joints += 1  # the muscle layer's root anchor joint (JOINT_MOTOR mode)
+			else:
+				joints += 1
 	assert_eq(joints, 15, "15 Generic6DOFJoint3D joints connect the 16 bodies")
+	assert_eq(world_joints, 1 if h.spring.is_motor_mode() else 0, "one world joint drives the root in JOINT_MOTOR mode")
 
 
 func test_bodies_snap_to_bone_globals():
@@ -123,11 +128,12 @@ func test_rig_survives_moving_character_root():
 		var q := leg.global_basis.get_rotation_quaternion()
 		travelled += q.angle_to(prev)
 		prev = q
-	# The active spring immediately lerps the commanded velocity back toward
+	# The active muscle immediately pulls the commanded velocity back toward
 	# its own (near-zero-error) target, so only a fraction of it integrates —
-	# ~0.17 rad measured. The regression pins ~0.000 rad exactly, so any
-	# clearly-nonzero travel discriminates.
-	assert_gt(travelled, 0.05,
+	# ~0.17 rad measured with the velocity resolver, ~0.05 rad with the joint
+	# motors (the joint solve cancels most of it). The regression pins ~0.000
+	# rad exactly, so any clearly-nonzero travel discriminates.
+	assert_gt(travelled, 0.02,
 		"body orientation integrates while the root moves every frame")
 
 

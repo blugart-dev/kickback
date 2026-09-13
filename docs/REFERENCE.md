@@ -102,6 +102,119 @@ frames" below):
   the rig is built — before, a physics-mode player hasn't ticked and the joints would be
   centred on the rest pose).
 
+## Muscle layer — JOINT_MOTOR mode (0.5.0)
+
+`RagdollTuning.muscle_mode = MuscleMode.JOINT_MOTOR` (**the default since 0.5.0**) swaps
+the velocity overwrite above for **torque-bounded joint motors** while keeping the same
+command. `VELOCITY_OVERWRITE` is the untouched 0.4.x path (bit-identical), kept for
+comparison and for projects that depend on its exact tracking.
+
+**Per jointed body, every physics tick** (`SpringResolver._drive_joint_motor`):
+
+```
+A   = parent.basis * frame_parent          # the joint limit frame on the parent (world)
+B   = child.basis  * frame_child           # the same frame carried by the child
+PA  = parent_target.basis * frame_parent   # animation (or IK override) targets
+CA  = child_target.basis  * frame_child
+R_rel = A^-1 * B                           # current  parent→child rotation
+R_tgt = PA^-1 * CA                         # target   parent→child rotation
+err   = axis_angle(R_tgt * R_rel^-1)       # rotation vector, frame A, settle deadband applied
+ff    = axis_angle(R_tgt * R_tgt_prev^-1) / dt * spring_feed_forward
+w     = clamp(err * muscle_gain / dt + ff, muscle_max_angular_velocity)
+motor.target = -( w.x, (R_rel^-1 * w).y, (R_rel^-1 * w).z )   # see "frames" below
+motor.force_limit = BoneDefinition.muscle_torque * muscle_strength_scale * ratio ^ muscle_strength_curve
+                    where ratio = strength / base_strength (root: muscle_root_torque * hold(ratio))
+```
+
+- **Strength is a torque.** The strength ratio maps to the motor force limit through
+  `muscle_strength_curve` (default 0.5, i.e. √ratio): the hit / stagger / fatigue
+  reductions were tuned as blend fractions, and as raw torque fractions the 10 % stagger
+  floor collapsed the character into a ragdoll; √ turns it into 32 % torque — visibly
+  weak, still standing. Limp (ratio 0) is still zero torque and full strength is still
+  full torque. `strength_map` / `default_spring_strength` no longer set stiffness in this
+  mode — the ratio is what matters.
+- **The root is balance, not muscle.** The pelvis is driven by a limit-free
+  `Generic6DOFJoint3D` between it and a **kinematic anchor body** (`<Root>_anchor`, a
+  static RigidBody3D with no shape) that the resolver teleports every tick to the root's
+  (foot-IK-shifted) animation target. The joint carries both motors: the angular motor
+  (`muscle_root_torque`, 400 N·m) for orientation and the LINEAR motor
+  (`muscle_root_force`, 2500 N) for position — target velocity = position error × 60 Hz
+  × `muscle_root_pin` past the settle deadband, plus the target's own motion, in the
+  anchor's frame. Neither is scaled by `muscle_strength_scale`; both stay at full
+  authority while the bone has any real strength (`_root_hold_factor`: full above 5 %
+  ratio, fading to zero below) and release when limp. The anchor never leads the pelvis
+  by more than `ROOT_ANCHOR_MAX_ANGLE` (1 rad) / `ROOT_ANCHOR_MAX_DISTANCE` (0.5 m) and
+  sits ON the pelvis while it is limp, so the joint's relative rotation — what Jolt's
+  swing-twist motor axes are conditioned on — is always small: with a fixed world frame
+  a pelvis lying on the ground was 90°+ from its frame, the axes degenerated and the
+  get-up drove the character to the wrong stable point (upside down); re-anchoring by
+  rebuilding the constraint broke every other joint of the rig. Three earlier root
+  designs were measured and rejected on the demo idle: a velocity pin on the pelvis
+  (diluted by the joint solve: 3.5 cm low, bouncing at 3 Hz — the editor "wobble", feet
+  clipping the floor), a velocity shift broadcast to every body (cancels gravity for all
+  of them, discards impulses applied between ticks), and the fixed world joint above. As
+  a bounded force inside the solver the pelvis sits within 1 mm of its target with no
+  bounce, a hit above ~2500 N moves the character, and after a ragdoll on the ground the
+  character gets up upright with ~2° error. The balance layer (0.6.0) replaces this with
+  feet that carry the weight. Consequence: **the balance-driven tip-over
+  (`balance_ragdoll_threshold` → RAGDOLL) is off in JOINT_MOTOR mode** — a held pelvis
+  cannot topple, so a CoM-vs-feet ratio past the threshold means the feet lag the body,
+  not a fall (measured: a staggered character ragdolled from ratio spikes of 1.0–1.5 while
+  standing perfectly well). Falls come from `ragdoll_probability`, pain, or explicit
+  triggers until the balance layer owns the decision.
+- **Limb motors are commanded in Jolt's own swing-twist angle space** (per axis:
+  target angle − body angle, wrapped, × gain / tick + feed-forward), the space the limits
+  are defined and verified in, so the command agrees with what each motor axis moves at
+  any joint angle. The rotation-vector command used first only agreed near rest: after a
+  ragdoll, joints thrown to their limits stalled part-way back with a correctly-signed
+  command that produced no motion.
+- **Gravity stays on** for every jointed body (`gravity_scale`, not scaled by strength);
+  damping is `muscle_angular_damp` / `muscle_linear_damp`.
+- **Frames.** Two engine facts measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`,
+  `tools/bench/ybot_bench.gd BENCH_DIAG=1`): the motor target velocity is **mirrored**
+  (`MOTOR_AXIS_SIGN = -1`, the same convention `JointDefinition.apply_to` compensates on
+  the limits), and the 6DOF angular motor is solved on **swing-twist axes** — the twist
+  axis is the **parent** frame's X, the two swing axes are the **child** frame's Y and Z.
+  Commanding everything in the parent frame left every joint of a real idle 2–4° short
+  on the swing axes; everything in the child frame tripled the twist error.
+- **The root** has no parent joint: entering motor mode attaches it to the world with a
+  limit-free `Generic6DOFJoint3D` (`<Root>_world_motor`, node_a empty = world) whose
+  motor drives the pelvis' world orientation with `muscle_root_torque`; its position
+  keeps the legacy pin scaled by `muscle_root_pin` until the balance layer exists.
+- **Gain is a per-tick fraction** (`muscle_gain`, default 0.10): the stability of a
+  velocity motor under an explicit position loop is set by gain × tick. Measured at 60 Hz
+  on the harness: 0.10 holds within 0.5° and settles a 60° elbow step without ringing;
+  0.15 rings once the pelvis is a bounded motor; 0.20+ limit-cycles on the light arm.
+
+**Torque table** (`SkeletonDetector.MUSCLE_TORQUE_TABLE`, N·m, on the child body of each
+joint): Spine 150, Chest 150, Head 30, UpperArm 60, LowerArm 40, Hand 10, UpperLeg 200,
+LowerLeg 150, Foot 60; root `muscle_root_torque` 400. Physically honest by construction:
+a 3 N·m shoulder cannot hold a horizontal arm (test), 60 N·m can.
+
+**Ybot bench** (`tools/bench/ybot_bench.gd`, idle / react_front / bullet on the hand,
+foot IK on, 2026-09-13):
+
+| Mode | Hz | IDLE mean / max | REACT mean | HIT peak / recover | resolver ms/tick |
+|---|---:|---|---:|---|---|
+| legacy | 60 | 0.78 / 1.65 | 10.1 | 1.3° / 4 ticks | 0.17 |
+| **JOINT_MOTOR** | 60 | **0.94 / 3.54** | 24.5 | **2.4° / 4 ticks** | 0.14 (≈1.4× legacy) |
+| legacy | 120 | 0.86 / 1.40 | 13.1 | 1.2° / 4 | 0.25 |
+| JOINT_MOTOR | 120 | 0.73 / 2.43 | 10.6 | 2.1° / 4 | 0.18 |
+| legacy | 30 | 1.06 / 7.17 | 10.0 | 1.7° / 4 | 0.15 |
+| JOINT_MOTOR, feet off (default) | 30 | 4.85 / 15.5 | 38.1 | never | 0.20 |
+| JOINT_MOTOR, feet colliding | 30 | 3.64 / 19.4 | 40.4 | never (joint wraps) | 0.18 |
+
+Read: at 60 Hz the motor layer matches the legacy cheat on idle under real gravity with
+bounded torques, tracks a violent react clip 1.9× worse (torque-limited, by design:
+with the pelvis now firmly on its target the limbs have to follow the clip's full
+motion), and gives a real hit reaction (3.5× the legacy deflection, muscle recovery in
+4 ticks). At 120 Hz it beats legacy on idle and react. **30 Hz is an open item**: the
+force-driven root brought the default (feet not colliding) from a 15° ring down to 4.9°;
+`foot_ik_disable_foot_collision = false` (feet load-bearing) is the other lever, and the
+hand-hit recovery at 30 Hz still wraps a wrist joint past its limit (Jolt limit
+tunnelling on a light body in a 33 ms step). The resolver tick timing is µs-level and
+noisy on Windows; quiet runs put the motor path at ≈1.2–1.4× the legacy path.
+
 ## Center of mass balance ratio
 
 Computes how off-balance the character is by comparing the mass-weighted center

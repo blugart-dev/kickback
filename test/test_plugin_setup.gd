@@ -138,3 +138,34 @@ func test_status_panel_presets_cover_every_tuning_factory():
 	for factory: String in factories:
 		var tuning = tuning_script.call(factory)  # how the panel's Apply dispatches
 		assert_true(tuning is RagdollTuning, "%s() callable by name and returns a RagdollTuning" % factory)
+
+
+func test_null_profile_and_tuning_resolve_to_defaults_and_ik_initialises():
+	# add_active_rig(root, skeleton) with no profile / tuning: KickbackCharacter must
+	# resolve the defaults itself and hand concrete resources to the controllers —
+	# a null passed through configure() used to strip the controller's roles and
+	# disable foot / arm IK with a warning.
+	var pair := _nested_character()
+	var root: Node3D = pair[0]
+	var skel: Skeleton3D = pair[1]
+	var ground := StaticBody3D.new()
+	var gs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(10, 1, 10)
+	gs.shape = box
+	ground.add_child(gs)
+	ground.position.y = -0.5
+	root.add_child(ground)
+	var nodes := KickbackSetup.add_active_rig(root, skel)
+	var kc: KickbackCharacter = nodes[nodes.size() - 1]
+	var frames := 0
+	while not kc.is_setup_complete() and frames < 60:
+		await get_tree().process_frame
+		frames += 1
+	assert_true(kc.is_setup_complete())
+	assert_not_null(kc.ragdoll_profile, "profile resolved to a concrete resource")
+	assert_not_null(kc.ragdoll_tuning, "tuning resolved to a concrete resource")
+	await wait_physics_frames(3)
+	var ctrl: ActiveRagdollController = nodes[3]
+	assert_eq(ctrl.get_root_rig(), "Hips", "controller roles resolved from the default profile")
+	assert_eq(ctrl.get_foot_rigs().size(), 2, "foot roles resolved (foot IK can initialise)")

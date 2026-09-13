@@ -64,16 +64,25 @@ Spring equilibrium point has coordinate space issues and flipped axes.
 resolver in script instead (Step 4). This is what V-Sekai and Jolt's
 creator recommend.
 
-Note (2026-09, measured by `tools/spike/motor_spike.gd`, see
-[MUSCLE_SPIKE.md](MUSCLE_SPIKE.md)): under Jolt 4.7.2 the 6DOF **motor target
-velocity axes are mirrored** (a +1 rad/s target yields −1 rad/s of child-relative-to-
-parent rotation about each joint-frame axis), and the **angular-spring equilibrium
-point is the inverse relative rotation decomposed with `EULER_ORDER_XYZ`**; the spring
-honours the motor force limit only when `FLAG_ENABLE_MOTOR` is also set. The spring
-(position-motor) path tracks a moving target poorly and degrades with tick rate in
-this binding, so the "do not use" advice above stands for the *springs*; the velocity
-*motors* are the chosen muscle substrate for 0.5.0. Nothing in the plugin uses motors
-yet.
+Measured under Jolt 4.7.2 (`tools/spike/motor_spike.gd`, `tools/bench/ybot_bench.gd`;
+see [MUSCLE_SPIKE.md](MUSCLE_SPIKE.md) and REFERENCE.md "Muscle layer"):
+
+- The 6DOF **motor target velocity is mirrored**: a +1 rad/s target yields −1 rad/s of
+  child-relative-to-parent rotation about each joint-frame axis (the same convention
+  the limits use; `SpringResolver.MOTOR_AXIS_SIGN`).
+- The angular motor is solved on **swing-twist axes**: the twist axis is the X of the
+  **parent's** constraint frame, the swing axes are the Y / Z of the **child's**. A
+  target expressed entirely in one frame is wrong whenever the joint sits away from
+  rest (2–4° per joint on a real idle) — hand each component in its own frame.
+- The **angular-spring equilibrium point** is the *inverse* relative rotation decomposed
+  with `EULER_ORDER_XYZ`; the spring honours the motor force limit only when
+  `FLAG_ENABLE_MOTOR` is also set; it tracks a moving target poorly and degrades with
+  tick rate in this binding. The "do not use" above stands for the *springs*.
+- A joint with an empty `node_a` attaches its body to the world (default
+  `physics/jolt_physics_3d/joints/world_node`); the muscle layer uses one to drive the
+  pelvis' orientation.
+
+`SpringResolver` uses the velocity motors in `RagdollTuning.MuscleMode.JOINT_MOTOR` (0.5.0).
 
 ### Angular motors DO work
 If you need joint-level motors (we don't for the spring resolver approach):

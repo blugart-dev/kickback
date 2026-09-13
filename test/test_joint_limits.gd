@@ -14,6 +14,10 @@ const RigHarness := preload("res://test/helpers/rig_harness.gd")
 
 func _tuning() -> RagdollTuning:
 	var t := RagdollTuning.create_default()
+	# Limit geometry / sign tests: the velocity resolver drives a body exactly to
+	# the far side of a limit; a torque-limited motor pushing into a limit yields
+	# a measured 10-20 deg past it (covered by test_muscle_layer.gd).
+	t.muscle_mode = RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	t.foot_ik_enabled = false
 	return t
 

@@ -8,6 +8,86 @@
 
 ## [Unreleased]
 
+### 0.5.0 candidate — Muscle layer (`feat/muscle-layer`)
+
+**Changed — default muscle mode is `JOINT_MOTOR`.** `RagdollTuning.create_default()` and
+every preset now drive the rig through the joint motors; set
+`muscle_mode = VELOCITY_OVERWRITE` for the 0.4.x behaviour. Two consequences were tuned
+on the way: `muscle_strength_curve` (default 0.5) maps the strength ratio to torque as
+√ratio so the 10 % stagger floor is 32 % torque instead of a collapse, and the root's
+world motor + pin hold at full authority until the bone is limp (they stand in for
+balance; a strength-scaled root let a staggered character topple within 0.3 s).
+
+**Added**
+- **Root driven through a kinematic anchor body** (`<Root>_anchor` + `<Root>_anchor_motor`):
+  the pelvis is joined to a static body the resolver teleports to its target every tick,
+  and the joint's angular (`muscle_root_torque`) and linear (`muscle_root_force`, 2500 N)
+  motors drive it there as bounded forces inside the solver. The anchor leads the pelvis
+  by at most 1 rad / 0.5 m and sits on it while limp, so Jolt's swing-twist motor axes
+  never degenerate. Found and fixed on the way (all user-visible in `shooting_range.tscn`):
+  a velocity pin on the pelvis was diluted by the joint solve (3.5 cm low, bouncing at
+  3 Hz: whole-body wobble, feet clipping the floor); a fixed world joint stood the
+  character up **upside down** after a ragdoll on the ground; re-anchoring by rebuilding
+  that constraint left every limb joint motor inert. After a ragdoll every character now
+  gets up upright with ~2° error. The root's torque and force are not scaled by
+  `muscle_strength_scale` (balance, not muscle).
+- **Limb motors commanded in Jolt's swing-twist angle space** (the limits' space) instead
+  of a rotation vector: joints thrown to their limits by a ragdoll now come back instead
+  of stalling part-way with an inert command.
+- **Balance tip-over off in JOINT_MOTOR mode**: the root's world motors hold the pelvis
+  until limp, so `balance_ragdoll_threshold` → RAGDOLL no longer fires in that mode (a
+  staggered character was ragdolled by CoM-vs-feet spikes of 1.0–1.5 while standing);
+  knockdowns come from `ragdoll_probability` / pain / explicit triggers until 0.6.0's
+  balance layer owns the decision.
+- `KickbackTraceRecorder` (F5 in the demos): per-tick trace of every character to
+  `user://kickback_traces/*.jsonl`; `tools/bench/trace_report.py` summarises sag, bounce
+  frequency, error spikes, ground clipping, root-motor saturation and frame pacing.
+  `tools/bench/scene_probe.gd` loads any demo scene headless and logs the characters with
+  no input (`PROBE_SCENE/MODE/SECONDS/TRACE/ALL_SECONDS`).
+- `RagdollTuning.muscle_mode` (`MuscleMode.JOINT_MOTOR` default / `VELOCITY_OVERWRITE`):
+  in JOINT_MOTOR the SpringResolver executes its command — joint-space rotation error ×
+  `muscle_gain` per tick + feed-forward — through each `Generic6DOFJoint3D` angular
+  motor (Jolt, velocity mode) with `force limit = BoneDefinition.muscle_torque × strength
+  ratio × muscle_strength_scale`. Strength is a torque; gravity stays on for jointed
+  bodies; a limp bone has a zero force limit; hits produce real, bounded reactions. The
+  pelvis is attached to the world by a limit-free joint (`<Root>_world_motor`) whose motor
+  drives its orientation (`muscle_root_torque`), with the legacy position pin scaled by
+  `muscle_root_pin`. New knobs: `muscle_strength_scale`, `muscle_gain`,
+  `muscle_max_angular_velocity`, `muscle_strength_curve`, `muscle_root_pin`,
+  `muscle_root_torque`, `muscle_root_force`, `muscle_angular_damp`, `muscle_linear_damp`.
+- `BoneDefinition.muscle_torque` (N·m) with `SkeletonDetector.MUSCLE_TORQUE_TABLE`
+  defaults (hip 200, knee 150, spine 150, shoulder 60, elbow 40, neck 30, wrist 10,
+  ankle 60); set by `create_profile_from_skeleton` and `create_mixamo_default`.
+- `SpringResolver.is_motor_mode()`, `get_muscle_torque()`, `get_motor_command()`,
+  `get_last_tick_usec()`.
+- `tools/bench/ybot_bench.gd` — the acceptance bench on the real demo character (idle /
+  react_front / bullet on the hand, both modes, `BENCH_HZ`, `BENCH_DIAG`, `BENCH_VARIANT`).
+- `test/test_muscle_layer.gd` (21 tests: wiring, force-limit scaling, limp = zero limit,
+  the pelvis stands within millimetres of its target without bouncing, a character knocked
+  to the ground gets up upright,
+  a motor pushing into a joint limit yields a bounded amount, a stagger stays standing,
+  gravity on, axis sign end to end on identity and anatomical frames, root yaw, hold under
+  gravity, an under-powered shoulder sags, hit deflects and recovers, 30 / 120 Hz holds,
+  ragdoll + recovery in motor mode, runtime mode switch).
+
+**Engine facts measured** (docs/GODOT_CONSTRAINTS.md): motor target axes mirrored; the
+6DOF angular motor is solved on swing-twist axes — twist about the parent frame's X,
+swing about the child frame's Y/Z. Commanding in a single frame leaves every joint of a
+real idle 2–4° short.
+
+**Ybot bench, 60 Hz** (docs/REFERENCE.md "Muscle layer"): idle 0.94° mean / 3.5° max
+under real gravity (legacy 0.78 / 1.57); react_front 24.5° (legacy 10.1, torque-limited
+and per-axis-commanded — see the open items); bullet on the hand 2.4° peak, muscle
+recovery in 4 ticks (legacy erases it: 1.3°); resolver tick ≈1.4× legacy. **30 Hz is an open item** (rings with the
+foot-IK default of non-colliding feet; 3.6° idle with `foot_ik_disable_foot_collision =
+false`; hand-hit recovery wraps a wrist limit).
+
+**Fixed**
+- `KickbackCharacter` resolves a null `ragdoll_profile` / `ragdoll_tuning` to concrete
+  defaults ONCE and hands the same resources to every controller. Passing null through
+  `configure()` used to overwrite the controller's fallback with null, leaving it without
+  roles (foot / arm IK then failed to initialise with a warning).
+
 ### Audit honesty pass — 0.4.1 candidate (branch `audit/honesty-pass`)
 
 Defect + docs pass driven by [docs/AUDIT_2026-09-12.md](docs/AUDIT_2026-09-12.md)

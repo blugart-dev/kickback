@@ -71,7 +71,14 @@ func _ready() -> void:
 		elif sibling is ActiveRagdollController:
 			_active_controller = sibling
 
-	# Distribute configuration to all controllers
+	# Resolve the defaults ONCE (null = Mixamo profile / default tuning) and hand the
+	# same concrete resources to every controller. Passing null through used to
+	# overwrite a controller's own fallback with null in configure(), which left the
+	# ActiveRagdollController without roles (foot / arm IK then failed to initialise).
+	if not ragdoll_profile:
+		ragdoll_profile = RagdollProfile.create_mixamo_default()
+	if not ragdoll_tuning:
+		ragdoll_tuning = RagdollTuning.create_default()
 	if _rig_builder:
 		_rig_builder.configure(ragdoll_profile, ragdoll_tuning)
 	if _rig_sync:

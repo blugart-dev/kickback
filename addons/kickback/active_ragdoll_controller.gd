@@ -431,8 +431,13 @@ func _update_stagger(delta: float) -> void:
 		# Hard cap: if the budget denies the slot, keep fighting in stagger instead
 		# of a full fall — and retry on later frames, so it ragdolls as soon as a
 		# slot frees up.
+		# JOINT_MOTOR mode: the root's world motors hold the pelvis until the bone is
+		# limp, so the character cannot physically topple — a CoM-vs-feet ratio past
+		# the threshold means the feet lag the body, not a fall. The tip-over is the
+		# balance layer's call (docs/PLAN.md 0.6.0), not this heuristic; falls still
+		# come from ragdoll_probability / pain / explicit triggers.
 		if _tuning.knockdown_enabled and balance > _tuning.balance_ragdoll_threshold \
-				and not _stumbling:
+				and not _stumbling and not _spring.is_motor_mode():
 			if _try_acquire_ragdoll_slot():
 				_full_ragdoll()
 				return
@@ -1336,6 +1341,10 @@ func _start_recovery() -> void:
 		_character_root.reset_physics_interpolation()
 
 	_ragdoll_poses = saved_transforms.duplicate()
+	# JOINT_MOTOR: the pelvis lies far from the orientation its world joint was
+	# anchored in — re-anchor before the get-up blend drives it (see
+	# SpringResolver.ROOT_REBASE_ANGLE).
+	_spring.rebase_root_world_joint()
 	recovery_started.emit(face_up)
 
 	# Force skeleton sync to prevent 1-frame visual pop after root teleport

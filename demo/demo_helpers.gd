@@ -147,4 +147,9 @@ static func add_debug_hud(parent: Node) -> StrengthDebugHUD:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(hud)
+	# F5: record every character's per-tick state to user://kickback_traces/ for
+	# offline analysis (tools/bench/trace_report.py) — "I saw it wobble" -> numbers.
+	var rec := KickbackTraceRecorder.new()
+	rec.name = "KickbackTraceRecorder"
+	parent.add_child(rec)
 	return hud
