@@ -428,66 +428,44 @@ var character_forward_sign: int = 1
 @export_range(0.1, 1.0) var foot_ik_stagger_leg_strength: float = 0.4
 
 
-# ── Self-Preservation: Stumble Steps ────────────────────────────────────────
+# ── Balance: Steps ──────────────────────────────────────────────────────────
 
-@export_group("Self-Preservation: Stumble Steps")
-## Enable the directed stumble: a staggering hit drifts the character root along
-## the hit direction ([member stumble_push_speed]) and the trailing foot steps to
-## follow. NOTE: this is a scripted displacement, not balance-driven stepping
-## (see docs/AUDIT_2026-09-12.md). Requires foot IK (the step is executed through
-## the foot IK solver). 0.4.0.
-@export var stumble_enabled: bool = true
-## Horizontal distance (meters) the root drifts between consecutive stumble
-## steps, and the distance ahead of the hips each step lands.
-@export_range(0.0, 1.0) var stumble_step_length: float = 0.24
-## Time for the stepping foot to travel from its current position to the step
-## target (seconds).
-@export_range(0.05, 1.0) var stumble_step_duration: float = 0.24
-## Maximum number of catch-steps in one stagger before giving up and ragdolling.
-@export_range(1, 5) var stumble_max_steps: int = 3
-## Spring strength (as a fraction of each bone's base) applied WHILE stumbling. A
-## real stumble tenses the body and steps — not a foot reposition on a limp ragdoll —
-## so during the stumble the springs stiffen toward this level so the body stays
-## upright as it lurches. Transient (only while [member _stumbling]); relaxes to the
-## stagger floor when the stumble ends. Higher = stiffer/more upright; too high reads
-## as a snap. 0.0 = no stiffening.
-@export_range(0.0, 1.0) var stumble_brace_strength: float = 0.6
-## Initial knockback speed (m/s) of the directed stumble: on a staggering hit the
-## character root drifts in the hit direction at this speed, so the stumble visibly
-## DISPLACES the character (you stumble where you're shoved) rather than shuffling in
-## place. Decays via [member stumble_push_decel]. 0.0 = no displacement (in-place).
-@export_range(0.0, 6.0) var stumble_push_speed: float = 2.3
-## Deceleration (m/s²) of the knockback drift — how fast the stumble momentum is
-## absorbed. Total stumble distance ≈ speed² / (2·decel). Higher = shorter stumble.
-@export_range(0.5, 20.0) var stumble_push_decel: float = 7.0
-## Peak height (meters) the swinging foot lifts during a stumble step, so it steps
-## over the ground instead of sliding across it. 0.0 = no lift (slides).
-@export_range(0.0, 0.3) var stumble_step_lift: float = 0.1
+@export_group("Balance: Steps")
+## Enable balance-driven stepping ([StepBehavior]): a foot swings to the capture point
+## when the extrapolated CoM reaches the edge of the feet, and a loaded foot standing
+## far from its animation spot is lifted and re-planted there. Requires foot IK (the
+## swing is executed through the foot IK solver). Replaces the 0.4.0 directed stumble,
+## which teleported the character root. 0.6.0.
+@export var steps_enabled: bool = true
+## [member BalanceState.ratio] at which a balance step fires (1.0 = the capture point is
+## exactly at the edge of the feet; a quiet idle reads ~0.4).
+@export_range(0.5, 1.5) var step_trigger_ratio: float = 0.9
+## Below this ratio the character is calm enough to re-plant a mis-placed foot. Kept
+## just under [member step_trigger_ratio]: with the feet displaced the CoM sits near
+## the edge of the (shifted) polygon, and a stricter gate deadlocks the re-plant that
+## would bring the feet back under it (measured 0.63–0.65 after the react clip).
+@export_range(0.0, 1.5) var step_calm_ratio: float = 0.85
+## Horizontal distance (m) between a loaded foot and its animation spot beyond which
+## the foot is re-planted (lifted and stepped there) instead of dragged.
+@export_range(0.02, 0.5) var step_replant_distance: float = 0.10
+## Time (s) for the swinging foot to travel from where it stands to its landing spot.
+@export_range(0.05, 1.0) var step_duration: float = 0.22
+## Peak height (m) of the swing arc, so the foot steps over the ground.
+@export_range(0.0, 0.3) var step_lift: float = 0.08
+## Longest single step (m) from where the foot stands.
+@export_range(0.1, 1.5) var step_max_length: float = 0.6
+## Closest the landing spot may come to the stance foot (m) — keeps the legs uncrossed.
+@export_range(0.0, 0.4) var step_min_stance: float = 0.12
 
 
 # ── Self-Preservation: Arm Bracing ──────────────────────────────────────────
 
 @export_group("Self-Preservation: Arm Bracing")
-## Enable procedural arm bracing: during a directed stumble the arms windmill (sweep
-## in wide vertical circles) to fight for balance — the active upper-body layer on top
-## of the loose flailing. Requires the arm IK solver (arm-chain roles). 0.4.0.
+## Enable the arm IK solver (the protective reach-for-ground on a committed fall; the
+## arm-balance behavior of 0.6.0 will use it too). Requires the arm-chain roles. The
+## 0.4.0 windmill (a scripted phase circle during the directed stumble) was removed in
+## 0.6.0 together with the stumble.
 @export var arm_brace_enabled: bool = true
-## How strongly the windmill drives the arms (0..1). This is a TENDENCY layered over
-## the loose physics pose, not a takeover: lower keeps the arms reactive and organic
-## (they only lean toward the windmill), 1.0 pins them rigidly to the geometric circle.
-@export_range(0.0, 1.0) var arm_brace_weight: float = 0.5
-## Radius (meters) of the windmill circle each hand sweeps. Larger = bigger, wilder
-## arcs. Kept within the arm's reach so the solve never overstretches.
-@export_range(0.0, 0.5) var arm_windmill_radius: float = 0.24
-## Outward offset (meters) of each windmill circle from the shoulder, along the body's
-## lateral axis, so the arms circle out to their own sides instead of across the chest.
-@export_range(0.0, 0.5) var arm_windmill_lateral: float = 0.16
-## Vertical offset (meters) of each windmill circle's center above the shoulder, so the
-## arms sweep up high (a raised, balancing flail) rather than down at the hips.
-@export_range(-0.3, 0.5) var arm_windmill_height: float = 0.1
-## Angular speed (rad/s) of the windmill sweep. Higher = faster spinning arms. The two
-## arms sweep in opposite phase, so this also sets how fast they alternate.
-@export_range(0.0, 30.0) var arm_windmill_speed: float = 5.0
 ## Blend rate (per second) the arm IK weight ramps in/out over. Higher = the arms snap
 ## into the brace faster; lower = they ease in.
 @export_range(1.0, 40.0) var arm_brace_blend_speed: float = 8.0
@@ -585,6 +563,16 @@ enum MuscleMode {
 ## feet-load-bearing lever of docs/PLAN.md 0.6.0: with the anchor carrying the weight
 ## the feet touched the floor with ~2 % of it.
 @export_range(0.0, 1.0) var muscle_root_support: float = 0.0
+## Share of [member muscle_root_force] the root position motor may spend SIDEWAYS (the
+## ground plane). 1 (default) = the balance stand-in: the pelvis is dragged to the
+## animation's position with up to the full force, so the standing character cannot
+## drift or topple — and cannot shift its weight either, so a balance step cannot
+## unload its swing foot (measured: the foot lifts 2 cm and slides). 0 = the pelvis
+## stands where the legs put it; measured on the ybot idle WITHOUT an upright /
+## ankle-strategy behavior: 7.2° idle error, constant phantom steps, a 150 N·s shove
+## walks the character off. Goes to 0 when the upright behavior lands (docs/PLAN.md
+## 0.6.0). The controller raises both shares to 1 for the canned get-up.
+@export_range(0.0, 1.0) var muscle_root_hold: float = 1.0
 ## Angular damping applied to jointed bodies in JOINT_MOTOR mode (the motor supplies
 ## the tracking damping; this only bleeds free rotation).
 @export_range(0.0, 10.0) var muscle_angular_damp: float = 0.5

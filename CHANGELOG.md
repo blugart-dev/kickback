@@ -95,6 +95,60 @@ PROBE_ACTION=ragdoll` now prints a get-up timeline (at `recovery_finished`, +1 s
   self-collision on and passes inside with it off. `test_rig_fidelity.gd` pins its legacy
   numbers with `self_collision = false` explicitly.
 
+**Step 4 — the behavior layer and `StepBehavior`; the directed stumble is gone.**
+
+**Added**
+- `KickbackBehavior` / `BehaviorContext` (`addons/kickback/behaviors/`): a behavior reads
+  the shared `BalanceState` every tick and answers with stiffness floors and pose
+  targets; the controller runs a fixed ordered list in NORMAL / STAGGER
+  (`get_behaviors()`), the 0.7.0 arbiter replaces the order with priorities.
+- `StepBehavior`: **balance steps** (the XCoM at the edge of the feet for 4 consecutive
+  ticks → the fall-side foot swings to the capture point, ≥ `step_min_stance` from the
+  stance foot, ≤ `step_max_length`) and **re-plants** (calm, and a loaded foot more than
+  `step_replant_distance` from its animation spot → the less loaded foot is lifted and
+  stepped there). Steps are lifted arcs the foot IK solver animates as the foot's target
+  (`FootIKSolver.begin_step`), then a hover at the goal until the physical foot arrives
+  within 5 cm (the motors lag ~10 ticks; a foot that lands short is friction-pinned). The
+  leg chains and pelvis are asked to full base strength while a foot is in flight. Emits
+  `step_started(foot_rig, target)`.
+- **Foot locks** (`FootIKSolver.set_foot_lock` / `clear_foot_lock` / `is_foot_locked`): a
+  load-bearing foot cannot be dragged by the animation, so a contacting foot that drifted
+  more than 5 cm from its spot is held where it stands (its IK target = its own position)
+  and released when the spot returns or the foot leaves the ground. The stagger's
+  anti-slide pin is the same lock on both feet. Motor mode only — the legacy resolver's
+  numbers are unchanged.
+- `RagdollTuning` "Balance: Steps": `steps_enabled`, `step_trigger_ratio` 0.9,
+  `step_calm_ratio` 0.85, `step_replant_distance` 0.10, `step_duration` 0.22, `step_lift`
+  0.08, `step_max_length` 0.6, `step_min_stance` 0.12. `muscle_root_hold` (sideways share
+  of the anchor's force, default **1** — see below).
+- Tooling: `tools/bench/step_probe.gd` (re-plant after a 0.25 m root move, a 150 N·s
+  shove, or `PROBE_SCENARIO=react`: per-foot mismatch / contact / lock / step / lift
+  timeline); the bench gained a SHOVE line (steps, ratio, pelvis and root displacement)
+  and a second SETTLE second.
+
+**Removed** (docs/PLAN.md removal list)
+- The 0.4.0 directed stumble: `_update_directed_stumble` (the root teleport),
+  `_do_directed_step`, `_apply_stumble_brace`, the arm windmill (`_update_arm_windmill`,
+  `_drive_windmill_arm`), the `stumble_*` / `arm_windmill_*` / `arm_brace_weight` knobs,
+  the `stumble_step_started` signal (→ `step_started`), `test_stumble_step.gd`.
+  `grep "global_position +=" addons/` is empty. The fall reach now takes the hit
+  direction. `SELF_PRESERVATION.md` rewritten as the behavior spec.
+
+**Measured** (ybot, 60 Hz, `tools/bench/step_probe.gd` / `ybot_bench.gd`)
+- Root moved 0.25 m with the feet planted: both feet re-planted by 0.83 s, legs within
+  1.5° at 1 s. After `react_front`: 5 steps over ~1.7 s, legs within 3° by 2.8 s; bench
+  SETTLE 10.4° in the first second, 6.2° in the second (was 9.9° flat).
+- 150 N·s shove with the default `muscle_root_hold` = 1: 2–4 steps, the pelvis moves
+  1–2 cm (the anchor arrests it), ratio back to ~0.6 in 2 s.
+- **`muscle_root_hold` stays 1 for now.** With it at 0 and no upright behavior the idle
+  is unstable (7.2° / 51° idle error, constant steps, a 150 N·s shove walks the character
+  off): torque-limited leg motors with a ~10-tick lag cannot hold an 80 kg inverted
+  pendulum by tracking a fixed pose. The `UprightBehavior` (ankle / hip strategy on the
+  XCoM) is the next step and takes the hold to 0 with measurements.
+- Harness skeleton: ankles 5 cm behind the leg line so the synthetic body stands
+  mid-foot (it stood on its heels: ratio 0.5–0.9 while still); `straight_legs` option
+  for the knee-fallback tests.
+
 **Step 3 — `BalanceState`.** One balance measurement per physics tick, read by every
 decision (REFERENCE.md "Balance state").
 

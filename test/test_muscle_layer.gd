@@ -25,7 +25,7 @@ func _tuning(motor: bool = true) -> RagdollTuning:
 	var t := RagdollTuning.create_default()
 	t.foot_ik_enabled = false
 	t.stagger_sway_strength = 0.0
-	t.stumble_enabled = false
+	t.steps_enabled = false
 	t.arm_brace_enabled = false
 	t.muscle_mode = RagdollTuning.MuscleMode.JOINT_MOTOR if motor else RagdollTuning.MuscleMode.VELOCITY_OVERWRITE
 	# These tests characterise the MUSCLES, mostly on a groundless rig: the root anchor
@@ -306,7 +306,7 @@ func test_stagger_stays_on_its_feet_and_recovers_in_motor_mode():
 	# weak but standing. Linear torque collapsed the character into a ragdoll.
 	var t := _tuning()
 	t.stagger_duration = 1.0
-	t.stumble_enabled = false
+	t.steps_enabled = false
 	var h = await _spawn(t, true)
 	await wait_physics_frames(5)
 	watch_signals(h.controller)
@@ -332,9 +332,9 @@ func test_knocked_down_character_gets_up_upright():
 	var h = await _spawn(t, true)
 	await wait_physics_frames(10)
 	var hips: RigidBody3D = h.get_body("Hips")
-	hips.apply_impulse(Vector3(60.0, 0.0, 20.0))  # knock it over so it lands lying
+	hips.apply_impulse(Vector3(90.0, 0.0, 30.0))  # knock it over so it lands lying
 	h.controller.trigger_ragdoll()
-	await wait_physics_frames(45)
+	await wait_physics_frames(60)
 	assert_lt(hips.global_basis.y.dot(Vector3.UP), 0.8, "the character actually went down")
 	var recovered: bool = await wait_for_signal(h.controller.recovery_finished, 12.0)
 	assert_true(recovered, "recovery finished")

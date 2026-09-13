@@ -282,6 +282,32 @@ the new scale: `balance_stagger_threshold` 0.8, `balance_recovery_threshold` 0.6
 foot in contact) → `has_support = false`, ratio 0. The F3 HUD draws the hull on the
 support plane, the CoM diamond and the XCoM ring with its margin in cm.
 
+### Behavior layer (0.6.0)
+
+`KickbackBehavior` (`addons/kickback/behaviors/`) is the base: `tick(ctx, balance, delta)`
+returns `{"stiffness": {rig: multiplier}, "targets": {rig: Transform3D}}`; the controller
+runs a fixed ordered list (`ActiveRagdollController.get_behaviors()`) in NORMAL / STAGGER,
+applies stiffness as a floor on each bone's current strength and merges the targets into
+the override channel after the IK solvers. `BehaviorContext` hands a behavior the
+resolver, rig, profile, tuning, root and the foot / arm IK solvers; `reset()` on ragdoll.
+
+**`StepBehavior`** — balance steps (XCoM at the edge of the feet for 4 ticks → the
+fall-side foot swings to the capture point) and re-plants (calm + a loaded foot > 10 cm
+from its animation spot → the less loaded foot is lifted and stepped there), executed
+through `FootIKSolver.begin_step` (a lifted arc, then a hover until the foot arrives) on
+top of **foot locks** (`set_foot_lock` / `clear_foot_lock`: a contacting foot that drifted
+> 5 cm from its spot is held where it stands so the leg does not fight friction). Motor
+mode only. Knobs: the "Balance: Steps" tuning group. Spec and measurements in
+[SELF_PRESERVATION.md](SELF_PRESERVATION.md).
+
+**Root hold.** `RagdollTuning.muscle_root_hold` (sideways share of `muscle_root_force`,
+default **1**) and `muscle_root_support` (up share, default 0) bound the anchor's position
+motor per world axis; the controller raises both to 1 for the canned get-up and fades
+back over 0.75 s. Measured without the sideways hold and without an upright behavior the
+standing idle is unstable (7.2° idle, constant steps) — the ankle motors' 60 N·m cannot
+hold an 80 kg pendulum at 0.9 m (~720 N·m/rad) with a 10-tick lag by tracking a fixed
+pose. The hold goes to 0 with the `UprightBehavior` (ankle / hip strategy on the XCoM).
+
 ### Self-collision (0.6.0)
 
 `RagdollTuning.self_collision` is **on** by default since 0.6.0: the torso blocks a limp

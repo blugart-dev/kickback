@@ -73,11 +73,13 @@ var _ragdoll_poses: Dictionary = {}  # rig_name → Transform3D at recovery star
 var _stagger_elapsed: float = 0.0
 var _stagger_hit_dir: Vector3 = Vector3.ZERO
 var _balance_stable_timer: float = 0.0
-var _stumble_step_count: int = 0  # Steps taken this stumble (vs stumble_max_steps).
-var _stumbling: bool = false  # In an active directed stumble (suspends tip-over ragdoll).
-var _stumble_dir: Vector3 = Vector3.ZERO  # Horizontal knockback direction of the stumble.
-var _stumble_drift: float = 0.0  # Current knockback drift speed (m/s), decays to 0.
-var _stumble_dist_since_step: float = 0.0  # Drift distance accumulated toward the next step.
+## The behavior layer (docs/PLAN.md 0.6.0): a fixed ordered list, ticked in NORMAL and
+## STAGGER after the balance update; each answers with stiffness / targets that this
+## controller applies (the 0.7.0 arbiter replaces the fixed order).
+var _behaviors: Array[KickbackBehavior] = [StepBehavior.new()]
+var _behavior_ctx: BehaviorContext = BehaviorContext.new()
+var _behavior_state: int = -1
+var _behavior_targets: Dictionary = {}
 var _fatigue: float = 0.0
 var _pain: float = 0.0
 ## Accumulated physics time (seconds). Hit streaks are measured against this,
@@ -104,7 +106,6 @@ var _arm_ik: ArmIKSolver
 
 # Arm bracing (0.4.0 Self-Preservation): the windmill sweep phase advances while
 # stumbling; the cached shoulder rig-names anchor each arm's windmill circle.
-var _windmill_phase: float = 0.0
 var _arm_shoulder_l: String = ""
 var _arm_shoulder_r: String = ""
 
@@ -174,7 +175,7 @@ signal region_injured(rig_name: String, severity: float)
 ## Emitted when a stumble recovery step begins during stagger. [param foot_rig] is
 ## the stepping foot; [param target] is the world-space step goal. Connect for step
 ## footstep SFX or a step animation hint. (0.4.0 Self-Preservation.)
-signal stumble_step_started(foot_rig: String, target: Vector3)
+signal step_started(foot_rig: String, target: Vector3)
 
 
 func configure(profile: RagdollProfile, tuning: RagdollTuning) -> void:
@@ -308,6 +309,7 @@ func _physics_process(delta: float) -> void:
 	_sync_injuries_to_resolver()
 	_update_balance(delta)
 	_tick_support_release(delta)
+	_tick_behaviors(delta)
 
 	match _state:
 		State.STAGGER:
@@ -357,6 +359,10 @@ func _physics_process(delta: float) -> void:
 			_arm_ik.process(delta)
 		else:
 			_arm_ik.reset()
+
+	# Behavior pose targets last: they override the IK solvers on any shared bone.
+	if ik_writing and not _behavior_targets.is_empty():
+		_spring.merge_target_overrides(_behavior_targets)
 
 
 func _update_fatigue_decay(delta: float) -> void:
@@ -433,16 +439,9 @@ func _update_stagger(delta: float) -> void:
 	var has_support: bool = balance_state.has_support
 	balance_changed.emit(balance)
 
-	# Directed stumble: a staggering hit knocks the character along the hit direction
-	# (visible displacement) with the feet stepping to follow, while the body stiffens
-	# to stay upright. Runs regardless of measured support (it's hit-driven, not
-	# balance-driven) and COMMITS — the tip-over→ragdoll transition is suspended while
-	# stumbling so the reaction plays out instead of collapsing mid-step.
-	_update_directed_stumble(delta)
-
 	if has_support:
-		# Too far off-balance → ragdoll (tipping over), unless mid-stumble or
-		# knockdowns are disabled (death-only ragdoll: keep fighting in stagger).
+		# Too far off-balance → ragdoll (tipping over), unless knockdowns are disabled
+		# (death-only ragdoll: keep fighting in stagger).
 		# Hard cap: if the budget denies the slot, keep fighting in stagger instead
 		# of a full fall — and retry on later frames, so it ragdolls as soon as a
 		# slot frees up.
@@ -452,7 +451,7 @@ func _update_stagger(delta: float) -> void:
 		# balance layer's call (docs/PLAN.md 0.6.0), not this heuristic; falls still
 		# come from ragdoll_probability / pain / explicit triggers.
 		if _tuning.knockdown_enabled and balance > _tuning.balance_ragdoll_threshold \
-				and not _stumbling and not _spring.is_motor_mode():
+				and not _spring.is_motor_mode():
 			if _try_acquire_ragdoll_slot():
 				_full_ragdoll()
 				return
@@ -471,165 +470,57 @@ func _update_stagger(delta: float) -> void:
 		_finish_stagger()
 
 
-## Drives the directed stumble (0.4.0 Self-Preservation): a staggering hit knocks the
-## character root along the hit direction so the reaction visibly DISPLACES it, with
-## the feet stepping to follow and the body stiffening to stay upright. The drift
-## decays (momentum absorbed) over [member RagdollTuning.stumble_push_decel]; a step
-## fires every [member RagdollTuning.stumble_step_length] of travel (trailing foot,
-## up to [member RagdollTuning.stumble_max_steps]). Ends when the drift is spent and no
-## step is in flight. While stumbling ([member _stumbling]) the caller suspends the
-## tip-over→ragdoll transition so the reaction plays out. No-op without foot-IK pinning.
-func _update_directed_stumble(delta: float) -> void:
-	if not _stumbling:
+## Ticks the behavior list (NORMAL / STAGGER): hands each behavior the shared balance
+## state, applies the stiffness it asks for as a FLOOR on the bone's current strength
+## (effective base × multiplier) and collects its pose targets for the override channel
+## (merged after the IK solvers). State changes and resets are forwarded.
+func _tick_behaviors(delta: float) -> void:
+	_behavior_targets.clear()
+	var ctx := _behavior_ctx
+	ctx.spring = _spring
+	ctx.rig_builder = _rig_builder
+	ctx.profile = _profile
+	ctx.tuning = _tuning
+	ctx.character_root = _character_root
+	ctx.foot_ik = _foot_ik
+	ctx.arm_ik = _arm_ik
+	ctx.state = _state
+	if not ctx.on_step_started.is_valid():
+		ctx.on_step_started = func(foot_rig: String, target: Vector3) -> void:
+			step_started.emit(foot_rig, target)
+	if _state != _behavior_state:
+		_behavior_state = _state
+		for b: KickbackBehavior in _behaviors:
+			b.on_state_changed(_state, ctx)
+	if _state != State.NORMAL and _state != State.STAGGER:
 		return
-	if not _tuning.stumble_enabled or not _foot_ik or not _character_root:
-		_stumbling = false
-		_end_arm_brace()
-		return
-
-	# Drift the root along the hit direction (horizontal), decaying the speed.
-	if _stumble_drift > 0.01:
-		var step_move := _stumble_dir * _stumble_drift * delta
-		_character_root.global_position += step_move
-		_stumble_dist_since_step += step_move.length()
-		_stumble_drift = maxf(_stumble_drift - _tuning.stumble_push_decel * delta, 0.0)
-
-	# Pace a step every step_length of travel so the feet keep up with the body.
-	if _stumble_step_count < _tuning.stumble_max_steps \
-			and _stumble_dist_since_step >= _tuning.stumble_step_length \
-			and not _foot_ik.is_stepping():
-		_do_directed_step()
-		_stumble_dist_since_step = 0.0
-
-	# Stiffen the lower body so it stays upright as it lurches, while the upper body
-	# stays loose and reacts (differential stiffness — see _apply_stumble_brace).
-	_apply_stumble_brace()
-
-	# Windmill the arms for balance — the active upper-body layer over the loose flail.
-	_update_arm_windmill(delta)
-
-	# Stumble is over once the momentum is spent and the last step has planted.
-	if _stumble_drift <= 0.01 and not _foot_ik.is_stepping():
-		_stumbling = false
-		_end_arm_brace()  # release the windmill; the arms blend back to animation
-
-
-## Steps the trailing foot (the one furthest back along the stumble direction) forward
-## in that direction, through the foot IK solver. Returns nothing; bumps the step count
-## and emits [signal stumble_step_started] when a step starts.
-func _do_directed_step() -> void:
-	var bodies := _rig_builder.get_bodies()
-	var step_foot := ""
-	var lowest := INF
-	var dir2 := Vector2(_stumble_dir.x, _stumble_dir.z)
-	for foot_rig: String in _foot_rigs:
-		var fb: RigidBody3D = bodies.get(foot_rig)
-		if not fb:
+	for b: KickbackBehavior in _behaviors:
+		if not b.enabled:
 			continue
-		var d := Vector2(fb.global_position.x, fb.global_position.z).dot(dir2)
-		if d < lowest:
-			lowest = d
-			step_foot = foot_rig
-	if step_foot.is_empty():
-		return
-	var fb: RigidBody3D = bodies[step_foot]
-
-	# Place the step ahead of the HIPS in the stumble direction, but PRESERVE the
-	# foot's lateral offset (its left/right side of the body) so the feet stay in their
-	# own lanes and don't cross. Plant a step ahead of the body so it catches the drift.
-	var hips: RigidBody3D = bodies.get(_root_rig)
-	var center: Vector3 = hips.global_position if hips else fb.global_position
-	var perp := Vector3(-_stumble_dir.z, 0.0, _stumble_dir.x)  # 90° in the ground plane
-	var lateral := (fb.global_position - center).dot(perp)  # signed offset onto this foot's side
-	var target := center + _stumble_dir * _tuning.stumble_step_length + perp * lateral
-	target.y = fb.global_position.y  # the foot IK ground-snaps + lifts this
-	if _foot_ik.begin_stumble(step_foot, target, _tuning.stumble_step_duration):
-		_stumble_step_count += 1
-		stumble_step_started.emit(step_foot, target)
-
-
-## Differential stiffening while stumbling. Braces only the LOWER body (leg chains +
-## pelvis) toward base so it steps and holds the character upright — but deliberately
-## leaves the upper body (torso, arms, head) at the stagger floor so it stays LOOSE and
-## reacts to the hit impulse and the stumble momentum. That contrast (purposeful legs,
-## flailing upper body) is what reads as a live body caught off guard, rather than a
-## rigid mannequin sliding on stepping feet. Transient — applied only while
-## [member _stumbling]; strengths relax to the floor when the stumble ends.
-func _apply_stumble_brace() -> void:
-	var brace: float = _tuning.stumble_brace_strength
-	if brace <= 0.0:
-		return
-	for rig_name: String in _spring.get_all_bone_names():
-		if _is_bone_protected(rig_name):
+		var out: Dictionary = b.tick(ctx, _balance, delta)
+		if out.is_empty():
 			continue
-		# Lower body only — legs (stepping + support) and the pelvis (root upright).
-		if not (_is_leg_bone(rig_name) or rig_name == _root_rig):
-			continue
-		var target := _effective_base_strength(rig_name) * brace
-		if _spring.get_bone_strength(rig_name) < target:
-			_spring.set_bone_strength(rig_name, target)
+		var stiff: Dictionary = out.get("stiffness", {})
+		for rig_name: String in stiff:
+			if _is_bone_protected(rig_name):
+				continue
+			var floor_val: float = _effective_base_strength(rig_name) * clampf(float(stiff[rig_name]), 0.0, 1.0)
+			if _spring.get_bone_strength(rig_name) < floor_val:
+				_spring.set_bone_strength(rig_name, floor_val)
+		var targets: Dictionary = out.get("targets", {})
+		for rig_name: String in targets:
+			_behavior_targets[rig_name] = targets[rig_name]
 
 
-## Drives the arm windmill while stumbling (0.4.0 Self-Preservation): each hand sweeps
-## a wide vertical circle out to its own side, the two arms in opposite phase, so the
-## upper body actively fights for balance instead of only flailing loosely. Targets are
-## recomputed in world space each frame so the circles follow the displacing body. The
-## arm IK blends these in by weight; an unreachable point just holds the animation pose.
-func _update_arm_windmill(delta: float) -> void:
-	if not _arm_ik or not _tuning.arm_brace_enabled:
-		return
-	_arm_ik.set_physics_anchored(false)  # windmill solves against the animation pose
-	_windmill_phase += _tuning.arm_windmill_speed * delta
-	# Couple the windmill to the body's momentum: full size right after the hit, winding
-	# down as the drift is spent, so the arms settle WITH the body rather than spinning on
-	# after it has stopped (a constant-size circle reads as a detached, canned layer).
-	var push: float = maxf(_tuning.stumble_push_speed, 0.01)
-	var intensity := clampf(_stumble_drift / push, 0.0, 1.0)
-	_drive_windmill_arm("L", _arm_shoulder_l, _windmill_phase, intensity)
-	_drive_windmill_arm("R", _arm_shoulder_r, _windmill_phase + PI, intensity)
+## The behavior list (read-only view; the entries are live).
+func get_behaviors() -> Array[KickbackBehavior]:
+	return _behaviors
 
 
-## Points one arm's windmill target for this frame. [param shoulder_rig] is the chain's
-## shoulder body (the circle anchor); [param phase] is its position around the sweep;
-## [param intensity] (0..1, the remaining stumble momentum) scales the arc and the lean.
-func _drive_windmill_arm(side: String, shoulder_rig: String, phase: float, intensity: float) -> void:
-	if shoulder_rig == "":
-		return
-	var bodies := _rig_builder.get_bodies()
-	var shoulder_body: RigidBody3D = bodies.get(shoulder_rig)
-	if not shoulder_body:
-		return
-	var shoulder := shoulder_body.global_position
-
-	# Outward = the shoulder's horizontal offset from the body center, so each circle
-	# sits on its own side regardless of facing (falls back to the character's lateral
-	# axis if the shoulder sits on the centerline).
-	var center_body: RigidBody3D = bodies.get(_root_rig)
-	var outward := shoulder - (center_body.global_position if center_body else shoulder)
-	outward.y = 0.0
-	if outward.length_squared() < 0.0001:
-		# Left = up × forward, which is +X for a +Z-facing model and -X for -Z.
-		outward = _character_root.global_basis.x * float(_tuning.character_forward_sign) \
-			* (1.0 if side == "L" else -1.0)
-	outward = outward.normalized()
-
-	# Sweep in the plane of the FALL (stumble direction × up), not the character's facing,
-	# so the arms throw the way the body is actually being shoved — and lean into it. This
-	# ties the windmill to THIS hit instead of being a facing-locked canned circle.
-	var sweep_axis := _stumble_dir
-	if sweep_axis.length_squared() < 0.0001:
-		sweep_axis = _character_forward()
-	sweep_axis = sweep_axis.normalized()
-
-	var radius: float = _tuning.arm_windmill_radius * (0.4 + 0.6 * intensity)
-	var circle_center := shoulder \
-		+ outward * _tuning.arm_windmill_lateral \
-		+ Vector3.UP * _tuning.arm_windmill_height \
-		+ sweep_axis * (_tuning.arm_windmill_radius * 0.5 * intensity)  # lean into the fall
-	var sweep := (sweep_axis * cos(phase) + Vector3.UP * sin(phase)) * radius
-	# Partial weight: the windmill is a balancing TENDENCY layered over the loose flail,
-	# not a takeover — keeps the upper body reactive rather than rigidly on the circle.
-	_arm_ik.begin_reach(side, circle_center + sweep, _tuning.arm_brace_weight)
+func _reset_behaviors() -> void:
+	for b: KickbackBehavior in _behaviors:
+		b.reset(_behavior_ctx)
+	_behavior_targets.clear()
 
 
 ## Releases the arm windmill (blends the arms back toward the animation pose).
@@ -650,10 +541,8 @@ func _setup_fall_brace() -> void:
 	if not _arm_ik or not _tuning.arm_fall_reach_enabled or not _rig_builder:
 		return
 
-	# Fall direction: the directed-stumble drift if there was one, else the hit direction.
-	var dir := _stumble_dir
-	if dir.length_squared() < 0.01:
-		dir = Vector3(_stagger_hit_dir.x, 0.0, _stagger_hit_dir.z)
+	# Fall direction: the hit direction that staggered / dropped the character.
+	var dir := Vector3(_stagger_hit_dir.x, 0.0, _stagger_hit_dir.z)
 	if dir.length_squared() < 0.01:
 		return
 	dir = dir.normalized()
@@ -661,8 +550,7 @@ func _setup_fall_brace() -> void:
 	# A protective ground reach is the forward/side "catch yourself" reflex. A backward
 	# fall can't be broken by a hands-forward plant — forcing it reaches behind the
 	# shoulder and contorts the arm — so skip the reach when the fall runs clearly
-	# against the character's facing (it just collapses; the stumble windmill already
-	# gave the upper body life on the way down).
+	# against the character's facing (it just collapses).
 	if dir.dot(_character_forward()) < _tuning.arm_fall_reach_min_facing:
 		return
 
@@ -984,9 +872,7 @@ func _handle_normal_hit(rig_name: String, hit_dir: Vector3, effective_reduction:
 		should_ragdoll = _pain >= _tuning.pain_ragdoll_threshold
 	if should_ragdoll:
 		if _tuning.knockdown_enabled and _try_acquire_ragdoll_slot():
-			# No stumble preceded this direct fall — give the protective reach the fresh
-			# hit direction (and clear any stale stumble drift) so it aims correctly.
-			_stumble_dir = Vector3.ZERO
+			# A direct fall: give the protective reach the fresh hit direction.
 			_stagger_hit_dir = hit_dir
 			_full_ragdoll()
 		else:
@@ -1229,6 +1115,7 @@ func _full_ragdoll(brace: bool = true, target_state: int = State.RAGDOLL) -> voi
 	_support_releasing = false
 	_spring.set_root_support_override(-1.0)
 	_set_feet_frictionless(false)
+	_reset_behaviors()
 	for rig_name: String in _spring.get_all_bone_names():
 		_spring.set_bone_strength(rig_name, 0.0)
 
@@ -1450,7 +1337,7 @@ func _tick_support_release(delta: float) -> void:
 		_support_releasing = false
 		_spring.set_root_support_override(-1.0)
 	else:
-		_spring.set_root_support_override(lerpf(1.0, _tuning.muscle_root_support, t))
+		_spring.set_root_support_override(1.0 - t)  # the tuning's shares take over as it falls
 
 
 func _start_stagger(hit_dir: Vector3) -> void:
@@ -1458,8 +1345,6 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_state = State.STAGGER
 	_stagger_elapsed = 0.0
 	_balance_stable_timer = 0.0
-	_stumble_step_count = 0
-	_stumbling = false
 	_reaction_pulses.clear()
 
 	# Moving characters stagger in their movement direction, not just hit direction
@@ -1472,21 +1357,6 @@ func _start_stagger(hit_dir: Vector3) -> void:
 	_com_initialized = false
 	_sway_phase = randf() * TAU
 	_spring.recovery_rate = _tuning.stagger_recovery_rate
-
-	# Begin a directed stumble: knock the character along the hit direction so the
-	# reaction visibly DISPLACES it, with the feet stepping to follow. The horizontal
-	# hit direction drives both the drift and the step direction.
-	_stumble_dir = Vector3(hit_dir.x, 0.0, hit_dir.z)
-	if _tuning.stumble_enabled and _foot_ik and _character_root and _stumble_dir.length() > 0.01:
-		_stumble_dir = _stumble_dir.normalized()
-		_stumble_drift = _tuning.stumble_push_speed
-		_stumble_dist_since_step = _tuning.stumble_step_length  # step on the first frame
-		_stumbling = true
-		_windmill_phase = 0.0  # arms windmill for balance for the duration of the stumble
-	else:
-		_stumble_dir = Vector3.ZERO
-		_stumble_drift = 0.0
-		_stumbling = false
 
 	if _tuning.brace_strength_bonus > 0.0:
 		_apply_directional_bracing(hit_dir)
@@ -1507,8 +1377,6 @@ func _finish_stagger() -> void:
 	_state = State.NORMAL
 	_balance_stable_timer = 0.0
 	_com_initialized = false
-	_stumbling = false
-	_stumble_drift = 0.0
 	_spring.recovery_rate = _spring.get_default_recovery_rate()
 	_disable_normal_collisions()
 	state_changed.emit(_state)

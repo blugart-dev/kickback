@@ -108,6 +108,8 @@ func _run_mode(mode: int, hz: int) -> void:
 		tuning.self_collision = false
 	if "nofootcol" in variant:
 		tuning.foot_ik_disable_foot_collision = true  # pre-0.6.0: feet masked out, anchor carries the body
+	if "hold1" in variant:
+		tuning.muscle_root_hold = 1.0
 	if "support1" in variant:
 		tuning.muscle_root_support = 1.0
 	elif "support05" in variant:
@@ -214,12 +216,39 @@ func _run_mode(mode: int, hz: int) -> void:
 	anim.play("idle")
 	var settle := await _measure(spring, builder, skeleton, hz, Callable())
 	var settle_balance: float = controller.get_balance_ratio()
+	var settle2 := await _measure(spring, builder, skeleton, hz, Callable())
+	var settle2_balance: float = controller.get_balance_ratio()
+
+	# SHOVE: 150 N·s sideways at the chest from the (re-)settled idle — does the
+	# character step and recover (docs/PLAN.md 0.6.0 acceptance), and how far does the
+	# pelvis actually move? The root is never written by the plugin.
+	await _wait(hz * 2)
+	var steps := {"n": 0}
+	var on_step := func(_foot: String, _target: Vector3) -> void:
+		steps.n += 1
+	controller.step_started.connect(on_step)
+	var chest: RigidBody3D = builder.get_bodies()["Chest"]
+	var hips_before: Vector3 = hips.global_position
+	var root_before: Vector3 = char_root.global_position
+	chest.apply_central_impulse(Vector3(150.0, 0.0, 0.0))
+	var max_ratio := 0.0
+	var shove_state: int = controller.get_state()
+	for i in hz * 2:
+		await physics_frame
+		max_ratio = maxf(max_ratio, controller.get_balance_ratio())
+		shove_state = maxi(shove_state, controller.get_state())
+	controller.step_started.disconnect(on_step)
+	var shove_line := "    shove 150 N·s: steps=%d max ratio=%.2f ratio after 2 s=%.2f state=%s pelvis moved %.2f m root moved %.3f m idle err %.1f" % [
+		steps.n, max_ratio, controller.get_balance_ratio(), ActiveRagdollController.State.keys()[shove_state],
+		(hips.global_position - hips_before).length(), (char_root.global_position - root_before).length(),
+		(await _measure(spring, builder, skeleton, 10, Callable()))[0]]
 
 	var line := "%-18s | %6.2f / %6.2f | %6.2f / %6.2f | %6.1f / %-6s / %-5s | %.3f | %+5.1f mm / %3.0f %%" % [
 		label, idle[0], idle[1], react[0], react[1], peak, str(recover) if recover >= 0 else "never", str(stuck), cpu_ms, sag_mm, feet_pct]
 	print(line)
 	print("    hit: state reached %s (balance ratio before the hit %.2f)" % [ActiveRagdollController.State.keys()[worst_state], balance_before])
-	print("    settle after react: idle error %.2f / %.2f, balance ratio %.2f" % [settle[0], settle[1], settle_balance])
+	print("    settle after react: idle error %.2f / %.2f, balance ratio %.2f; second 2: %.2f / %.2f, ratio %.2f" % [settle[0], settle[1], settle_balance, settle2[0], settle2[1], settle2_balance])
+	print(shove_line)
 	print("    idle per body: %s" % idle[2])
 	print("    react per body: %s" % react[2])
 	_results.append(line)

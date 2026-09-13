@@ -18,7 +18,10 @@ extends Node3D
 ## spring/ragdoll/IK math, which is orientation-agnostic. Hips at 0.935 m, ankles at
 ## 0.065 m above the origin (the character root) = RagdollTuning.foot_ik_ankle_height,
 ## so the sole-aligned foot boxes rest exactly on the y = 0 ground; legs 0.42 m +
-## 0.40 m long.
+## ~0.40 m long. The ankles sit 5 cm BEHIND the leg line (toes ahead), so the body's
+## centre of mass stands over the middle of the sole boxes the way a real stance does —
+## with the ankle under the hip the CoM sat on the heel edge and read ~0.5–0.9 on the
+## balance ratio while standing perfectly still.
 const _BONES: Array = [
 	["mixamorig_Hips", "", Vector3(0.0, 0.935, 0.0)],
 	["mixamorig_Spine", "mixamorig_Hips", Vector3(0.0, 0.12, 0.0)],
@@ -35,11 +38,11 @@ const _BONES: Array = [
 	["mixamorig_RightHand", "mixamorig_RightForeArm", Vector3(-0.25, 0.0, 0.0)],
 	["mixamorig_LeftUpLeg", "mixamorig_Hips", Vector3(0.10, -0.05, 0.0)],
 	["mixamorig_LeftLeg", "mixamorig_LeftUpLeg", Vector3(0.0, -0.42, 0.0)],
-	["mixamorig_LeftFoot", "mixamorig_LeftLeg", Vector3(0.0, -0.40, 0.0)],
+	["mixamorig_LeftFoot", "mixamorig_LeftLeg", Vector3(0.0, -0.40, -0.05)],
 	["mixamorig_LeftToeBase", "mixamorig_LeftFoot", Vector3(0.0, -0.05, 0.12)],
 	["mixamorig_RightUpLeg", "mixamorig_Hips", Vector3(-0.10, -0.05, 0.0)],
 	["mixamorig_RightLeg", "mixamorig_RightUpLeg", Vector3(0.0, -0.42, 0.0)],
-	["mixamorig_RightFoot", "mixamorig_RightLeg", Vector3(0.0, -0.40, 0.0)],
+	["mixamorig_RightFoot", "mixamorig_RightLeg", Vector3(0.0, -0.40, -0.05)],
 	["mixamorig_RightToeBase", "mixamorig_RightFoot", Vector3(0.0, -0.05, 0.12)],
 ]
 
@@ -61,6 +64,10 @@ var controller: ActiveRagdollController
 var ground: StaticBody3D
 var tuning: RagdollTuning
 var profile: RagdollProfile
+## Set before [method setup]: build the legs perfectly straight (ankle under the knee)
+## instead of the default stance with the ankles 5 cm behind the leg line — for tests
+## of the straight-leg knee fallback, where the animation knee gives no bend plane.
+var straight_legs: bool = false
 
 
 ## Builds the synthetic skeleton, optional ground, and the full Kickback graph.
@@ -75,7 +82,7 @@ func setup(p_tuning: RagdollTuning = null, p_profile: RagdollProfile = null, wit
 		ground = _build_ground()
 		add_child(ground)
 
-	skeleton = build_mixamo_skeleton()
+	skeleton = build_mixamo_skeleton(straight_legs)
 	add_child(skeleton)
 
 	# Sibling controllers, pre-configured BEFORE entering the tree so their
@@ -151,7 +158,7 @@ func skeleton_bone_world_origin(skeleton_bone: String) -> Vector3:
 ## Builds the synthetic Mixamo-named skeleton (21 bones, rest = standing pose).
 ## Static so resource/validation tests can reuse the canonical skeleton without
 ## assembling the whole physics rig.
-static func build_mixamo_skeleton() -> Skeleton3D:
+static func build_mixamo_skeleton(p_straight_legs: bool = false) -> Skeleton3D:
 	var skel := Skeleton3D.new()
 	skel.name = "Skeleton3D"
 	var name_to_idx: Dictionary = {}
@@ -159,6 +166,8 @@ static func build_mixamo_skeleton() -> Skeleton3D:
 		var bone_name: String = entry[0]
 		var parent_name: String = entry[1]
 		var pos: Vector3 = entry[2]
+		if p_straight_legs and bone_name.ends_with("Foot"):
+			pos.z = 0.0  # ankle straight under the knee
 		var idx := skel.add_bone(bone_name)
 		name_to_idx[bone_name] = idx
 		if parent_name != "":

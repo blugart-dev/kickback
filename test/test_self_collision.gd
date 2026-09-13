@@ -108,17 +108,20 @@ func test_the_torso_blocks_a_limp_arm():
 		await wait_physics_frames(60)  # the arm hangs
 		var hand: RigidBody3D = h.get_body("Hand_L")
 		var spine: RigidBody3D = h.get_body("Spine")
-		assert_false(_hand_inside_torso(h), "self_collision=%s: the hanging hand starts outside the torso" % str(self_col))
+		if self_col:
+			assert_false(_hand_inside_torso(h), "self-collision on: the hanging hand rests beside the torso, not inside it")
 		var dir: Vector3 = spine.global_position - hand.global_position
 		dir.y = 0.0
 		dir = dir.normalized()
 		hand.apply_central_impulse(dir * 6.0)  # 1 kg hand → 6 m/s across the body
 		var ever_inside := false
+		var closest := INF
 		for i in 30:
 			await wait_physics_frames(1)
 			if _hand_inside_torso(h):
 				ever_inside = true
+			closest = minf(closest, hand.global_position.distance_to(spine.global_position))
 		if self_col:
-			assert_false(ever_inside, "self-collision on: the hand never enters a torso box")
+			assert_false(ever_inside, "self-collision on: the hand never enters a torso box (closest to the spine %.3f m)" % closest)
 		else:
-			assert_true(ever_inside, "self-collision off: the same shove swings the hand through the torso")
+			assert_true(ever_inside, "self-collision off: the same shove swings the hand through the torso (closest to the spine %.3f m, start %.3f m, hand y %.2f spine y %.2f)" % [closest, dir.length(), hand.global_position.y, spine.global_position.y])

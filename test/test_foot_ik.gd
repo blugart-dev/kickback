@@ -49,17 +49,17 @@ func test_reset_clears_state():
 	var solver := FootIKSolver.new()
 	solver.reset()
 	assert_false(solver.is_active())
-	assert_false(solver._stagger_pinning)
+	assert_false(solver._lock_l or solver._lock_r)
 
 
 func test_stagger_lifecycle():
 	var solver := FootIKSolver.new()
 	# begin_stagger on uninitialized solver is safe
 	solver.begin_stagger()
-	assert_false(solver._stagger_pinning, "Uninitialized solver should not pin")
+	assert_false(solver._lock_l or solver._lock_r, "Uninitialized solver holds no foot locks")
 
 	solver.end_stagger()
-	assert_false(solver._stagger_pinning)
+	assert_false(solver._lock_l or solver._lock_r)
 
 
 # ── RagdollTuning foot IK defaults / validation ────────────────────────────
@@ -150,6 +150,7 @@ func _knee_forward_displacement(sign: int) -> float:
 	t.character_forward_sign = sign
 	var h = RigHarness.new()
 	add_child_autoqfree(h)
+	h.straight_legs = true  # the fallback only runs when the animation knee gives no bend plane
 	h.setup(t, null, true)
 	var ok: bool = await h.await_ready(40)
 	assert_true(ok, "Kickback setup completed within frame budget")

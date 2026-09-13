@@ -173,7 +173,8 @@ PERSISTENT ──set_persistent(false)──→ GETTING_UP
 
 | Transition                | Signal emitted          | When to use                |
 |---------------------------|-------------------------|----------------------------|
-| Any → STAGGER             | `stagger_started`       | Play stumble animation     |
+| Any → STAGGER             | `stagger_started`       | Play a stagger / hit-reaction animation |
+| a foot steps (0.6.0)      | `step_started(foot_rig, target)` | Footstep sound / decal at `target` |
 | STAGGER → NORMAL          | `stagger_finished`      | Return to idle/locomotion  |
 | Any → RAGDOLL             | `ragdoll_started`       | Disable movement, stop AI  |
 | RAGDOLL → GETTING_UP      | `recovery_started`      | Play get-up animation      |
@@ -395,7 +396,7 @@ Characters flop dramatically.
 locked. Slow `fatigue_decay` so sustained fire eventually overwhelms.
 
 **Death-only ragdoll:** Set `knockdown_enabled = false`. Hits keep all
-their in-animation life (micro-reactions, pulses, stagger, stumble) but a
+their in-animation life (micro-reactions, pulses, stagger, steps) but a
 would-be knockdown downgrades to stagger — enemies never leave their feet
 until an explicit `trigger_ragdoll()` / `set_persistent(true)` (the death).
 No need to zero `ragdoll_probability` across every ImpactProfile.

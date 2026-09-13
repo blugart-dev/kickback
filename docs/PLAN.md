@@ -176,9 +176,18 @@ it; the scripted stumble and the sine sway are deleted.
   (stagger 0.8, recovery 0.6, ragdoll 1.0). **Not yet**: the tip-over decision and the
   root anchor release on it (needs the step behavior first — a 150 N·s shove must step,
   not fall).
-- [ ] `Behavior` base (new file): `tick(balance, delta) -> {targets: Dictionary, stiffness: Dictionary, priority: int}`; the controller runs a fixed ordered list for now (arbiter comes in 0.7.0)
-- [ ] `UprightBehavior` (pelvis/chest world-up torque, capped), `StepBehavior` (XCoM outside the polygon ⇒ swing-leg IK target = XCoM + k·v, leg joint targets from the two-bone solve; the body moves because the loaded leg pushes), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
-- [ ] Delete `_update_directed_stumble` root teleport, `_apply_stagger_sway`, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs
+- [x] `KickbackBehavior` base + `BehaviorContext` (2026-09-13): `tick(ctx, balance, delta) -> {stiffness, targets}`; the controller runs a fixed ordered list in NORMAL / STAGGER (`get_behaviors()`), stiffness applied as floors, targets merged after the IK solvers
+- [x] `StepBehavior` (2026-09-13, `test_step_behavior.gd`, 6 tests): balance step (XCoM at the
+  edge for 4 ticks → fall-side foot to the capture point) + re-plant (calm + loaded foot
+  > 10 cm from its spot); **foot locks** in `FootIKSolver` (`set_foot_lock`, `begin_step`
+  with a hover-until-arrived landing). Measured: root moved 0.25 m → both feet re-planted
+  by 0.83 s, legs 1.5°; after react_front 5 steps, legs 3° by 2.8 s (bench SETTLE 10.4 →
+  6.2 in the 2nd second, was 9.9 flat). Balance steps validated with the hold released on
+  the harness only — with `muscle_root_hold` 0 and no upright behavior the ybot idle is
+  unstable (7.2°, constant steps, a 150 N·s shove walks it off), so **`muscle_root_hold`
+  stays 1** until the next item.
+- [ ] `UprightBehavior` (ankle / hip strategy on the XCoM: lean the leg / pelvis targets against the imbalance, capped by the muscle torques; replaces the anchor's sideways hold — `muscle_root_hold` → 0 with the bench proving quiet standing ≤ 2° and the 150 N·s shove → step + recovery), `ArmBalanceBehavior` (arm target opposes XCoM error), `FallReachBehavior` (existing reach, moved), `GetUpBehavior` (existing canned blend, moved)
+- [x] Delete `_update_directed_stumble` root teleport, `_apply_stumble_brace`, windmill phase circle; remove their tuning knobs (2026-09-13; `grep "global_position +=" addons/` is empty). Still to delete: `_apply_stagger_sway`
 - [ ] **Removal list from the 2026-09-13 feature inventory** (each item was compensation for
   the velocity-overwrite substrate or a stand-in for balance, and is now either redundant
   or fake on top of real muscles):

@@ -702,19 +702,24 @@ func _drive_root_pin(rig_name: String, state: Dictionary, body: RigidBody3D, tar
 	var hold := _root_hold_factor(ratio)
 	var force: float = _tuning.muscle_root_force * hold
 	# Linear motor targets and force limits are per axis in the constraint space of
-	# body A — the world-aligned anchor twin, so these ARE world axes. Along up the
-	# motor may carry at most muscle_root_support of the body's weight; the legs carry
-	# the rest through their joint motors and the feet on the ground (0.6.0 "feet
-	# load-bearing"). Sideways the anchor keeps its full authority.
-	var support: float = _root_support_override if _root_support_override >= 0.0 else _tuning.muscle_root_support
-	var vertical: float = force * support
-	_set_linear_motor(joint, v_cmd * ROOT_LINEAR_MOTOR_SIGN, Vector3(force, vertical, force))
+	# body A — the world-aligned anchor twin, so these ARE world axes. Sideways the
+	# motor may spend muscle_root_hold of the force, along up muscle_root_support of it
+	# (both 0 by default since 0.6.0: the legs carry and place the body — feet planted
+	# by friction, joint motors tracking the pose — and a shove moves the body for the
+	# step behavior to catch); the controller raises both for the canned get-up.
+	var side_share: float = _tuning.muscle_root_hold
+	var up_share: float = _tuning.muscle_root_support
+	if _root_support_override >= 0.0:
+		side_share = maxf(side_share, _root_support_override)
+		up_share = maxf(up_share, _root_support_override)
+	_set_linear_motor(joint, v_cmd * ROOT_LINEAR_MOTOR_SIGN, Vector3(force * side_share, force * up_share, force * side_share))
 
 
-## Lets the controller override [member RagdollTuning.muscle_root_support] for a while
-## (the canned get-up blend needs the anchor to lift the pelvis: the legs cannot push a
-## body up from the ground through a pose blend). [param value] in 0..1, or negative
-## to hand the authority back to the tuning.
+## Lets the controller demand more position authority than the tuning's
+## [member RagdollTuning.muscle_root_hold] / [member RagdollTuning.muscle_root_support]
+## for a while (the canned get-up blend needs the anchor to carry and place the pelvis:
+## folded legs cannot push a body up from the ground through a pose blend). [param value]
+## in 0..1 raises both shares to at least that; negative hands the authority back.
 func set_root_support_override(value: float) -> void:
 	_root_support_override = value
 
